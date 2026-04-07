@@ -1,0 +1,51 @@
+# macOS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+.env.example
+.eve.example
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/.turbo/
+
+# Python
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Backend local/build artifacts
+backend/build/
+backend/build_linux/
+backend/layer/
+backend/dist/
+backend/lambda-layer-app/
+backend/lambda-layer-app.zip
+backend/lambda_package_*.zip
+backend/python/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
