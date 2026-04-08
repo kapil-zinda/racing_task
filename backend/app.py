@@ -17,11 +17,13 @@ POINTS_MAP = {
     "new_class": 3,
     "revision": 2,
     "ticket_resolved": 4,
+    "test_completed": 4,
 }
 ACTION_LABELS = {
     "new_class": "New Class",
     "revision": "Revision",
     "ticket_resolved": "Ticket Resolved",
+    "test_completed": "Test Completed",
 }
 
 MILESTONES = [
@@ -52,6 +54,7 @@ logger = logging.getLogger("race-api")
 class AddPointsRequest(BaseModel):
     player_id: str
     action_type: str
+    test_type: str = ""
     detail: str = ""
 
 
@@ -289,11 +292,15 @@ def add_points(payload: AddPointsRequest):
         history = state["history"]
         points[payload.player_id] += POINTS_MAP[payload.action_type]
         _evaluate_rewards(payload.player_id, points, reached)
+        test_type = (payload.test_type or "").strip()
         detail = (payload.detail or "").strip()
+        action_label = ACTION_LABELS[payload.action_type]
+        if payload.action_type == "test_completed" and test_type:
+            action_label = test_type
         history_entry = {
             "action_type": payload.action_type,
-            "action_label": ACTION_LABELS[payload.action_type],
-            "detail": detail or ACTION_LABELS[payload.action_type],
+            "action_label": action_label,
+            "detail": detail or action_label,
             "points": POINTS_MAP[payload.action_type],
             "created_at": datetime.now(timezone.utc).isoformat(),
         }

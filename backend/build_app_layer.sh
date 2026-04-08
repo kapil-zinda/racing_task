@@ -7,8 +7,7 @@ echo "Building app Lambda Layer..."
 
 # Configuration
 LAYER_NAME="racing-app-layer"
-PYTHON_VERSION="3.11"
-PYTHON_DIR_VERSION="python3.11"
+PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
 LAYER_DIR="lambda-layer-app"
 OUTPUT_ZIP="lambda-layer-app.zip"
 REQ_FILE="./requirements-app.txt"
@@ -26,9 +25,9 @@ rm -f "$OUTPUT_ZIP"
 
 # Create layer structure
 echo "Creating layer structure..."
-mkdir -p "$LAYER_DIR/python/lib/$PYTHON_DIR_VERSION/site-packages"
+mkdir -p "$LAYER_DIR/python"
 
-TARGET_DIR="$LAYER_DIR/python/lib/$PYTHON_DIR_VERSION/site-packages"
+TARGET_DIR="$LAYER_DIR/python"
 
 # Install Linux-compatible wheels
 echo "Installing dependencies..."
@@ -52,6 +51,7 @@ find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find . -type f -name "*.pyc" -delete 2>/dev/null || true
 find . -type f -name "*.md" -delete 2>/dev/null || true
 find . -type f -name "*.rst" -delete 2>/dev/null || true
+rm -rf ./bin 2>/dev/null || true
 cd - >/dev/null
 
 # Zip

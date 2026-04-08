@@ -1,31 +1,66 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+# Build Lambda deployment package (application code only)
+# Dependencies should be provided via Lambda Layer(s)
 
-# Build AWS Lambda deployment zip (Python 3.11 Linux compatible)
-# Output: backend/dist/lambda_package_py311_linux.zip
+set -e
 
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DIST_DIR="$ROOT_DIR/dist"
-BUILD_DIR="$ROOT_DIR/build_linux"
-IMAGE="public.ecr.aws/lambda/python:3.11"
+echo "Building Lambda deployment package (application code)..."
 
-rm -rf "$BUILD_DIR" "$DIST_DIR"
-mkdir -p "$BUILD_DIR" "$DIST_DIR"
+# Configuration
+OUTPUT_ZIP="lambda-package.zip"
+PACKAGE_DIR="lambda-package"
 
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Docker is required to build a Linux-compatible Lambda package." >&2
-  exit 1
-fi
+# Clean up previous builds
+echo "Cleaning up previous builds..."
+rm -rf "$PACKAGE_DIR"
+rm -f "$OUTPUT_ZIP"
 
-echo "Building Lambda package using Docker image: $IMAGE"
-docker run --rm \
-  -v "$ROOT_DIR":/var/task \
-  "$IMAGE" \
-  /bin/sh -c "pip install -r /var/task/requirements.txt -t /var/task/build_linux && cp /var/task/app.py /var/task/lambda_function.py /var/task/build_linux/"
+# Create package directory
+echo "Creating package directory..."
+mkdir -p "$PACKAGE_DIR"
 
-(
-  cd "$BUILD_DIR"
-  zip -r ../dist/lambda_package_py311_linux.zip . >/dev/null
-)
+# Copy root-level application files
+echo "Copying application files..."
+cp app.py "$PACKAGE_DIR/"
+cp lambda_function.py "$PACKAGE_DIR/"
+cp .env.example "$PACKAGE_DIR/" 2>/dev/null || true
 
-echo "Created package: $DIST_DIR/lambda_package_py311_linux.zip"
+# If present, include API spec
+cp openapi.yaml "$PACKAGE_DIR/" 2>/dev/null || true
+
+# Remove unnecessary files
+echo "Cleaning up unnecessary files..."
+cd "$PACKAGE_DIR"
+
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find . -type f -name "*.pyc" -delete 2>/dev/null || true
+find . -type f -name ".DS_Store" -delete 2>/dev/null || true
+
+# Remove local/dev-only files if present
+rm -f local_server.py 2>/dev/null || true
+rm -f start.py 2>/dev/null || true
+
+cd ..
+
+# Create zip file
+echo "Creating zip file..."
+cd "$PACKAGE_DIR"
+zip -r "../$OUTPUT_ZIP" . -q
+cd ..
+
+# Get file size
+FILE_SIZE=$(du -h "$OUTPUT_ZIP" | cut -f1)
+FILE_SIZE_KB=$(du -k "$OUTPUT_ZIP" | cut -f1)
+
+echo ""
+echo "Lambda package built successfully"
+echo "Output file: $OUTPUT_ZIP"
+echo "File size: $FILE_SIZE (${FILE_SIZE_KB}KB)"
+echo ""
+echo "Contents:"
+echo " - app.py"
+echo " - lambda_function.py"
+echo " - .env.example (if present)"
+echo ""
+echo "Note: This package does NOT include dependencies."
+echo "Attach your app dependency Lambda Layer while deploying."
