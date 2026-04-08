@@ -736,6 +736,13 @@ export default function RecorderPage() {
   const stopSession = async () => {
     if (!selectedSession || !["started", "paused", "resumed"].includes(selectedSession.status)) return;
     try {
+      Object.values(recorderRefs.current).forEach((rec) => {
+        if (rec && rec.state !== "inactive") {
+          try {
+            rec.requestData();
+          } catch (_) {}
+        }
+      });
       await stopRecordersOnly();
       await Promise.all(SESSION_MEDIA_TYPES.map(async (mode) => {
         try {
