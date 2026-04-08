@@ -3,3 +3,4 @@ mangum==0.17.0
 pymongo==4.15.5
 dnspython==2.6.1
 python-dotenv==1.0.1
+boto3==1.37.38

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -31,6 +32,7 @@ const DIVYA_TEST_OPTIONS = [
   "PMP Test",
   "CAVA Test"
 ];
+const SESSION_MEDIA_TYPES = ["audio", "video", "screen"];
 
 const INITIAL_PLAYERS = [
   { key: "kapil", name: "Kapil", points: 0, reached: [], history: [] },
@@ -58,6 +60,14 @@ function racePercent(points) {
   return Math.min(Math.max((points / 100) * 100, 0), 100);
 }
 
+function formatDuration(totalSeconds) {
+  const sec = Math.max(0, Number(totalSeconds) || 0);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
+}
+
 export default function HomePage() {
   const [players, setPlayers] = useState(INITIAL_PLAYERS);
   const [toast, setToast] = useState("");
@@ -75,6 +85,24 @@ export default function HomePage() {
   const [historyData, setHistoryData] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [sessionForm, setSessionForm] = useState({
+    user_id: "kapil",
+    subject: "",
+    topic: "",
+    session_type: "study",
+    notes: "",
+    modes: ["audio", "video", "screen"]
+  });
+  const [sessionList, setSessionList] = useState([]);
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionError, setSessionError] = useState("");
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [timerState, setTimerState] = useState({ running: false, startedAt: 0, baseElapsed: 0 });
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [uploadStatus, setUploadStatus] = useState({ audio: "", video: "", screen: "" });
+  const recorderRefs = useRef({});
+  const streamRefs = useRef({});
+  const chunkRefs = useRef({ audio: [], video: [], screen: [] });
 
   useEffect(() => {
     const init = async () => {
@@ -151,6 +179,12 @@ export default function HomePage() {
     const timer = setTimeout(() => setToast(""), 2400);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!timerState.running) return;
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [timerState.running]);
 
   const addPoints = async (playerId, actionType, providedDetail = "", providedTestType = "") => {
     const add = POINTS_MAP[actionType] || 0;
@@ -294,12 +328,234 @@ export default function HomePage() {
     }
   };
 
+  const fetchSessions = async (userValue = sessionForm.user_id) => {
+    if (!API_BASE_URL || !userValue) return;
+    setSessionLoading(true);
+    setSessionError("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/sessions?user_id=${encodeURIComponent(userValue)}`);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Sessions API failed: ${res.status} ${txt}`);
+      }
+      const data = await res.json();
+      setSessionList(data.sessions || []);
+      if (selectedSession) {
+        const refreshed = (data.sessions || []).find((s) => s._id === selectedSession._id);
+        if (refreshed) setSelectedSession(refreshed);
+      }
+    } catch (err) {
+      setSessionError(String(err.message || err));
+    } finally {
+      setSessionLoading(false);
+    }
+  };
+
+  const createSession = async () => {
+    if (!API_BASE_URL) return;
+    setSessionError("");
+    try {
+      const payload = {
+        user_id: sessionForm.user_id,
+        subject: sessionForm.subject.trim(),
+        topic: sessionForm.topic.trim(),
+        session_type: sessionForm.session_type,
+        notes: sessionForm.notes.trim(),
+        modes: sessionForm.modes
+      };
+      const res = await fetch(`${API_BASE_URL}/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Create session failed: ${res.status} ${txt}`);
+      }
+      const data = await res.json();
+      setSelectedSession(data.session);
+      setTimerState({ running: false, startedAt: 0, baseElapsed: data.session?.elapsed_seconds || 0 });
+      await fetchSessions(sessionForm.user_id);
+    } catch (err) {
+      setSessionError(String(err.message || err));
+    }
+  };
+
+  const selectSession = (session) => {
+    setSelectedSession(session);
+    setTimerState({ running: false, startedAt: 0, baseElapsed: session?.elapsed_seconds || 0 });
+    setUploadStatus({ audio: "", video: "", screen: "" });
+  };
+
+  const stopAndReleaseStreams = () => {
+    Object.values(streamRefs.current).forEach((stream) => {
+      (stream?.getTracks?.() || []).forEach((t) => t.stop());
+    });
+    streamRefs.current = {};
+  };
+
+  const stopRecordersOnly = async () => {
+    const entries = Object.entries(recorderRefs.current);
+    if (entries.length === 0) return;
+    await Promise.all(entries.map(([mode, rec]) => new Promise((resolve) => {
+      if (!rec || rec.state === "inactive") return resolve();
+      rec.onstop = () => resolve();
+      try {
+        rec.stop();
+      } catch (_) {
+        resolve();
+      }
+    })));
+  };
+
+  const getMimeForMode = (mode) => {
+    if (mode === "audio") return "audio/webm";
+    return "video/webm";
+  };
+
+  const initRecorders = async (modes) => {
+    recorderRefs.current = {};
+    chunkRefs.current = { audio: [], video: [], screen: [] };
+    const unique = Array.from(new Set(modes || []));
+    for (const mode of unique) {
+      let stream;
+      if (mode === "audio") {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      } else if (mode === "video") {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      } else if (mode === "screen") {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      } else {
+        continue;
+      }
+      streamRefs.current[mode] = stream;
+      const mimeType = getMimeForMode(mode);
+      const rec = new MediaRecorder(stream, { mimeType });
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          chunkRefs.current[mode].push(e.data);
+        }
+      };
+      recorderRefs.current[mode] = rec;
+      rec.start(1000);
+    }
+  };
+
+  const uploadRecordedBlob = async (mediaType, blob) => {
+    if (!API_BASE_URL || !selectedSession?._id || !blob || blob.size === 0) return;
+    setUploadStatus((prev) => ({ ...prev, [mediaType]: "Uploading..." }));
+    try {
+      const contentType = blob.type || (mediaType === "audio" ? "audio/webm" : "video/webm");
+      const ext = contentType.includes("mp4") ? "mp4" : "webm";
+      const presignRes = await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/presign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          media_type: mediaType,
+          content_type: contentType,
+          extension: ext
+        })
+      });
+      if (!presignRes.ok) {
+        const txt = await presignRes.text();
+        throw new Error(`Presign failed: ${presignRes.status} ${txt}`);
+      }
+      const presignData = await presignRes.json();
+      const putRes = await fetch(presignData.upload_url, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: blob
+      });
+      if (!putRes.ok) throw new Error(`Upload failed: ${putRes.status}`);
+      setUploadStatus((prev) => ({ ...prev, [mediaType]: "Uploaded" }));
+    } catch (err) {
+      setUploadStatus((prev) => ({ ...prev, [mediaType]: `Error: ${String(err.message || err)}` }));
+    }
+  };
+
+  const pushSessionStatus = async (status) => {
+    if (!API_BASE_URL || !selectedSession?._id) return;
+    const elapsed = timerState.running
+      ? timerState.baseElapsed + Math.floor((Date.now() - timerState.startedAt) / 1000)
+      : timerState.baseElapsed;
+    try {
+      const res = await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, elapsed_seconds: elapsed })
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Status update failed: ${res.status} ${txt}`);
+      }
+      const data = await res.json();
+      setSelectedSession(data.session);
+      setTimerState({ running: false, startedAt: 0, baseElapsed: data.session?.elapsed_seconds || elapsed });
+      await fetchSessions(selectedSession?.user_id || sessionForm.user_id);
+    } catch (err) {
+      setSessionError(String(err.message || err));
+    }
+  };
+
+  const startSession = async () => {
+    if (!selectedSession) return;
+    setSessionError("");
+    try {
+      await initRecorders(selectedSession.modes || []);
+    } catch (err) {
+      stopAndReleaseStreams();
+      setSessionError(`Recorder permission/device error: ${String(err.message || err)}`);
+      return;
+    }
+    await pushSessionStatus("started");
+    setTimerState({ running: true, startedAt: Date.now(), baseElapsed: selectedSession.elapsed_seconds || 0 });
+  };
+
+  const pauseSession = async () => {
+    Object.values(recorderRefs.current).forEach((rec) => {
+      if (rec && rec.state === "recording") rec.pause();
+    });
+    await pushSessionStatus("paused");
+  };
+
+  const resumeSession = async () => {
+    if (!selectedSession) return;
+    Object.values(recorderRefs.current).forEach((rec) => {
+      if (rec && rec.state === "paused") rec.resume();
+    });
+    await pushSessionStatus("resumed");
+    const base = selectedSession.elapsed_seconds || timerState.baseElapsed || 0;
+    setTimerState({ running: true, startedAt: Date.now(), baseElapsed: base });
+  };
+
+  const stopSession = async () => {
+    await stopRecordersOnly();
+    stopAndReleaseStreams();
+    await Promise.all(SESSION_MEDIA_TYPES.map(async (m) => {
+      const parts = chunkRefs.current[m] || [];
+      if (!parts.length) return;
+      const blob = new Blob(parts, { type: getMimeForMode(m) });
+      await uploadRecordedBlob(m, blob);
+    }));
+    recorderRefs.current = {};
+    chunkRefs.current = { audio: [], video: [], screen: [] };
+    await pushSessionStatus("stopped");
+  };
+
+  const elapsedDisplay = timerState.running
+    ? timerState.baseElapsed + Math.floor((nowTick - timerState.startedAt) / 1000)
+    : timerState.baseElapsed;
+
   return (
     <main className="app-shell">
       <div className="bg-orb orb-1" />
       <div className="bg-orb orb-2" />
 
       <header className="hero">
+        <div className="top-nav-links">
+          <Link href="/" className="top-nav-link active">Home</Link>
+          <Link href="/recorder" className="top-nav-link">Recorder</Link>
+        </div>
         {API_BASE_URL ? (
           <div className="top-right-tools">
             <div className="winner-counter compact">

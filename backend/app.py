@@ -1,5 +1,7 @@
 import os
 import logging
+import uuid
+from urllib.parse import quote
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -12,6 +14,11 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from dotenv import load_dotenv
+
+try:
+    import boto3
+except ImportError:
+    boto3 = None
 
 POINTS_MAP = {
     "new_class": 3,
@@ -58,13 +65,68 @@ class AddPointsRequest(BaseModel):
     detail: str = ""
 
 
+class CreateSessionRequest(BaseModel):
+    user_id: str
+    subject: str
+    topic: str
+    session_type: str  # study | revision
+    modes: List[str] = []  # audio | video | screen
+    notes: str
+
+
+class SessionStatusRequest(BaseModel):
+    status: str  # started | paused | resumed | stopped
+    elapsed_seconds: int = 0
+
+
+class PresignRequest(BaseModel):
+    media_type: str  # audio | video | screen
+    content_type: str = "application/octet-stream"
+    extension: str = "webm"
+
+
+class MultipartStartRequest(BaseModel):
+    media_type: str  # audio | video | screen
+    content_type: str = "application/octet-stream"
+    extension: str = "webm"
+
+
+class MultipartPartRequest(BaseModel):
+    media_type: str  # audio | video | screen
+    upload_id: str
+    part_number: int
+
+
+class UploadedPart(BaseModel):
+    part_number: int
+    etag: str
+
+
+class MultipartCompleteRequest(BaseModel):
+    media_type: str  # audio | video | screen
+    upload_id: str
+    parts: List[UploadedPart]
+
+
+class MultipartAbortRequest(BaseModel):
+    media_type: str  # audio | video | screen
+    upload_id: str
+
+
+def _session_id() -> str:
+    return f"session:{uuid.uuid4().hex}"
+
+
 def _settings():
     return {
         "race_doc_id": os.getenv("RACE_DOC_ID", "kapil_divya_race"),
         "mongodb_uri": os.getenv("MONGODB_URI", ""),
         "mongodb_db": os.getenv("MONGODB_DB", "racing_challenge"),
         "mongodb_collection": os.getenv("MONGODB_COLLECTION", "race_state"),
+        "mongodb_sessions_collection": os.getenv("MONGODB_SESSIONS_COLLECTION", "study_sessions"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
+        "aws_region": os.getenv("AWS_REGION", "ap-south-1"),
+        "recording_bucket": os.getenv("RECORDING_BUCKET", ""),
     }
 
 
@@ -90,6 +152,41 @@ def _get_collection():
         _mongo_client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
 
     return _mongo_client[settings["mongodb_db"]][settings["mongodb_collection"]]
+
+
+def _get_sessions_collection():
+    global _mongo_client
+    settings = _settings()
+    mongodb_uri = settings["mongodb_uri"]
+    if not mongodb_uri:
+        raise RuntimeError("MONGODB_URI is not configured")
+
+    if _mongo_client is None:
+        _mongo_client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
+
+    return _mongo_client[settings["mongodb_db"]][settings["mongodb_sessions_collection"]]
+
+
+def _get_s3_client():
+    settings = _settings()
+    if boto3 is None:
+        raise RuntimeError("boto3 is not installed")
+    aws_region = settings["aws_region"]
+    return boto3.client(
+        "s3",
+        region_name=aws_region,
+        endpoint_url=f"https://s3.{aws_region}.amazonaws.com",
+    )
+
+
+def _sanitize_key_part(value: str) -> str:
+    return quote((value or "").strip().replace(" ", "_"), safe="_-")
+
+
+def _session_media_key(doc: Dict[str, Any], media_type: str, ext: str) -> str:
+    date_part = _sanitize_key_part(doc.get("date", _current_date_str()))
+    subject_part = _sanitize_key_part(doc.get("subject", "general"))
+    return f"study-sessions/{date_part}/{subject_part}/{doc.get('_id')}/{media_type}.{ext}"
 
 
 def _default_state_doc() -> Dict[str, Any]:
@@ -367,6 +464,464 @@ def reset_race():
         }
     except Exception as err:
         logger.exception("POST /reset failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.post("/sessions")
+def create_session(payload: CreateSessionRequest):
+    try:
+        if payload.user_id not in PLAYERS:
+            raise HTTPException(status_code=400, detail="Invalid user_id")
+        if payload.session_type not in {"study", "revision"}:
+            raise HTTPException(status_code=400, detail="session_type must be study or revision")
+        subject = payload.subject.strip()
+        topic = payload.topic.strip()
+        notes = payload.notes.strip()
+        if not subject:
+            raise HTTPException(status_code=400, detail="subject is required")
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic is required")
+        if not notes:
+            raise HTTPException(status_code=400, detail="notes are required")
+
+        modes = [m for m in payload.modes if m in {"audio", "video", "screen"}]
+        date_str = _current_date_str()
+        doc = {
+            "_id": _session_id(),
+            "doc_type": "study_session",
+            "date": date_str,
+            "user_id": payload.user_id,
+            "subject": subject,
+            "start_time": None,
+            "total_time_minutes": 0,
+            "topic": topic,
+            "session_type": payload.session_type,
+            "modes": modes,
+            "notes": notes,
+            "timer_only": len(modes) == 0,
+            "status": "created",
+            "elapsed_seconds": 0,
+            "started_at": None,
+            "stopped_at": None,
+            "uploads": {"audio": None, "video": None, "screen": None},
+            "events": [{
+                "status": "created",
+                "at": datetime.now(timezone.utc).isoformat(),
+            }],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        collection = _get_sessions_collection()
+        collection.insert_one(doc)
+        return {"message": "Session created", "session": doc}
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.exception("POST /sessions failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.get("/sessions")
+def list_sessions(
+    date: str | None = Query(default=None),
+    user_id: str | None = Query(default=None),
+):
+    try:
+        collection = _get_sessions_collection()
+        query: Dict[str, Any] = {"doc_type": "study_session"}
+        query["date"] = date or _current_date_str()
+        if user_id in PLAYERS:
+            query["user_id"] = user_id
+        docs = list(collection.find(query).sort("created_at", -1))
+        return {"sessions": docs}
+    except Exception as err:
+        logger.exception("GET /sessions failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.get("/sessions/{session_id}")
+def get_session(session_id: str):
+    try:
+        collection = _get_sessions_collection()
+        doc = collection.find_one({"_id": session_id, "doc_type": "study_session"})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return {"session": doc}
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.exception("GET /sessions/{id} failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.post("/sessions/{session_id}/status")
+def update_session_status(session_id: str, payload: SessionStatusRequest):
+    try:
+        if payload.status not in {"started", "paused", "resumed", "stopped"}:
+            raise HTTPException(status_code=400, detail="Invalid status")
+
+        collection = _get_sessions_collection()
+        doc = collection.find_one({"_id": session_id, "doc_type": "study_session"})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Session not found")
+        current_status = doc.get("status", "created")
+        if current_status == "stopped":
+            raise HTTPException(status_code=400, detail="Session already stopped/closed")
+
+        allowed_transitions = {
+            "created": {"started"},
+            "started": {"paused", "stopped"},
+            "paused": {"resumed", "stopped"},
+            "resumed": {"paused", "stopped"},
+        }
+        next_allowed = allowed_transitions.get(current_status, set())
+        if payload.status not in next_allowed:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid transition: {current_status} -> {payload.status}",
+            )
+        if payload.status in {"started", "resumed", "paused"}:
+            other_active = collection.find_one({
+                "doc_type": "study_session",
+                "user_id": doc.get("user_id"),
+                "status": {"$in": ["started", "resumed", "paused"]},
+                "_id": {"$ne": session_id},
+            })
+            if other_active:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only one active session is allowed per user. Stop the current active session first.",
+                )
+
+        event = {
+            "status": payload.status,
+            "elapsed_seconds": max(0, payload.elapsed_seconds),
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+        update_fields = {
+            "status": payload.status,
+            "elapsed_seconds": max(0, payload.elapsed_seconds),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if payload.status == "started":
+            update_fields["started_at"] = datetime.now(timezone.utc).isoformat()
+            if not doc.get("start_time"):
+                update_fields["start_time"] = datetime.now(timezone.utc).isoformat()
+        if payload.status == "stopped":
+            update_fields["stopped_at"] = datetime.now(timezone.utc).isoformat()
+            update_fields["total_time_minutes"] = max(1, (max(0, payload.elapsed_seconds) + 59) // 60)
+
+        collection.update_one(
+            {"_id": session_id},
+            {"$set": update_fields, "$push": {"events": event}},
+        )
+        updated = collection.find_one({"_id": session_id})
+        return {"message": "Session status updated", "session": updated}
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.exception("POST /sessions/{id}/status failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.post("/sessions/{session_id}/presign")
+def create_presigned_upload(session_id: str, payload: PresignRequest):
+    try:
+        if payload.media_type not in {"audio", "video", "screen"}:
+            raise HTTPException(status_code=400, detail="Invalid media_type")
+        ext = (payload.extension or "webm").strip().lower().replace(".", "")
+        if not ext:
+            ext = "webm"
+
+        settings = _settings()
+        bucket = settings["recording_bucket"]
+        if not bucket:
+            raise HTTPException(status_code=500, detail="RECORDING_BUCKET is not configured")
+
+        collection = _get_sessions_collection()
+        doc = collection.find_one({"_id": session_id, "doc_type": "study_session"})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        key = _session_media_key(doc, payload.media_type, ext)
+
+        s3_client = _get_s3_client()
+        upload_url = s3_client.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": bucket,
+                "Key": key,
+                "ContentType": payload.content_type,
+            },
+            ExpiresIn=3600,
+        )
+
+        object_url = f"https://{bucket}.s3.{settings['aws_region']}.amazonaws.com/{key}"
+        collection.update_one(
+            {"_id": session_id},
+            {"$set": {
+                f"uploads.{payload.media_type}": {
+                    "key": key,
+                    "content_type": payload.content_type,
+                    "object_url": object_url,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        return {
+            "upload_url": upload_url,
+            "object_url": object_url,
+            "key": key,
+            "bucket": bucket,
+        }
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.exception("POST /sessions/{id}/presign failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.post("/sessions/{session_id}/multipart/start")
+def start_multipart_upload(session_id: str, payload: MultipartStartRequest):
+    try:
+        if payload.media_type not in {"audio", "video", "screen"}:
+            raise HTTPException(status_code=400, detail="Invalid media_type")
+        ext = (payload.extension or "webm").strip().lower().replace(".", "")
+        if not ext:
+            ext = "webm"
+
+        settings = _settings()
+        bucket = settings["recording_bucket"]
+        if not bucket:
+            raise HTTPException(status_code=500, detail="RECORDING_BUCKET is not configured")
+
+        collection = _get_sessions_collection()
+        doc = collection.find_one({"_id": session_id, "doc_type": "study_session"})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        key = _session_media_key(doc, payload.media_type, ext)
+        s3_client = _get_s3_client()
+        resp = s3_client.create_multipart_upload(
+            Bucket=bucket,
+            Key=key,
+            ContentType=payload.content_type,
+        )
+        upload_id = resp.get("UploadId", "")
+        if not upload_id:
+            raise HTTPException(status_code=500, detail="Failed to initialize multipart upload")
+
+        collection.update_one(
+            {"_id": session_id},
+            {"$set": {
+                f"uploads.{payload.media_type}": {
+                    "key": key,
+                    "content_type": payload.content_type,
+                    "upload_id": upload_id,
+                    "status": "multipart_started",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        return {"bucket": bucket, "key": key, "upload_id": upload_id, "media_type": payload.media_type}
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.exception("POST /sessions/{id}/multipart/start failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.post("/sessions/{session_id}/multipart/presign-part")
+def presign_multipart_part(session_id: str, payload: MultipartPartRequest):
+    try:
+        if payload.media_type not in {"audio", "video", "screen"}:
+            raise HTTPException(status_code=400, detail="Invalid media_type")
+        if payload.part_number < 1:
+            raise HTTPException(status_code=400, detail="part_number must be >= 1")
+
+        settings = _settings()
+        bucket = settings["recording_bucket"]
+        if not bucket:
+            raise HTTPException(status_code=500, detail="RECORDING_BUCKET is not configured")
+
+        collection = _get_sessions_collection()
+        doc = collection.find_one({"_id": session_id, "doc_type": "study_session"})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        upload_info = (doc.get("uploads", {}) or {}).get(payload.media_type) or {}
+        key = upload_info.get("key")
+        upload_id = upload_info.get("upload_id")
+        if not key or not upload_id:
+            raise HTTPException(status_code=400, detail="Multipart upload not initialized for this media")
+        if upload_id != payload.upload_id:
+            raise HTTPException(status_code=400, detail="upload_id mismatch")
+
+        s3_client = _get_s3_client()
+        upload_url = s3_client.generate_presigned_url(
+            "upload_part",
+            Params={
+                "Bucket": bucket,
+                "Key": key,
+                "UploadId": payload.upload_id,
+                "PartNumber": payload.part_number,
+            },
+            ExpiresIn=3600,
+        )
+        return {"upload_url": upload_url, "key": key, "upload_id": payload.upload_id, "part_number": payload.part_number}
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.exception("POST /sessions/{id}/multipart/presign-part failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.post("/sessions/{session_id}/multipart/complete")
+def complete_multipart_upload(session_id: str, payload: MultipartCompleteRequest):
+    try:
+        if payload.media_type not in {"audio", "video", "screen"}:
+            raise HTTPException(status_code=400, detail="Invalid media_type")
+        if not payload.parts:
+            raise HTTPException(status_code=400, detail="parts are required")
+
+        settings = _settings()
+        bucket = settings["recording_bucket"]
+        if not bucket:
+            raise HTTPException(status_code=500, detail="RECORDING_BUCKET is not configured")
+
+        collection = _get_sessions_collection()
+        doc = collection.find_one({"_id": session_id, "doc_type": "study_session"})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        upload_info = (doc.get("uploads", {}) or {}).get(payload.media_type) or {}
+        key = upload_info.get("key")
+        upload_id = upload_info.get("upload_id")
+        if not key or not upload_id:
+            raise HTTPException(status_code=400, detail="Multipart upload not initialized for this media")
+        if upload_id != payload.upload_id:
+            raise HTTPException(status_code=400, detail="upload_id mismatch")
+
+        parts = sorted(
+            [{"ETag": p.etag, "PartNumber": p.part_number} for p in payload.parts],
+            key=lambda item: item["PartNumber"],
+        )
+        s3_client = _get_s3_client()
+        s3_client.complete_multipart_upload(
+            Bucket=bucket,
+            Key=key,
+            UploadId=payload.upload_id,
+            MultipartUpload={"Parts": parts},
+        )
+
+        object_url = f"https://{bucket}.s3.{settings['aws_region']}.amazonaws.com/{key}"
+        collection.update_one(
+            {"_id": session_id},
+            {"$set": {
+                f"uploads.{payload.media_type}": {
+                    "key": key,
+                    "content_type": upload_info.get("content_type", "application/octet-stream"),
+                    "object_url": object_url,
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        return {"message": "Multipart upload completed", "media_type": payload.media_type, "object_url": object_url}
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.exception("POST /sessions/{id}/multipart/complete failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.post("/sessions/{session_id}/multipart/abort")
+def abort_multipart_upload(session_id: str, payload: MultipartAbortRequest):
+    try:
+        if payload.media_type not in {"audio", "video", "screen"}:
+            raise HTTPException(status_code=400, detail="Invalid media_type")
+
+        settings = _settings()
+        bucket = settings["recording_bucket"]
+        if not bucket:
+            raise HTTPException(status_code=500, detail="RECORDING_BUCKET is not configured")
+
+        collection = _get_sessions_collection()
+        doc = collection.find_one({"_id": session_id, "doc_type": "study_session"})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        upload_info = (doc.get("uploads", {}) or {}).get(payload.media_type) or {}
+        key = upload_info.get("key")
+        upload_id = upload_info.get("upload_id")
+        if not key or not upload_id:
+            return {"message": "No in-progress multipart upload to abort"}
+        if upload_id != payload.upload_id:
+            raise HTTPException(status_code=400, detail="upload_id mismatch")
+
+        s3_client = _get_s3_client()
+        s3_client.abort_multipart_upload(
+            Bucket=bucket,
+            Key=key,
+            UploadId=payload.upload_id,
+        )
+        collection.update_one(
+            {"_id": session_id},
+            {"$set": {
+                f"uploads.{payload.media_type}.status": "aborted",
+                f"uploads.{payload.media_type}.updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        return {"message": "Multipart upload aborted", "media_type": payload.media_type}
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.exception("POST /sessions/{id}/multipart/abort failed")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
+
+
+@app.get("/sessions/{session_id}/playback-url")
+def create_presigned_playback_url(session_id: str, media_type: str = Query(...)):
+    try:
+        if media_type not in {"audio", "video", "screen"}:
+            raise HTTPException(status_code=400, detail="Invalid media_type")
+
+        settings = _settings()
+        bucket = settings["recording_bucket"]
+        if not bucket:
+            raise HTTPException(status_code=500, detail="RECORDING_BUCKET is not configured")
+
+        collection = _get_sessions_collection()
+        doc = collection.find_one({"_id": session_id, "doc_type": "study_session"})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        upload_info = (doc.get("uploads", {}) or {}).get(media_type)
+        key = (upload_info or {}).get("key")
+        if not key:
+            raise HTTPException(status_code=404, detail=f"No {media_type} recording found for this session")
+
+        s3_client = _get_s3_client()
+        playback_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": key},
+            ExpiresIn=3600,
+        )
+        return {
+            "playback_url": playback_url,
+            "media_type": media_type,
+            "key": key,
+        }
+    except HTTPException:
+        raise
+    except Exception as err:
+        logger.exception("GET /sessions/{id}/playback-url failed")
         raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
 
 

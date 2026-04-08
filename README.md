@@ -67,6 +67,23 @@ Note: backend now auto-loads variables from `backend/.env` via `python-dotenv`.
 - `GET /state?date=YYYY-MM-DD` can fetch any day in read-only mode.
 - `GET /days` returns available race dates and winner-day counters.
 
+## Study Session Recorder
+
+- Create session with metadata:
+  - `date`, `subject`, `topic`, `session_type` (`study`/`revision`)
+  - `start_time` and `total_time_minutes` are auto-calculated by recorder status events
+- Track session controls:
+  - `started`, `paused`, `resumed`, `stopped`
+- Upload media to S3 through presigned URLs:
+  - `audio`, `video`, `screen`
+
+API endpoints:
+- `POST /sessions`
+- `GET /sessions?user_id=kapil|divya` (today by default)
+- `GET /sessions/{session_id}`
+- `POST /sessions/{session_id}/status`
+- `POST /sessions/{session_id}/presign`
+
 ## Backend Deploy (AWS Lambda + API Gateway + MongoDB)
 
 1. Create a Lambda function (Python 3.11).
