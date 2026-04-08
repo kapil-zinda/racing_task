@@ -14,14 +14,23 @@ const MILESTONES = [
 const POINTS_MAP = {
   new_class: 3,
   revision: 2,
-  ticket_resolved: 4
+  ticket_resolved: 4,
+  test_completed: 4
 };
 
 const ACTION_LABELS = {
   new_class: "New Class",
   revision: "Revision",
-  ticket_resolved: "Ticket Resolved"
+  ticket_resolved: "Ticket Resolved",
+  test_completed: "Test Completed"
 };
+
+const DIVYA_TEST_OPTIONS = [
+  "SFG Level 1",
+  "SFG Level 2",
+  "PMP Test",
+  "CAVA Test"
+];
 
 const INITIAL_PLAYERS = [
   { key: "kapil", name: "Kapil", points: 0, reached: [], history: [] },
@@ -55,6 +64,7 @@ export default function HomePage() {
   const [apiError, setApiError] = useState("");
   const [taskModal, setTaskModal] = useState({ open: false, playerId: "", actionType: "" });
   const [taskComment, setTaskComment] = useState("");
+  const [selectedTest, setSelectedTest] = useState("");
   const [historyOpen, setHistoryOpen] = useState({ kapil: false, divya: false });
   const [todayDate, setTodayDate] = useState("");
   const [availableDates, setAvailableDates] = useState([]);
@@ -142,9 +152,10 @@ export default function HomePage() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const addPoints = async (playerId, actionType, providedDetail = "") => {
+  const addPoints = async (playerId, actionType, providedDetail = "", providedTestType = "") => {
     const add = POINTS_MAP[actionType] || 0;
     const detail = providedDetail.trim();
+    const testType = providedTestType.trim();
     if (!isEditable) {
       setApiError("Only today's race can be edited.");
       return false;
@@ -155,7 +166,7 @@ export default function HomePage() {
         const res = await fetch(`${API_BASE_URL}/points`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ player_id: playerId, action_type: actionType, detail })
+          body: JSON.stringify({ player_id: playerId, action_type: actionType, test_type: testType, detail })
         });
 
         if (!res.ok) {
@@ -209,8 +220,8 @@ export default function HomePage() {
 
         updatedHistory.unshift({
           action_type: actionType,
-          action_label: ACTION_LABELS[actionType],
-          detail: detail || ACTION_LABELS[actionType],
+          action_label: actionType === "test_completed" && testType ? testType : ACTION_LABELS[actionType],
+          detail: detail || (actionType === "test_completed" && testType ? testType : ACTION_LABELS[actionType]),
           points: add,
           created_at: new Date().toISOString()
         });
@@ -225,17 +236,22 @@ export default function HomePage() {
     if (!isEditable) return;
     setTaskModal({ open: true, playerId, actionType });
     setTaskComment("");
+    setSelectedTest("");
   };
 
   const closeTaskModal = () => {
     setTaskModal({ open: false, playerId: "", actionType: "" });
     setTaskComment("");
+    setSelectedTest("");
   };
 
   const submitTaskModal = async () => {
+    const isTestAction = taskModal.actionType === "test_completed";
+    const testType = isTestAction ? selectedTest.trim() : "";
     const detail = taskComment.trim();
-    if (!detail) return;
-    const ok = await addPoints(taskModal.playerId, taskModal.actionType, detail);
+    if (isTestAction && (!testType || !detail)) return;
+    if (!isTestAction && !detail) return;
+    const ok = await addPoints(taskModal.playerId, taskModal.actionType, detail, testType);
     if (ok) closeTaskModal();
   };
 
@@ -360,7 +376,11 @@ export default function HomePage() {
               <div className="action-grid">
                 <button className="btn-new" disabled={!isEditable} onClick={() => openTaskModal(player.key, "new_class")}>+ New Class</button>
                 <button className="btn-revise" disabled={!isEditable} onClick={() => openTaskModal(player.key, "revision")}>+ Revision</button>
-                <button className="btn-ticket" disabled={!isEditable} onClick={() => openTaskModal(player.key, "ticket_resolved")}>+ Ticket</button>
+                {player.key === "divya" ? (
+                  <button className="btn-ticket" disabled={!isEditable} onClick={() => openTaskModal(player.key, "test_completed")}>+ Tests</button>
+                ) : (
+                  <button className="btn-ticket" disabled={!isEditable} onClick={() => openTaskModal(player.key, "ticket_resolved")}>+ Ticket</button>
+                )}
               </div>
 
               <div className="earned-wrap">
@@ -439,18 +459,41 @@ export default function HomePage() {
               {players.find((p) => p.key === taskModal.playerId)?.name} -{" "}
               {ACTION_LABELS[taskModal.actionType] || "Task"}
             </p>
-            <textarea
-              className="task-textarea"
-              placeholder="Write what was completed..."
-              value={taskComment}
-              onChange={(e) => setTaskComment(e.target.value)}
-            />
+            {taskModal.actionType === "test_completed" ? (
+              <>
+                <select
+                  className="task-select"
+                  value={selectedTest}
+                  onChange={(e) => setSelectedTest(e.target.value)}
+                >
+                  <option value="">Select Test</option>
+                  {DIVYA_TEST_OPTIONS.map((test) => (
+                    <option key={test} value={test}>
+                      {test}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  className="task-textarea"
+                  placeholder="Add detail about this test..."
+                  value={taskComment}
+                  onChange={(e) => setTaskComment(e.target.value)}
+                />
+              </>
+            ) : (
+              <textarea
+                className="task-textarea"
+                placeholder="Write what was completed..."
+                value={taskComment}
+                onChange={(e) => setTaskComment(e.target.value)}
+              />
+            )}
             <div className="task-modal-actions">
               <button className="btn-cancel" onClick={closeTaskModal}>Cancel</button>
               <button
                 className="btn-save"
                 onClick={submitTaskModal}
-                disabled={!taskComment.trim()}
+                disabled={taskModal.actionType === "test_completed" ? (!selectedTest.trim() || !taskComment.trim()) : !taskComment.trim()}
               >
                 Save Task
               </button>

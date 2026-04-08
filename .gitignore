@@ -40,8 +40,9 @@ backend/build_linux/
 backend/layer/
 backend/dist/
 backend/lambda-layer-app/
+backend/lambda-package/
 backend/lambda-layer-app.zip
-backend/lambda_package_*.zip
+backend/lambda-package.zip
 backend/python/
 
 # IDE/editor
