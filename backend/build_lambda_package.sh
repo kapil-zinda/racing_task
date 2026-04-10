@@ -23,6 +23,7 @@ mkdir -p "$PACKAGE_DIR"
 echo "Copying application files..."
 cp app.py "$PACKAGE_DIR/"
 cp lambda_function.py "$PACKAGE_DIR/"
+cp -r race_api "$PACKAGE_DIR/"
 cp .env.example "$PACKAGE_DIR/" 2>/dev/null || true
 
 # If present, include API spec
@@ -60,6 +61,7 @@ echo ""
 echo "Contents:"
 echo " - app.py"
 echo " - lambda_function.py"
+echo " - race_api/"
 echo " - .env.example (if present)"
 echo ""
 echo "Note: This package does NOT include dependencies."

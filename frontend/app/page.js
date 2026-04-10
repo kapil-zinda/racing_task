@@ -26,12 +26,112 @@ const ACTION_LABELS = {
   test_completed: "Test Completed"
 };
 
-const DIVYA_TEST_OPTIONS = [
-  "SFG Level 1",
-  "SFG Level 2",
-  "PMP Test",
-  "CAVA Test"
+const TEST_SOURCE_OPTIONS = ["sfg1", "sfg2", "pmp", "cava"];
+const TEST_STAGE_OPTIONS = [
+  { value: "test_given", label: "Test Given" },
+  { value: "revision", label: "Revision" },
+  { value: "second_revision", label: "Second Revision" },
 ];
+const TICKET_ORG_OPTIONS = ["uchhal", "elucidata", "divya"];
+const OTHER_VALUE = "__other__";
+const EXAM_CATALOG = {
+  prelims: [
+    "Latest Current Affairs",
+    "Static GK",
+    "History of India and Indian National Movement",
+    "Indian and World Geography",
+    "Physical Geography",
+    "Social Geography",
+    "Economic Geography",
+    "Indian Polity and Governance",
+    "Constitution",
+    "Public Policy Rights",
+    "Political System",
+    "Rights Issues",
+    "Panchayati Raj",
+    "Economic and Social Development",
+    "Sustainable Development",
+    "Poverty",
+    "Inclusion",
+    "Demographics",
+    "Social Sector Initiatives",
+    "Environment and Ecology",
+    "Biodiversity",
+    "Climate Change",
+    "Science and Technology"
+  ].map((subject) => ({ subject, topics: ["General"] })),
+  mains: [
+    "History",
+    "Modern",
+    "World History",
+    "Art & Culture",
+    "Indian Heritage and Culture",
+    "Geography",
+    "Human Geography",
+    "World Physical Geography",
+    "Society",
+    "Salient Features of Indian Society",
+    "Polity",
+    "Indian Constitution & its features, amendments, provisions and bodies",
+    "Governance",
+    "Social Justice",
+    "International Relations",
+    "Technology",
+    "Economic Development",
+    "Biodiversity",
+    "Environment",
+    "Security",
+    "Disaster Management",
+    "Ethics",
+    "Integrity",
+    "Aptitude"
+  ].map((subject) => ({ subject, topics: ["General"] })),
+  csat: [
+    "Comprehension",
+    "Interpersonal Skills Including Communication Skills",
+    "Logical Reasoning and Analytical Ability",
+    "Decision Making and Problem Solving",
+    "General Mental Ability",
+    "Basic Numeracy",
+    "Data Interpretation",
+    "English Language Comprehension Skills"
+  ].map((subject) => ({ subject, topics: ["General"] })),
+  sociology_1: [
+    { subject: "Sociology - The Discipline", topics: ["Modernity and emergence of Sociology", "Scope and comparison with other social sciences", "Sociology and common sense"] },
+    { subject: "Sociology as Science", topics: ["Scientific method and critique", "Positivism and critique", "Fact value and objectivity", "Non-positivist methodologies"] },
+    { subject: "Research Methods and Analysis", topics: ["Qualitative and quantitative methods", "Data collection techniques", "Sampling, hypothesis, reliability, validity"] },
+    { subject: "Sociological Thinkers", topics: ["Karl Marx", "Emile Durkheim", "Max Weber", "Talcott Parsons", "Robert K. Merton", "Mead"] },
+    { subject: "Stratification and Mobility", topics: ["Inequality and deprivation", "Theories of stratification", "Class/status/gender/ethnicity/race", "Mobility types and causes"] },
+    { subject: "Works and Economic Life", topics: ["Work across slave/feudal/capitalist societies", "Formal and informal work", "Labour and society"] },
+    { subject: "Politics and Society", topics: ["Theories of power", "Power elite and bureaucracy", "Nation/state/citizenship/democracy", "Movements and revolution"] },
+    { subject: "Religion and Society", topics: ["Theories of religion", "Animism/monism/pluralism/sects/cults", "Secularisation/revivalism/fundamentalism"] },
+    { subject: "Systems of Kinship", topics: ["Family/household/marriage", "Lineage and descent", "Patriarchy and sexual division of labour", "Contemporary trends"] },
+    { subject: "Social Change in Modern Society", topics: ["Theories of social change", "Development and dependency", "Agents of social change", "Education/science/technology"] }
+  ],
+  sociology_2: [
+    { subject: "Perspectives on the Study of Indian Society", topics: ["Indology (G.S. Ghure)", "Structural functionalism (M. N. Srinivas)", "Marxist sociology (A. R. Desai)"] },
+    { subject: "Impact of Colonial Rule on Indian Society", topics: ["Indian nationalism background", "Modernization of tradition", "Protests and movements", "Social reforms"] },
+    { subject: "Rural and Agrarian Social Structure", topics: ["Indian village studies", "Land tenure and land reforms"] },
+    { subject: "Caste System", topics: ["Caste perspectives", "Features of caste", "Untouchability"] },
+    { subject: "Tribal Communities in India", topics: ["Definitional problems", "Geographical spread", "Colonial policies", "Integration and autonomy"] },
+    { subject: "Social Classes in India", topics: ["Agrarian class structure", "Industrial class structure", "Middle classes"] },
+    { subject: "Systems of Kinship in India", topics: ["Lineage and descent", "Family and marriage", "Patriarchy and labour division"] },
+    { subject: "Religion and Society", topics: ["Religious communities", "Religious minorities"] },
+    { subject: "Visions of Social Change in India", topics: ["Development planning and mixed economy", "Law and social change", "Education and social change"] },
+    { subject: "Rural and Agrarian Transformation in India", topics: ["Rural development programmes", "Green revolution", "Agriculture production changes", "Rural labour and migration"] },
+    { subject: "Industrialization and Urbanisation in India", topics: ["Modern industry evolution", "Urban settlements growth", "Working class and mobilisation", "Informal sector and slums"] },
+    { subject: "Politics and Society", topics: ["Nation/democracy/citizenship", "Parties and pressure groups", "Regionalism/decentralisation", "Secularization"] },
+    { subject: "Social Movements in Modern India", topics: ["Peasants/farmers", "Womens movement", "Backward classes and Dalit", "Environmental", "Ethnicity and identity"] },
+    { subject: "Population Dynamics", topics: ["Population structure and distribution", "Birth/death/migration", "Population policy", "Ageing/sex ratio/infant mortality/reproductive health"] },
+    { subject: "Challenges of Social Transformation", topics: ["Crisis of development", "Poverty and inequality", "Violence against women", "Caste and ethnic conflicts", "Illiteracy and education disparities"] }
+  ]
+};
+
+const getSubjectsForExam = (examType) => (EXAM_CATALOG[examType] || []).map((entry) => entry.subject);
+const getTopicsForSelection = (examType, subject) => {
+  const found = (EXAM_CATALOG[examType] || []).find((entry) => entry.subject === subject);
+  return found?.topics || [];
+};
 const SESSION_MEDIA_TYPES = ["audio", "video", "screen"];
 
 const INITIAL_PLAYERS = [
@@ -69,12 +169,36 @@ function formatDuration(totalSeconds) {
 }
 
 export default function HomePage() {
+  const defaultSubject = getSubjectsForExam("prelims")[0] || "";
+  const defaultTopic = getTopicsForSelection("prelims", defaultSubject)[0] || "";
   const [players, setPlayers] = useState(INITIAL_PLAYERS);
   const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState("");
   const [taskModal, setTaskModal] = useState({ open: false, playerId: "", actionType: "" });
   const [taskComment, setTaskComment] = useState("");
-  const [selectedTest, setSelectedTest] = useState("");
+  const [taskMeta, setTaskMeta] = useState({
+    exam_type: "prelims",
+    subject: defaultSubject,
+    topic: defaultTopic,
+    exam_type_other: "",
+    subject_other: "",
+    topic_other: "",
+    note: ""
+  });
+  const [taskTestMeta, setTaskTestMeta] = useState({
+    exam_type: "prelims",
+    exam_type_other: "",
+    source: TEST_SOURCE_OPTIONS[0],
+    source_other: "",
+    test_number: "",
+    stage: "test_given",
+    note: "",
+  });
+  const [taskTicketMeta, setTaskTicketMeta] = useState({
+    org: TICKET_ORG_OPTIONS[0],
+    org_other: "",
+    note: "",
+  });
   const [historyOpen, setHistoryOpen] = useState({ kapil: false, divya: false });
   const [todayDate, setTodayDate] = useState("");
   const [availableDates, setAvailableDates] = useState([]);
@@ -270,19 +394,67 @@ export default function HomePage() {
     if (!isEditable) return;
     setTaskModal({ open: true, playerId, actionType });
     setTaskComment("");
-    setSelectedTest("");
+    const firstSubject = getSubjectsForExam("prelims")[0] || "";
+    const firstTopic = getTopicsForSelection("prelims", firstSubject)[0] || "";
+    setTaskMeta({
+      exam_type: "prelims",
+      subject: firstSubject,
+      topic: firstTopic,
+      exam_type_other: "",
+      subject_other: "",
+      topic_other: "",
+      note: ""
+    });
+    setTaskTestMeta({
+      exam_type: "prelims",
+      exam_type_other: "",
+      source: TEST_SOURCE_OPTIONS[0],
+      source_other: "",
+      test_number: "",
+      stage: "test_given",
+      note: "",
+    });
+    setTaskTicketMeta({
+      org: TICKET_ORG_OPTIONS[0],
+      org_other: "",
+      note: "",
+    });
   };
 
   const closeTaskModal = () => {
     setTaskModal({ open: false, playerId: "", actionType: "" });
     setTaskComment("");
-    setSelectedTest("");
   };
 
   const submitTaskModal = async () => {
     const isTestAction = taskModal.actionType === "test_completed";
-    const testType = isTestAction ? selectedTest.trim() : "";
-    const detail = taskComment.trim();
+    const isClassOrRevision = taskModal.actionType === "new_class" || taskModal.actionType === "revision";
+    const isTicketAction = taskModal.actionType === "ticket_resolved";
+    const effectiveExamType = taskMeta.exam_type === OTHER_VALUE ? taskMeta.exam_type_other.trim().toLowerCase() : taskMeta.exam_type;
+    const effectiveSubject = taskMeta.subject === OTHER_VALUE ? taskMeta.subject_other.trim() : taskMeta.subject;
+    const effectiveTopic = taskMeta.topic === OTHER_VALUE ? taskMeta.topic_other.trim() : taskMeta.topic;
+    const testType = isTestAction ? "Test Completed" : "";
+    let detail = taskComment.trim();
+    if (isClassOrRevision) {
+      if (!effectiveExamType || !effectiveSubject || !effectiveTopic) return;
+      const note = taskMeta.note.trim();
+      detail = `Exam: ${effectiveExamType} | Subject: ${effectiveSubject} | Topic: ${effectiveTopic}${note ? ` | Note: ${note}` : ""}`;
+    }
+    if (isTestAction) {
+      const exam = taskTestMeta.exam_type === OTHER_VALUE ? taskTestMeta.exam_type_other.trim().toLowerCase() : taskTestMeta.exam_type;
+      const source = taskTestMeta.source === OTHER_VALUE ? taskTestMeta.source_other.trim().toLowerCase() : taskTestMeta.source;
+      const testNumber = taskTestMeta.test_number.trim();
+      const stage = taskTestMeta.stage;
+      const note = taskTestMeta.note.trim();
+      if (!exam || !source || !testNumber || !stage || !note) return;
+      detail = `Exam: ${exam} | Source: ${source} | Test Number: ${testNumber} | Stage: ${stage} | Note: ${note}`;
+    }
+    if (isTicketAction) {
+      const org = taskTicketMeta.org === OTHER_VALUE ? taskTicketMeta.org_other.trim().toLowerCase() : taskTicketMeta.org;
+      const note = taskTicketMeta.note.trim();
+      if (!org || !note) return;
+      detail = `Org: ${org} | Note: ${note}`;
+    }
     if (isTestAction && (!testType || !detail)) return;
     if (!isTestAction && !detail) return;
     const ok = await addPoints(taskModal.playerId, taskModal.actionType, detail, testType);
@@ -555,6 +727,7 @@ export default function HomePage() {
         <div className="top-nav-links">
           <Link href="/" className="top-nav-link active">Home</Link>
           <Link href="/recorder" className="top-nav-link">Recorder</Link>
+          <Link href="/syllabus" className="top-nav-link">Syllabus</Link>
         </div>
         {API_BASE_URL ? (
           <div className="top-right-tools">
@@ -717,23 +890,207 @@ export default function HomePage() {
             </p>
             {taskModal.actionType === "test_completed" ? (
               <>
-                <select
-                  className="task-select"
-                  value={selectedTest}
-                  onChange={(e) => setSelectedTest(e.target.value)}
-                >
-                  <option value="">Select Test</option>
-                  {DIVYA_TEST_OPTIONS.map((test) => (
-                    <option key={test} value={test}>
-                      {test}
-                    </option>
-                  ))}
-                </select>
+                <div className="session-form-grid">
+                  <select
+                    className="task-select"
+                    value={taskTestMeta.exam_type}
+                    onChange={(e) => {
+                      const nextExam = e.target.value;
+                      setTaskTestMeta((p) => ({
+                        ...p,
+                        exam_type: nextExam,
+                        exam_type_other: nextExam === OTHER_VALUE ? p.exam_type_other : "",
+                      }));
+                    }}
+                  >
+                    <option value="prelims">Prelims</option>
+                    <option value="mains">Mains</option>
+                    <option value="csat">CSAT</option>
+                    <option value="sociology_1">Sociology 1</option>
+                    <option value="sociology_2">Sociology 2</option>
+                    <option value={OTHER_VALUE}>Other</option>
+                  </select>
+                  {taskTestMeta.exam_type === OTHER_VALUE ? (
+                    <input
+                      className="task-select"
+                      placeholder="Type custom exam"
+                      value={taskTestMeta.exam_type_other}
+                      onChange={(e) => setTaskTestMeta((p) => ({ ...p, exam_type_other: e.target.value }))}
+                    />
+                  ) : null}
+                  <select
+                    className="task-select"
+                    value={taskTestMeta.source}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setTaskTestMeta((p) => ({ ...p, source: next, source_other: next === OTHER_VALUE ? p.source_other : "" }));
+                    }}
+                  >
+                    {TEST_SOURCE_OPTIONS.map((src) => (
+                      <option key={src} value={src}>{src.toUpperCase()}</option>
+                    ))}
+                    <option value={OTHER_VALUE}>Other</option>
+                  </select>
+                  {taskTestMeta.source === OTHER_VALUE ? (
+                    <input
+                      className="task-select"
+                      placeholder="Type custom source"
+                      value={taskTestMeta.source_other}
+                      onChange={(e) => setTaskTestMeta((p) => ({ ...p, source_other: e.target.value }))}
+                    />
+                  ) : null}
+                  <input
+                    className="task-select"
+                    type="number"
+                    min="1"
+                    placeholder="Test number"
+                    value={taskTestMeta.test_number}
+                    onChange={(e) => setTaskTestMeta((p) => ({ ...p, test_number: e.target.value }))}
+                  />
+                  <select
+                    className="task-select"
+                    value={taskTestMeta.stage}
+                    onChange={(e) => setTaskTestMeta((p) => ({ ...p, stage: e.target.value }))}
+                  >
+                    {TEST_STAGE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
                 <textarea
                   className="task-textarea"
-                  placeholder="Add detail about this test..."
-                  value={taskComment}
-                  onChange={(e) => setTaskComment(e.target.value)}
+                  placeholder="Test note..."
+                  value={taskTestMeta.note}
+                  onChange={(e) => setTaskTestMeta((p) => ({ ...p, note: e.target.value }))}
+                />
+              </>
+            ) : taskModal.actionType === "new_class" || taskModal.actionType === "revision" ? (
+              <>
+                <div className="session-form-grid">
+                  <select
+                    className="task-select"
+                    value={taskMeta.exam_type}
+                    onChange={(e) => {
+                      const nextExam = e.target.value;
+                      const nextExamForCatalog = nextExam === OTHER_VALUE ? "" : nextExam;
+                      const nextSubjects = nextExamForCatalog ? getSubjectsForExam(nextExamForCatalog) : [];
+                      const nextSubject = nextExam === OTHER_VALUE ? OTHER_VALUE : (nextSubjects[0] || OTHER_VALUE);
+                      const nextTopics = nextExamForCatalog && nextSubject !== OTHER_VALUE
+                        ? getTopicsForSelection(nextExamForCatalog, nextSubject)
+                        : [];
+                      setTaskMeta((p) => ({
+                        ...p,
+                        exam_type: nextExam,
+                        subject: nextSubject,
+                        topic: nextTopics[0] || OTHER_VALUE,
+                        exam_type_other: nextExam === OTHER_VALUE ? p.exam_type_other : "",
+                        subject_other: nextSubject === OTHER_VALUE ? p.subject_other : "",
+                        topic_other: (nextTopics[0] || OTHER_VALUE) === OTHER_VALUE ? p.topic_other : ""
+                      }));
+                    }}
+                  >
+                    <option value="prelims">Prelims</option>
+                    <option value="mains">Mains</option>
+                    <option value="csat">CSAT</option>
+                    <option value="sociology_1">Sociology 1</option>
+                    <option value="sociology_2">Sociology 2</option>
+                    <option value={OTHER_VALUE}>Other</option>
+                  </select>
+                  {taskMeta.exam_type === OTHER_VALUE ? (
+                    <input
+                      className="task-select"
+                      placeholder="Type custom exam"
+                      value={taskMeta.exam_type_other}
+                      onChange={(e) => setTaskMeta((p) => ({ ...p, exam_type_other: e.target.value, subject: OTHER_VALUE, topic: OTHER_VALUE }))}
+                    />
+                  ) : null}
+                  <select
+                    className="task-select"
+                    value={taskMeta.subject}
+                    onChange={(e) => {
+                      const nextSubject = e.target.value;
+                      const effectiveExamType = taskMeta.exam_type === OTHER_VALUE ? taskMeta.exam_type_other.trim().toLowerCase() : taskMeta.exam_type;
+                      const nextTopics = nextSubject === OTHER_VALUE ? [] : getTopicsForSelection(effectiveExamType, nextSubject);
+                      setTaskMeta((p) => ({
+                        ...p,
+                        subject: nextSubject,
+                        topic: nextTopics[0] || OTHER_VALUE,
+                        subject_other: nextSubject === OTHER_VALUE ? p.subject_other : "",
+                        topic_other: (nextTopics[0] || OTHER_VALUE) === OTHER_VALUE ? p.topic_other : ""
+                      }));
+                    }}
+                  >
+                    {(taskMeta.exam_type === OTHER_VALUE ? [] : getSubjectsForExam(taskMeta.exam_type)).map((subj) => (
+                      <option key={subj} value={subj}>{subj}</option>
+                    ))}
+                    <option value={OTHER_VALUE}>Other</option>
+                  </select>
+                  {taskMeta.subject === OTHER_VALUE ? (
+                    <input
+                      className="task-select"
+                      placeholder="Type custom subject"
+                      value={taskMeta.subject_other}
+                      onChange={(e) => setTaskMeta((p) => ({ ...p, subject_other: e.target.value, topic: OTHER_VALUE }))}
+                    />
+                  ) : null}
+                  <select
+                    className="task-select"
+                    value={taskMeta.topic}
+                    onChange={(e) => setTaskMeta((p) => ({ ...p, topic: e.target.value }))}
+                  >
+                    {(taskMeta.exam_type === OTHER_VALUE || taskMeta.subject === OTHER_VALUE
+                      ? []
+                      : getTopicsForSelection(taskMeta.exam_type, taskMeta.subject)).map((topic) => (
+                      <option key={topic} value={topic}>{topic}</option>
+                    ))}
+                    <option value={OTHER_VALUE}>Other</option>
+                  </select>
+                  {taskMeta.topic === OTHER_VALUE ? (
+                    <input
+                      className="task-select"
+                      placeholder="Type custom topic"
+                      value={taskMeta.topic_other}
+                      onChange={(e) => setTaskMeta((p) => ({ ...p, topic_other: e.target.value }))}
+                    />
+                  ) : null}
+                </div>
+                <textarea
+                  className="task-textarea"
+                  placeholder="Add note (optional)"
+                  value={taskMeta.note}
+                  onChange={(e) => setTaskMeta((p) => ({ ...p, note: e.target.value }))}
+                />
+              </>
+            ) : taskModal.actionType === "ticket_resolved" ? (
+              <>
+                <div className="session-form-grid">
+                  <select
+                    className="task-select"
+                    value={taskTicketMeta.org}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setTaskTicketMeta((p) => ({ ...p, org: next, org_other: next === OTHER_VALUE ? p.org_other : "" }));
+                    }}
+                  >
+                    {TICKET_ORG_OPTIONS.map((org) => (
+                      <option key={org} value={org}>{org}</option>
+                    ))}
+                    <option value={OTHER_VALUE}>Other</option>
+                  </select>
+                  {taskTicketMeta.org === OTHER_VALUE ? (
+                    <input
+                      className="task-select"
+                      placeholder="Type custom org"
+                      value={taskTicketMeta.org_other}
+                      onChange={(e) => setTaskTicketMeta((p) => ({ ...p, org_other: e.target.value }))}
+                    />
+                  ) : null}
+                </div>
+                <textarea
+                  className="task-textarea"
+                  placeholder="Ticket note..."
+                  value={taskTicketMeta.note}
+                  onChange={(e) => setTaskTicketMeta((p) => ({ ...p, note: e.target.value }))}
                 />
               </>
             ) : (
@@ -749,7 +1106,28 @@ export default function HomePage() {
               <button
                 className="btn-save"
                 onClick={submitTaskModal}
-                disabled={taskModal.actionType === "test_completed" ? (!selectedTest.trim() || !taskComment.trim()) : !taskComment.trim()}
+                disabled={
+                  taskModal.actionType === "test_completed"
+                    ? !(
+                      (taskTestMeta.exam_type === OTHER_VALUE ? taskTestMeta.exam_type_other.trim() : taskTestMeta.exam_type) &&
+                      (taskTestMeta.source === OTHER_VALUE ? taskTestMeta.source_other.trim() : taskTestMeta.source) &&
+                      taskTestMeta.test_number.trim() &&
+                      taskTestMeta.stage &&
+                      taskTestMeta.note.trim()
+                    )
+                    : (taskModal.actionType === "new_class" || taskModal.actionType === "revision")
+                      ? !(
+                        (taskMeta.exam_type === OTHER_VALUE ? taskMeta.exam_type_other.trim() : taskMeta.exam_type) &&
+                        (taskMeta.subject === OTHER_VALUE ? taskMeta.subject_other.trim() : taskMeta.subject) &&
+                        (taskMeta.topic === OTHER_VALUE ? taskMeta.topic_other.trim() : taskMeta.topic)
+                      )
+                      : taskModal.actionType === "ticket_resolved"
+                        ? !(
+                          (taskTicketMeta.org === OTHER_VALUE ? taskTicketMeta.org_other.trim() : taskTicketMeta.org) &&
+                          taskTicketMeta.note.trim()
+                        )
+                      : !taskComment.trim()
+                }
               >
                 Save Task
               </button>

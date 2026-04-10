@@ -353,7 +353,7 @@ h1 {
 
 .session-form-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -599,6 +599,124 @@ h1 {
   gap: 8px;
 }
 
+.upload-inline-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.upload-inline-item {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  gap: 8px;
+}
+
+.upload-inline-item label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.explainer-setup-card {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.explainer-setup-card h4 {
+  margin: 0 0 8px;
+}
+
+.explainer-live-preview-card {
+  margin-top: 8px;
+}
+
+.selected-chip {
+  border: 1px solid rgba(114, 221, 247, 0.8);
+  box-shadow: 0 0 0 2px rgba(114, 221, 247, 0.2);
+}
+
+.explainer-recorder-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.explainer-checklist {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.explainer-check-item {
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.explainer-check-item.done {
+  border-color: rgba(16, 185, 129, 0.8);
+  background: rgba(16, 185, 129, 0.18);
+  color: #d1fae5;
+}
+
+.explainer-check-item.pending {
+  border-color: rgba(239, 68, 68, 0.75);
+  background: rgba(239, 68, 68, 0.15);
+  color: #fecaca;
+}
+
+.player-tools {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.player-tools label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.speed-select {
+  width: 90px;
+  padding: 6px 8px;
+}
+
+.explainer-modal {
+  width: min(980px, 100%);
+}
+
+.explainer-viewer {
+  margin-top: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px;
+  min-height: 320px;
+}
+
+.explainer-asset {
+  width: 100%;
+  height: min(68vh, 560px);
+  border: 0;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #0b1020;
+}
+
+.explainer-audio-wrap {
+  margin-top: 10px;
+}
+
 .timer-only-display {
   margin-top: 10px;
   border: 1px solid rgba(114, 221, 247, 0.45);
@@ -625,6 +743,86 @@ h1 {
   line-height: 1;
   color: #f3fbff;
   text-shadow: 0 8px 20px rgba(6, 16, 40, 0.35);
+}
+
+.syllabus-tree {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.syllabus-exam,
+.syllabus-subject,
+.syllabus-topic,
+.syllabus-tests,
+.syllabus-source {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.syllabus-exam > summary,
+.syllabus-subject > summary,
+.syllabus-topic > summary,
+.syllabus-tests > summary,
+.syllabus-source > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #f3f6ff;
+}
+
+.syllabus-subjects,
+.syllabus-topics {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.syllabus-card {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.syllabus-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.syllabus-test-row {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.syllabus-table-wrap {
+  margin-top: 8px;
+  overflow-x: auto;
+}
+
+.syllabus-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #edf0ff;
+}
+
+.syllabus-table th,
+.syllabus-table td {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.syllabus-table th {
+  background: rgba(255, 255, 255, 0.09);
+  color: #ffffff;
 }
 
 .scoreboard {
