@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from pymongo import ASCENDING, DESCENDING
@@ -497,6 +497,53 @@ def get_days_payload() -> Dict[str, Any]:
         dates = [today] + dates
 
     return {"today": today, "dates": sorted(set(dates), reverse=True), "winner_counts": winner_counts()}
+
+
+def build_mission_control_payload(user_id: str, lookback_days: int = 90) -> Dict[str, Any]:
+    ensure_indexes()
+    capped_lookback = max(14, min(int(lookback_days or 90), 365))
+    today = current_date_str()
+    start_date = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=capped_lookback - 1)).strftime("%Y-%m-%d")
+
+    pipeline = [
+        {
+            "$match": {
+                "player_id": user_id,
+                "date": {"$gte": start_date, "$lte": today},
+            }
+        },
+        {
+            "$group": {
+                "_id": {"date": "$date", "event_type": "$event_type"},
+                "count": {"$sum": 1},
+            }
+        },
+    ]
+
+    activity_by_date: Dict[str, Dict[str, int]] = {}
+    for row in events_collection().aggregate(pipeline):
+        key = row.get("_id", {})
+        date_key = key.get("date", "")
+        event_type = key.get("event_type", "")
+        if not date_key:
+            continue
+        if date_key not in activity_by_date:
+            activity_by_date[date_key] = {"study": 0, "revision": 0, "practice": 0}
+        if event_type == "new_class":
+            activity_by_date[date_key]["study"] += int(row.get("count", 0) or 0)
+        elif event_type == "revision":
+            activity_by_date[date_key]["revision"] += int(row.get("count", 0) or 0)
+        elif event_type in {"test_completed", "ticket_resolved"}:
+            activity_by_date[date_key]["practice"] += int(row.get("count", 0) or 0)
+
+    return {
+        "user_id": user_id,
+        "today": today,
+        "lookback_days": capped_lookback,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "syllabus": build_syllabus_payload(user_id),
+        "activity_by_date": activity_by_date,
+    }
 
 
 def add_points_payload(player_id: str, action_type: str, test_type: str, detail: str) -> Dict[str, Any]:

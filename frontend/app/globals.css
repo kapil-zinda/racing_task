@@ -1218,3 +1218,527 @@ button:hover {
     grid-template-columns: 1fr;
   }
 }
+
+.mission-shell {
+  max-width: 1240px;
+}
+
+.mission-hero h1 {
+  letter-spacing: 1.5px;
+}
+
+.mission-controls {
+  display: grid;
+  gap: 14px;
+}
+
+.mission-status-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mission-kpi {
+  background: linear-gradient(160deg, rgba(12, 20, 38, 0.8), rgba(19, 31, 58, 0.62));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.mission-kpi h3 {
+  margin: 0;
+  font-size: 12px;
+  color: #b9c5e9;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mission-kpi p {
+  margin: 8px 0 0;
+  font-size: 28px;
+  font-weight: 800;
+  color: #f3f7ff;
+}
+
+.summit-panel {
+  padding: 18px;
+}
+
+.summit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.trajectory-chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 209, 102, 0.45);
+  color: #ffe7a0;
+  font-weight: 700;
+  font-size: 13px;
+  background: rgba(255, 209, 102, 0.1);
+}
+
+.summit-metrics {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summit-metrics > div {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.summit-metrics span {
+  display: block;
+  color: #bcc9ea;
+  font-size: 12px;
+}
+
+.summit-metrics strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 21px;
+}
+
+.momentum-rising { color: #8df6af; }
+.momentum-stable { color: #ffe39f; }
+.momentum-falling { color: #ff9b9b; }
+
+.risk-low { color: #8df6af; }
+.risk-medium { color: #ffd67a; }
+.risk-high { color: #ff8c8c; }
+
+.summit-path-wrap {
+  margin-top: 14px;
+}
+
+.summit-path {
+  position: relative;
+  height: 70px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(120deg, #13243f, #1f375c);
+}
+
+.summit-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, rgba(128, 237, 153, 0.2), rgba(255, 209, 102, 0.26));
+}
+
+.summit-fog {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fog-low { background: transparent; }
+.fog-medium { background: linear-gradient(90deg, transparent, rgba(255, 209, 102, 0.12)); }
+.fog-high { background: linear-gradient(90deg, transparent, rgba(255, 107, 107, 0.2)); }
+
+.summit-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #ffe8ac;
+  background: #ffd166;
+  box-shadow: 0 0 18px rgba(255, 209, 102, 0.7);
+}
+
+.summit-goal {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffd166;
+}
+
+.risk-summary {
+  margin: 10px 0 0;
+  color: #c4d0ef;
+}
+
+.mission-main-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 14px;
+}
+
+.radar-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.radar-svg {
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  display: block;
+}
+
+.radar-ring {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.17);
+  stroke-width: 1;
+}
+
+.radar-poly {
+  stroke-width: 2;
+}
+
+.radar-poly.coverage {
+  fill: rgba(114, 221, 247, 0.12);
+  stroke: #72ddf7;
+}
+
+.radar-poly.retention {
+  fill: rgba(128, 237, 153, 0.14);
+  stroke: #80ed99;
+}
+
+.radar-poly.performance {
+  fill: rgba(255, 209, 102, 0.15);
+  stroke: #ffd166;
+}
+
+.radar-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #d4dcf7;
+  font-size: 13px;
+}
+
+.radar-dot-coverage { background: #72ddf7; }
+.radar-dot-retention { background: #80ed99; }
+.radar-dot-performance { background: #ffd166; }
+
+.axis-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.axis-mini-card {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px;
+}
+
+.axis-mini-card strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.axis-bars {
+  display: grid;
+  gap: 4px;
+}
+
+.axis-bars .bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.axis-bars .bar.coverage { background: #72ddf7; }
+.axis-bars .bar.retention { background: #80ed99; }
+.axis-bars .bar.performance { background: #ffd166; }
+
+.mission-side-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.leak-list {
+  display: grid;
+  gap: 8px;
+}
+
+.leak-card {
+  border-radius: 11px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.leak-card h4 {
+  margin: 0 0 5px;
+}
+
+.leak-card p {
+  margin: 0;
+  color: #d2ddf9;
+  font-size: 13px;
+}
+
+.leak-card.high {
+  border-color: rgba(255, 107, 107, 0.6);
+  background: rgba(255, 107, 107, 0.15);
+}
+
+.leak-card.medium {
+  border-color: rgba(255, 209, 102, 0.6);
+  background: rgba(255, 209, 102, 0.14);
+}
+
+.battle-list {
+  display: grid;
+  gap: 8px;
+}
+
+.battle-task {
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #eef2ff;
+  padding: 10px;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+}
+
+.battle-task.done {
+  border-color: rgba(128, 237, 153, 0.8);
+  background: rgba(128, 237, 153, 0.18);
+  box-shadow: 0 0 16px rgba(128, 237, 153, 0.35);
+}
+
+.battle-type {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #c4cff1;
+}
+
+.battle-progress {
+  margin-top: 10px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.battle-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #80ed99, #ffd166);
+}
+
+.mission-lower-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.decay-strip {
+  display: grid;
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.decay-block {
+  height: 16px;
+  border-radius: 4px;
+}
+
+.decay-block.green { background: #80ed99; }
+.decay-block.yellow { background: #ffd166; }
+.decay-block.red { background: #ff6b6b; }
+.decay-block.grey { background: #7e86a0; }
+
+.story-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.story-kpi {
+  padding: 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.story-kpi span {
+  color: #c6d2f1;
+  font-size: 12px;
+}
+
+.story-kpi strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.river-chart {
+  margin-top: 12px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  position: relative;
+}
+
+.river-flow,
+.river-stones {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.river-flow.green {
+  left: 0;
+  background: rgba(128, 237, 153, 0.8);
+}
+
+.river-flow.red {
+  right: 0;
+  background: rgba(255, 107, 107, 0.75);
+}
+
+.river-stones {
+  left: 45%;
+  transform: translateX(-50%);
+  background: rgba(12, 18, 32, 0.85);
+}
+
+.river-labels {
+  margin-top: 8px;
+  display: grid;
+  gap: 4px;
+  color: #c8d4f1;
+  font-size: 12px;
+}
+
+.heatmap-group {
+  display: grid;
+  gap: 9px;
+}
+
+.heatmap-row {
+  display: grid;
+  gap: 6px;
+}
+
+.heatmap-row strong {
+  font-size: 12px;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.heat-cell {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.heat-cell.level-1 { background: rgba(114, 221, 247, 0.35); }
+.heat-cell.level-2 { background: rgba(114, 221, 247, 0.55); }
+.heat-cell.level-3 { background: rgba(128, 237, 153, 0.7); }
+.heat-cell.level-4 { background: rgba(128, 237, 153, 0.95); }
+
+.identity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.identity-grid h4 {
+  margin: 0 0 6px;
+}
+
+.identity-grid ul {
+  margin: 0;
+  padding-left: 16px;
+  color: #d2dcf8;
+}
+
+.identity-delta {
+  margin-top: 10px;
+  color: #ffe7a0;
+  font-weight: 700;
+}
+
+.trajectory-status {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffe7a0;
+}
+
+.trajectory-cols {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.trajectory-cols h4 {
+  margin: 0 0 5px;
+}
+
+.trajectory-cols ul {
+  margin: 0;
+  padding-left: 16px;
+  color: #d1dbf6;
+}
+
+.projection-panel ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 7px;
+  color: #dae4ff;
+}
+
+@media (max-width: 1040px) {
+  .mission-status-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .mission-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mission-lower-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .mission-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summit-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-mini-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .identity-grid {
+    grid-template-columns: 1fr;
+  }
+}

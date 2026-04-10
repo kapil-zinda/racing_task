@@ -91,6 +91,7 @@ export default function SyllabusPage() {
           <Link href="/" className="top-nav-link">Home</Link>
           <Link href="/recorder" className="top-nav-link">Recorder</Link>
           <Link href="/syllabus" className="top-nav-link active">Syllabus</Link>
+          <Link href="/mission" className="top-nav-link">Mission</Link>
         </div>
         <p className="badge">Study Map</p>
         <h1>Syllabus Tracker</h1>

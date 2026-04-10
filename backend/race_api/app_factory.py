@@ -6,6 +6,7 @@ from .constants import PLAYERS, POINTS_MAP
 from .context import logger
 from .race_domain import (
     add_points_payload,
+    build_mission_control_payload,
     build_syllabus_payload,
     get_days_payload,
     get_state_payload,
@@ -81,6 +82,18 @@ def create_app() -> FastAPI:
             return build_syllabus_payload(user_id)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /syllabus")
+
+    @app.get("/mission-control")
+    def get_mission_control(
+        user_id: str = Query(default="kapil"),
+        lookback_days: int = Query(default=90, ge=14, le=365),
+    ):
+        try:
+            if user_id not in PLAYERS:
+                raise HTTPException(status_code=400, detail="Invalid user_id")
+            return build_mission_control_payload(user_id, lookback_days)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /mission-control")
 
     @app.post("/points")
     def add_points(payload: AddPointsRequest):
