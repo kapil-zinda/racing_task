@@ -980,6 +980,71 @@ h1 {
   color: var(--muted);
 }
 
+.search-hit {
+  width: 100%;
+  text-align: left;
+  color: #f3f6ff;
+  cursor: pointer;
+}
+
+.search-hit-active {
+  border-color: rgba(114, 221, 247, 0.9);
+  box-shadow: 0 0 0 2px rgba(114, 221, 247, 0.22);
+  background: linear-gradient(150deg, rgba(114, 221, 247, 0.2), rgba(126, 229, 251, 0.1));
+}
+
+.search-viewer-wrap {
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.search-viewer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.search-viewer {
+  width: 100%;
+  min-height: 74vh;
+  border: 0;
+  display: block;
+  background: #0b1020;
+}
+
+.pdf-search-grid {
+  grid-template-columns: minmax(320px, 1fr) minmax(640px, 2fr);
+}
+
+.pdf-search-single {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.search-viewer-wide .search-viewer {
+  min-height: 78vh;
+}
+
+.search-viewer-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  background: #0b1020;
+}
+
+.search-viewer-wrap:fullscreen .search-viewer {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+}
+
 .history-empty {
   font-size: 12px;
   color: var(--muted);

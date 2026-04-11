@@ -1463,6 +1463,7 @@ export default function RecorderPage() {
           <Link href="/recorder" className="top-nav-link active">Recorder</Link>
           <Link href="/syllabus" className="top-nav-link">Syllabus</Link>
           <Link href="/mission" className="top-nav-link">Mission</Link>
+          <Link href="/search" className="top-nav-link">Search</Link>
         </div>
         <p className="badge">Live Recorder</p>
         <h1>Session Recorder</h1>

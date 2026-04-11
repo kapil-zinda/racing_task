@@ -417,6 +417,7 @@ export default function MissionControlPage() {
           <Link href="/recorder" className="top-nav-link">Recorder</Link>
           <Link href="/syllabus" className="top-nav-link">Syllabus</Link>
           <Link href="/mission" className="top-nav-link active">Mission</Link>
+          <Link href="/search" className="top-nav-link">Search</Link>
         </div>
         <p className="badge">UPSC War Room</p>
         <h1>UPSC Mission Control</h1>

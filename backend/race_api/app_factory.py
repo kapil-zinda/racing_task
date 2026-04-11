@@ -12,6 +12,11 @@ from .race_domain import (
     get_state_payload,
     reset_race_payload,
 )
+from .pdf_search_domain import (
+    create_pdf_presigned_upload,
+    index_pdf_document,
+    search_pdf,
+)
 from .schemas import (
     AddPointsRequest,
     CreateSessionRequest,
@@ -19,6 +24,8 @@ from .schemas import (
     MultipartCompleteRequest,
     MultipartPartRequest,
     MultipartStartRequest,
+    PdfIndexRequest,
+    PdfPresignUploadRequest,
     PresignRequest,
     SessionStatusRequest,
 )
@@ -82,6 +89,31 @@ def create_app() -> FastAPI:
             return build_syllabus_payload(user_id)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /syllabus")
+
+    @app.post("/pdf-search/presign-upload")
+    def pdf_presign_upload(payload: PdfPresignUploadRequest):
+        try:
+            return create_pdf_presigned_upload(payload)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /pdf-search/presign-upload")
+
+    @app.post("/pdf-search/index")
+    def pdf_index(payload: PdfIndexRequest):
+        try:
+            return index_pdf_document(payload)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /pdf-search/index")
+
+    @app.get("/pdf-search/query")
+    def pdf_query(
+        q: str = Query(...),
+        limit: int = Query(default=20, ge=1, le=100),
+        course: str | None = Query(default=None),
+    ):
+        try:
+            return search_pdf(q, limit, course)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /pdf-search/query")
 
     @app.get("/mission-control")
     def get_mission_control(

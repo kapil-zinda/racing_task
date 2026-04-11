@@ -57,3 +57,19 @@ class MultipartCompleteRequest(BaseModel):
 class MultipartAbortRequest(BaseModel):
     media_type: str  # audio | video | screen | attachment
     upload_id: str
+
+
+class PdfPresignUploadRequest(BaseModel):
+    file_name: str
+    content_type: str = "application/pdf"
+    course: str
+
+
+class PdfIndexRequest(BaseModel):
+    doc_id: str
+
+
+class PdfSearchRequest(BaseModel):
+    query: str
+    limit: int = 20
+    course: str = ""

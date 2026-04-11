@@ -729,6 +729,7 @@ export default function HomePage() {
           <Link href="/recorder" className="top-nav-link">Recorder</Link>
           <Link href="/syllabus" className="top-nav-link">Syllabus</Link>
           <Link href="/mission" className="top-nav-link">Mission</Link>
+          <Link href="/search" className="top-nav-link">Search</Link>
         </div>
         {API_BASE_URL ? (
           <div className="top-right-tools">
