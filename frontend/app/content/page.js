@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import MainMenu from "../components/MainMenu";
 import ResourceInternalMenu from "../components/ResourceInternalMenu";
 
@@ -73,7 +73,6 @@ function uploadWithProgress(url, file, contentType, onProgress) {
 export default function ContentPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [folderId, setFolderId] = useState("content_root");
   const [folderInfo, setFolderInfo] = useState(null);
   const [items, setItems] = useState([]);
@@ -117,9 +116,15 @@ export default function ContentPage() {
     );
   }, [folderInfo]);
 
+  const getUrlFolderId = () => {
+    if (typeof window === "undefined") return "content_root";
+    const params = new URLSearchParams(window.location.search || "");
+    return (params.get("folder_id") || "content_root").trim() || "content_root";
+  };
+
   const syncFolderInUrl = (nextFolderId) => {
     const fid = (nextFolderId || "content_root").trim() || "content_root";
-    const params = new URLSearchParams(searchParams?.toString() || "");
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
     if (fid === "content_root") params.delete("folder_id");
     else params.set("folder_id", fid);
     const nextUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
@@ -175,7 +180,7 @@ export default function ContentPage() {
   useEffect(() => {
     const init = async () => {
       if (!API_BASE_URL) return;
-      const requestedFolderId = (searchParams?.get("folder_id") || "content_root").trim() || "content_root";
+      const requestedFolderId = getUrlFolderId();
       try {
         await Promise.all([
           loadTree("content_root"),
@@ -201,12 +206,16 @@ export default function ContentPage() {
 
   useEffect(() => {
     if (!API_BASE_URL) return;
-    const requestedFolderId = (searchParams?.get("folder_id") || "content_root").trim() || "content_root";
-    if (requestedFolderId === folderId) return;
-    openFolder(requestedFolderId).catch((err) => {
-      setError(String(err.message || err));
-    });
-  }, [searchParams, API_BASE_URL]);
+    const onPopState = () => {
+      const requestedFolderId = getUrlFolderId();
+      if (requestedFolderId === folderId) return;
+      openFolder(requestedFolderId).catch((err) => {
+        setError(String(err.message || err));
+      });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [API_BASE_URL, folderId]);
 
   useEffect(() => {
     const close = () => {
