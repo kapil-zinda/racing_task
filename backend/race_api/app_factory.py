@@ -3,6 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
 from .constants import PLAYERS, POINTS_MAP
+from .content_domain import (
+    complete_upload,
+    create_folder,
+    create_upload_url,
+    delete_item,
+    list_content,
+    list_folder_tree,
+    preview_by_id,
+    rename_item,
+)
 from .context import logger
 from .race_domain import (
     add_points_payload,
@@ -19,6 +29,11 @@ from .pdf_search_domain import (
 )
 from .schemas import (
     AddPointsRequest,
+    ContentCreateFolderRequest,
+    ContentDeleteRequest,
+    ContentCompleteUploadRequest,
+    ContentPresignUploadRequest,
+    ContentRenameRequest,
     CreateSessionRequest,
     MultipartAbortRequest,
     MultipartCompleteRequest,
@@ -89,6 +104,67 @@ def create_app() -> FastAPI:
             return build_syllabus_payload(user_id)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /syllabus")
+
+    @app.get("/content/list")
+    def content_list(
+        folder_id: str | None = Query(default=None),
+        q: str | None = Query(default=None),
+        sort_by: str | None = Query(default="name"),
+        sort_dir: str | None = Query(default="asc"),
+    ):
+        try:
+            return list_content(folder_id, q, sort_by, sort_dir)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /content/list")
+
+    @app.get("/content/tree")
+    def content_tree(parent_id: str | None = Query(default=None)):
+        try:
+            return list_folder_tree(parent_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /content/tree")
+
+    @app.post("/content/folder")
+    def content_create_folder(payload: ContentCreateFolderRequest):
+        try:
+            return create_folder(payload.parent_id, payload.name)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/folder")
+
+    @app.post("/content/rename")
+    def content_rename(payload: ContentRenameRequest):
+        try:
+            return rename_item(payload.id, payload.item_type, payload.new_name)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/rename")
+
+    @app.post("/content/presign-upload")
+    def content_presign_upload(payload: ContentPresignUploadRequest):
+        try:
+            return create_upload_url(payload.folder_id, payload.file_name, payload.content_type, payload.size)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/presign-upload")
+
+    @app.post("/content/complete-upload")
+    def content_complete_upload(payload: ContentCompleteUploadRequest):
+        try:
+            return complete_upload(payload.file_id, payload.etag, payload.size)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/complete-upload")
+
+    @app.post("/content/delete")
+    def content_delete(payload: ContentDeleteRequest):
+        try:
+            return delete_item(payload.id, payload.item_type, payload.recursive)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/delete")
+
+    @app.get("/content/preview-url")
+    def content_preview(file_id: str = Query(...)):
+        try:
+            return preview_by_id(file_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /content/preview-url")
 
     @app.post("/pdf-search/presign-upload")
     def pdf_presign_upload(payload: PdfPresignUploadRequest):

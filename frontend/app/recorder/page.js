@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import MainMenu from "../components/MainMenu";
+import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const NOTICE_TTL_MS = 15000;
 const SESSION_MEDIA_TYPES = ["audio", "video", "screen", "attachment"];
 const RECORDER_TYPES = [
   { value: "time", label: "Time" },
@@ -443,6 +445,12 @@ export default function RecorderPage() {
     const id = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(id);
   }, [timerState.running]);
+
+  useEffect(() => {
+    if (!sessionError) return;
+    const id = setTimeout(() => setSessionError(""), NOTICE_TTL_MS);
+    return () => clearTimeout(id);
+  }, [sessionError]);
 
   useEffect(() => () => {
     stopAndReleaseStreams();
@@ -1458,14 +1466,8 @@ export default function RecorderPage() {
       <div className="bg-orb orb-1" />
       <div className="bg-orb orb-2" />
       <header className="hero">
-        <div className="top-nav-links">
-          <Link href="/" className="top-nav-link">Home</Link>
-          <Link href="/recorder" className="top-nav-link active">Recorder</Link>
-          <Link href="/syllabus" className="top-nav-link">Syllabus</Link>
-          <Link href="/mission" className="top-nav-link">Mission</Link>
-          <Link href="/search" className="top-nav-link">Search</Link>
-        </div>
-        <p className="badge">Live Recorder</p>
+        <MainMenu active="recorder" />
+        <ActivityInternalMenu active="recorder" />
         <h1>Session Recorder</h1>
         <p className="subtext">Create, run, and upload study recording sessions.</p>
       </header>

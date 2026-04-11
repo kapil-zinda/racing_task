@@ -7,10 +7,16 @@ echo "Building app Lambda Layer..."
 
 # Configuration
 LAYER_NAME="racing-app-layer"
-PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.13}"
+LAMBDA_ARCH="${LAMBDA_ARCH:-x86_64}"
 LAYER_DIR="lambda-layer-app"
 OUTPUT_ZIP="lambda-layer-app.zip"
 REQ_FILE="./requirements-app.txt"
+
+PLATFORM="manylinux2014_x86_64"
+if [ "$LAMBDA_ARCH" = "arm64" ]; then
+  PLATFORM="manylinux2014_aarch64"
+fi
 
 # Check requirements file
 if [ ! -f "$REQ_FILE" ]; then
@@ -31,8 +37,11 @@ TARGET_DIR="$LAYER_DIR/python"
 
 # Install Linux-compatible wheels
 echo "Installing dependencies..."
+echo "Target Python: $PYTHON_VERSION"
+echo "Target Arch: $LAMBDA_ARCH"
+echo "Platform tag: $PLATFORM"
 pip3 install \
-  --platform manylinux2014_x86_64 \
+  --platform "$PLATFORM" \
   --target="$TARGET_DIR" \
   --implementation cp \
   --python-version "$PYTHON_VERSION" \

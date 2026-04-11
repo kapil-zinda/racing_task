@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import MainMenu from "../components/MainMenu";
+import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const NOTICE_TTL_MS = 15000;
 
 function labelDate(value) {
   if (!value) return "-";
@@ -54,6 +56,12 @@ export default function SyllabusPage() {
     loadSyllabus("kapil");
   }, []);
 
+  useEffect(() => {
+    if (!error) return;
+    const id = setTimeout(() => setError(""), NOTICE_TTL_MS);
+    return () => clearTimeout(id);
+  }, [error]);
+
   const playRecording = async (rec) => {
     if (!API_BASE_URL || !rec.session_id || !rec.default_media_type) return;
     setPlaybackLoadingKey(rec.key);
@@ -87,14 +95,8 @@ export default function SyllabusPage() {
       <div className="bg-orb orb-2" />
 
       <header className="hero">
-        <div className="top-nav-links">
-          <Link href="/" className="top-nav-link">Home</Link>
-          <Link href="/recorder" className="top-nav-link">Recorder</Link>
-          <Link href="/syllabus" className="top-nav-link active">Syllabus</Link>
-          <Link href="/mission" className="top-nav-link">Mission</Link>
-          <Link href="/search" className="top-nav-link">Search</Link>
-        </div>
-        <p className="badge">Study Map</p>
+        <MainMenu active="syllabus" />
+        <ActivityInternalMenu active="syllabus" />
         <h1>Syllabus Tracker</h1>
         <p className="subtext">Expandable progress map for classes, revisions, recordings, and tests.</p>
       </header>

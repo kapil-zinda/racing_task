@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import MainMenu from "./components/MainMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const NOTICE_TTL_MS = 15000;
 
 const MILESTONES = [
   { points: 20, reward: "Coffee Treat" },
@@ -309,6 +310,24 @@ export default function HomePage() {
     const id = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(id);
   }, [timerState.running]);
+
+  useEffect(() => {
+    if (!apiError) return;
+    const id = setTimeout(() => setApiError(""), NOTICE_TTL_MS);
+    return () => clearTimeout(id);
+  }, [apiError]);
+
+  useEffect(() => {
+    if (!historyError) return;
+    const id = setTimeout(() => setHistoryError(""), NOTICE_TTL_MS);
+    return () => clearTimeout(id);
+  }, [historyError]);
+
+  useEffect(() => {
+    if (!sessionError) return;
+    const id = setTimeout(() => setSessionError(""), NOTICE_TTL_MS);
+    return () => clearTimeout(id);
+  }, [sessionError]);
 
   const addPoints = async (playerId, actionType, providedDetail = "", providedTestType = "") => {
     const add = POINTS_MAP[actionType] || 0;
@@ -724,13 +743,7 @@ export default function HomePage() {
       <div className="bg-orb orb-2" />
 
       <header className="hero">
-        <div className="top-nav-links">
-          <Link href="/" className="top-nav-link active">Home</Link>
-          <Link href="/recorder" className="top-nav-link">Recorder</Link>
-          <Link href="/syllabus" className="top-nav-link">Syllabus</Link>
-          <Link href="/mission" className="top-nav-link">Mission</Link>
-          <Link href="/search" className="top-nav-link">Search</Link>
-        </div>
+        <MainMenu active="home" />
         {API_BASE_URL ? (
           <div className="top-right-tools">
             <div className="winner-counter compact">

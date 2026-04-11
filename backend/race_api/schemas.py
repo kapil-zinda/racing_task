@@ -73,3 +73,33 @@ class PdfSearchRequest(BaseModel):
     query: str
     limit: int = 20
     course: str = ""
+
+
+class ContentCreateFolderRequest(BaseModel):
+    parent_id: str = "content_root"
+    name: str
+
+
+class ContentPresignUploadRequest(BaseModel):
+    folder_id: str = "content_root"
+    file_name: str
+    content_type: str = "application/octet-stream"
+    size: int = 0
+
+
+class ContentDeleteRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    recursive: bool = False
+
+
+class ContentRenameRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    new_name: str
+
+
+class ContentCompleteUploadRequest(BaseModel):
+    file_id: str
+    etag: str = ""
+    size: int = 0

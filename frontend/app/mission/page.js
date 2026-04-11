@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import MainMenu from "../components/MainMenu";
+import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const NOTICE_TTL_MS = 15000;
 const PRELIMS_DATE = "2026-05-24";
 const HOURS_PER_DAY = 15;
 const FULL_TEST_TARGET = 17;
@@ -381,6 +383,12 @@ export default function MissionControlPage() {
     loadMission("divya");
   }, []);
 
+  useEffect(() => {
+    if (!error) return;
+    const id = setTimeout(() => setError(""), NOTICE_TTL_MS);
+    return () => clearTimeout(id);
+  }, [error]);
+
   const mission = useMemo(() => buildMissionModel(syllabus, activityByDate, userId), [syllabus, activityByDate, userId]);
 
   const dayLeftCount = daysLeft();
@@ -412,14 +420,8 @@ export default function MissionControlPage() {
       <div className="bg-orb orb-2" />
 
       <header className="hero mission-hero">
-        <div className="top-nav-links">
-          <Link href="/" className="top-nav-link">Home</Link>
-          <Link href="/recorder" className="top-nav-link">Recorder</Link>
-          <Link href="/syllabus" className="top-nav-link">Syllabus</Link>
-          <Link href="/mission" className="top-nav-link active">Mission</Link>
-          <Link href="/search" className="top-nav-link">Search</Link>
-        </div>
-        <p className="badge">UPSC War Room</p>
+        <MainMenu active="mission" />
+        <ActivityInternalMenu active="mission" />
         <h1>UPSC Mission Control</h1>
         <p className="subtext">Distance to selection, leakage, daily battle and trajectory in one view.</p>
 

@@ -36,11 +36,15 @@ def settings() -> Dict[str, Any]:
         "mongodb_sessions_collection": os.getenv("MONGODB_SESSIONS_COLLECTION", "study_sessions"),
         "mongodb_pdf_docs_collection": os.getenv("MONGODB_PDF_DOCS_COLLECTION", "pdf_search_docs"),
         "mongodb_pdf_pages_collection": os.getenv("MONGODB_PDF_PAGES_COLLECTION", "pdf_search_pages"),
+        "mongodb_content_folders_collection": os.getenv("MONGODB_CONTENT_FOLDERS_COLLECTION", "content_folders"),
+        "mongodb_content_files_collection": os.getenv("MONGODB_CONTENT_FILES_COLLECTION", "content_files"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
         "aws_region": os.getenv("AWS_REGION", "ap-south-1"),
         "recording_bucket": os.getenv("RECORDING_BUCKET", ""),
         "pdf_search_bucket": os.getenv("PDF_SEARCH_BUCKET", os.getenv("RECORDING_BUCKET", "")),
         "pdf_search_prefix": os.getenv("PDF_SEARCH_PREFIX", "pdf-search"),
+        "content_bucket": os.getenv("CONTENT_BUCKET", os.getenv("RECORDING_BUCKET", "")),
+        "content_prefix": os.getenv("CONTENT_PREFIX", "content"),
         "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
         "openai_embeddings_model": os.getenv("OPENAI_EMBEDDINGS_MODEL", "text-embedding-3-large"),
         "openai_embeddings_dimensions": os.getenv("OPENAI_EMBEDDINGS_DIMENSIONS", "512"),
@@ -93,6 +97,16 @@ def pdf_docs_collection():
 def pdf_pages_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_pdf_pages_collection"]]
+
+
+def content_folders_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_content_folders_collection"]]
+
+
+def content_files_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_content_files_collection"]]
 
 
 def s3_client():

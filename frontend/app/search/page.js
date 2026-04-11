@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import MainMenu from "../components/MainMenu";
+import ResourceInternalMenu from "../components/ResourceInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const NOTICE_TTL_MS = 15000;
 const COURSE_OPTIONS = [
   { value: "sfg_level_1", label: "SFG Level 1" },
   { value: "sfg_level_2", label: "SFG Level 2" },
@@ -53,6 +55,18 @@ export default function PdfSearchPage() {
       document.removeEventListener("fullscreenchange", onFullscreenChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!uploadMessage) return;
+    const id = setTimeout(() => setUploadMessage(""), NOTICE_TTL_MS);
+    return () => clearTimeout(id);
+  }, [uploadMessage]);
+
+  useEffect(() => {
+    if (!searchError) return;
+    const id = setTimeout(() => setSearchError(""), NOTICE_TTL_MS);
+    return () => clearTimeout(id);
+  }, [searchError]);
 
   const handleUpload = async () => {
     if (!API_BASE_URL || !file) return;
@@ -169,14 +183,8 @@ export default function PdfSearchPage() {
             Upload PDF
           </button>
         </div>
-        <div className="top-nav-links">
-          <Link href="/" className="top-nav-link">Home</Link>
-          <Link href="/recorder" className="top-nav-link">Recorder</Link>
-          <Link href="/syllabus" className="top-nav-link">Syllabus</Link>
-          <Link href="/mission" className="top-nav-link">Mission</Link>
-          <Link href="/search" className="top-nav-link active">Search</Link>
-        </div>
-        <p className="badge">PDF Search Engine</p>
+        <MainMenu active="search" />
+        <ResourceInternalMenu active="search" />
         <h1>Knowledge Finder</h1>
         <p className="subtext">Upload PDFs, search keywords like "pseudo force", and open directly on matched page.</p>
       </header>
