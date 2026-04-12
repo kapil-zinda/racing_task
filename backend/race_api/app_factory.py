@@ -13,6 +13,7 @@ from .content_domain import (
     preview_by_id,
     rename_item,
 )
+from .extras_domain import get_extras_payload, save_extras_payload
 from .context import logger
 from .race_domain import (
     add_points_payload,
@@ -35,6 +36,7 @@ from .schemas import (
     ContentPresignUploadRequest,
     ContentRenameRequest,
     CreateSessionRequest,
+    ExtrasUpsertRequest,
     MultipartAbortRequest,
     MultipartCompleteRequest,
     MultipartPartRequest,
@@ -202,6 +204,21 @@ def create_app() -> FastAPI:
             return build_mission_control_payload(user_id, lookback_days)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /mission-control")
+
+    @app.get("/extras")
+    def get_extras(user_id: str = Query(default="kapil")):
+        try:
+            return get_extras_payload(user_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /extras")
+
+    @app.put("/extras")
+    def save_extras(payload: ExtrasUpsertRequest):
+        try:
+            rows = [r.model_dump() for r in payload.rows]
+            return save_extras_payload(payload.user_id, rows)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "PUT /extras")
 
     @app.post("/points")
     def add_points(payload: AddPointsRequest):

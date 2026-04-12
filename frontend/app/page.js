@@ -5,6 +5,17 @@ import MainMenu from "./components/MainMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
+const GLOBAL_USER_STORAGE_KEY = "global_user_id";
+const HOME_EXTRAS_STORAGE_KEY = "home_extras_by_user_v1";
+const EXTRAS_KIND_META = {
+  time_waste: { label: "Time waste", color: "#94A3B8" },
+  danger: { label: "Danger", color: "#F43F5E" },
+  necessary: { label: "Necessary", color: "#0EA5E9" },
+  coursework: { label: "Coursework", color: "#10B981" },
+  random: { label: "Random", color: "#8B5CF6" },
+  sleep: { label: "Sleep", color: "#4338CA" },
+};
+const EXTRAS_TYPE_OPTIONS = Object.keys(EXTRAS_KIND_META);
 
 const MILESTONES = [
   { points: 20, reward: "Coffee Treat" },
@@ -169,6 +180,32 @@ function formatDuration(totalSeconds) {
   return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
 }
 
+function readGlobalUser() {
+  if (typeof window === "undefined") return "kapil";
+  const raw = (window.localStorage.getItem(GLOBAL_USER_STORAGE_KEY) || "kapil").toLowerCase().trim();
+  return raw === "divya" ? "divya" : "kapil";
+}
+
+function normalizeExtraKind(value) {
+  const raw = String(value || "").toLowerCase().trim();
+  if (raw === "time weste" || raw === "time waste" || raw === "time_waste") return "time_waste";
+  if (raw === "denger" || raw === "danger") return "danger";
+  if (raw === "necessory" || raw === "necessary") return "necessary";
+  if (raw === "coursework") return "coursework";
+  if (raw === "random") return "random";
+  if (raw === "sleep") return "sleep";
+  return "time_waste";
+}
+
+function extraKindLabel(value) {
+  const key = normalizeExtraKind(value);
+  return EXTRAS_KIND_META[key]?.label || "Time waste";
+}
+
+function extraKindClass(value) {
+  return `extras-kind-${normalizeExtraKind(value)}`;
+}
+
 export default function HomePage() {
   const defaultSubject = getSubjectsForExam("prelims")[0] || "";
   const defaultTopic = getTopicsForSelection("prelims", defaultSubject)[0] || "";
@@ -225,9 +262,23 @@ export default function HomePage() {
   const [timerState, setTimerState] = useState({ running: false, startedAt: 0, baseElapsed: 0 });
   const [nowTick, setNowTick] = useState(Date.now());
   const [uploadStatus, setUploadStatus] = useState({ audio: "", video: "", screen: "" });
+  const [selectedUserId, setSelectedUserId] = useState("kapil");
+  const [extrasByUser, setExtrasByUser] = useState({ kapil: [], divya: [] });
+  const [extraActionOpenId, setExtraActionOpenId] = useState("");
+  const [extraModalOpen, setExtraModalOpen] = useState(false);
+  const [extraModalMode, setExtraModalMode] = useState("create");
+  const [editingExtraId, setEditingExtraId] = useState("");
+  const [extraDraft, setExtraDraft] = useState({
+    title: "",
+    link: "",
+    duration: "",
+    kind: "time_waste",
+  });
   const recorderRefs = useRef({});
   const streamRefs = useRef({});
   const chunkRefs = useRef({ audio: [], video: [], screen: [] });
+  const extrasSaveTimerRef = useRef(null);
+  const extrasHydratingRef = useRef({ kapil: false, divya: false });
 
   useEffect(() => {
     const init = async () => {
@@ -289,6 +340,99 @@ export default function HomePage() {
 
     init();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const user = readGlobalUser();
+    setSelectedUserId(user);
+    setSessionForm((prev) => ({ ...prev, user_id: user }));
+    if (!API_BASE_URL) {
+      const rawExtras = window.localStorage.getItem(HOME_EXTRAS_STORAGE_KEY);
+      if (rawExtras) {
+        try {
+          const parsed = JSON.parse(rawExtras);
+          setExtrasByUser({
+            kapil: Array.isArray(parsed?.kapil) ? parsed.kapil : [],
+            divya: Array.isArray(parsed?.divya) ? parsed.divya : [],
+          });
+        } catch (_) {}
+      }
+    }
+    const onGlobalUser = (e) => {
+      const nextUser = e?.detail?.userId === "divya" ? "divya" : "kapil";
+      setSelectedUserId(nextUser);
+      setSessionForm((prev) => ({ ...prev, user_id: nextUser }));
+    };
+    window.addEventListener("global-user-change", onGlobalUser);
+    return () => window.removeEventListener("global-user-change", onGlobalUser);
+  }, [API_BASE_URL]);
+
+  useEffect(() => {
+    const loadExtrasForUser = async () => {
+      if (!selectedUserId) return;
+      if (API_BASE_URL) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/extras?user_id=${encodeURIComponent(selectedUserId)}`);
+          if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(`Extras API failed: ${res.status} ${txt}`);
+          }
+          const data = await res.json();
+          extrasHydratingRef.current[selectedUserId] = true;
+          setExtrasByUser((prev) => ({ ...prev, [selectedUserId]: Array.isArray(data.rows) ? data.rows : [] }));
+          return;
+        } catch (err) {
+          setApiError(String(err.message || err));
+        }
+      }
+      if (typeof window !== "undefined") {
+        const rawExtras = window.localStorage.getItem(HOME_EXTRAS_STORAGE_KEY);
+        if (!rawExtras) return;
+        try {
+          const parsed = JSON.parse(rawExtras);
+          extrasHydratingRef.current[selectedUserId] = true;
+          setExtrasByUser((prev) => ({ ...prev, [selectedUserId]: Array.isArray(parsed?.[selectedUserId]) ? parsed[selectedUserId] : [] }));
+        } catch (_) {}
+      }
+    };
+    loadExtrasForUser();
+  }, [selectedUserId, API_BASE_URL]);
+
+  useEffect(() => {
+    if (!selectedUserId) return;
+    const userRows = extrasByUser[selectedUserId] || [];
+    if (extrasHydratingRef.current[selectedUserId]) {
+      extrasHydratingRef.current[selectedUserId] = false;
+      return;
+    }
+    if (extrasSaveTimerRef.current) {
+      clearTimeout(extrasSaveTimerRef.current);
+    }
+    extrasSaveTimerRef.current = setTimeout(async () => {
+      if (API_BASE_URL) {
+        try {
+          const res = await fetch(`${API_BASE_URL}/extras`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: selectedUserId, rows: userRows }),
+          });
+          if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(`Extras save failed: ${res.status} ${txt}`);
+          }
+        } catch (err) {
+          setApiError(String(err.message || err));
+        }
+        return;
+      }
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(HOME_EXTRAS_STORAGE_KEY, JSON.stringify(extrasByUser));
+      }
+    }, 500);
+    return () => {
+      if (extrasSaveTimerRef.current) clearTimeout(extrasSaveTimerRef.current);
+    };
+  }, [extrasByUser, selectedUserId, API_BASE_URL]);
 
   useEffect(() => {
     if (API_BASE_URL) return;
@@ -737,6 +881,75 @@ export default function HomePage() {
     ? timerState.baseElapsed + Math.floor((nowTick - timerState.startedAt) / 1000)
     : timerState.baseElapsed;
 
+  const selectedPlayer = players.find((p) => p.key === selectedUserId) || players[0];
+  const selectedExtras = extrasByUser[selectedUserId] || [];
+
+  useEffect(() => {
+    setExtraActionOpenId("");
+  }, [selectedUserId]);
+
+  const openExtraModal = () => {
+    setExtraModalMode("create");
+    setEditingExtraId("");
+    setExtraDraft({
+      title: "",
+      link: "",
+      duration: "",
+      kind: "time_waste",
+    });
+    setExtraModalOpen(true);
+  };
+
+  const closeExtraModal = () => {
+    setExtraModalOpen(false);
+    setExtraModalMode("create");
+    setEditingExtraId("");
+  };
+
+  const openEditExtraModal = (row) => {
+    setExtraModalMode("edit");
+    setEditingExtraId(row.id);
+    setExtraDraft({
+      title: row.title || "",
+      link: row.link || "",
+      duration: row.duration || "",
+      kind: normalizeExtraKind(row.kind),
+    });
+    setExtraActionOpenId("");
+    setExtraModalOpen(true);
+  };
+
+  const saveExtraRow = () => {
+    const cleanRow = {
+      title: (extraDraft.title || "").trim(),
+      link: (extraDraft.link || "").trim(),
+      kind: normalizeExtraKind(extraDraft.kind),
+      duration: (extraDraft.duration || "").trim(),
+    };
+    setExtrasByUser((prev) => ({
+      ...prev,
+      [selectedUserId]:
+        extraModalMode === "edit" && editingExtraId
+          ? (prev[selectedUserId] || []).map((row) => (row.id === editingExtraId ? { ...row, ...cleanRow } : row))
+          : [
+              ...(prev[selectedUserId] || []),
+              {
+                id: `extra:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                ...cleanRow,
+              },
+            ],
+    }));
+    closeExtraModal();
+  };
+
+  const removeExtraRow = (rowId) => {
+    setExtrasByUser((prev) => ({
+      ...prev,
+      [selectedUserId]: (prev[selectedUserId] || []).filter((r) => r.id !== rowId),
+    }));
+    setExtraActionOpenId("");
+  };
+
   return (
     <main className="app-shell">
       <div className="bg-orb orb-1" />
@@ -798,81 +1011,140 @@ export default function HomePage() {
       </header>
 
       <section className="scoreboard">
-        {players.map((player) => {
-          const next = nextMilestone(player.points);
-          const progress = Math.min((player.points / next.points) * 100, 100);
-          const earnedRewards = rewardsFromReached(player.reached);
+        {selectedPlayer ? (
+          <article className="player-card" key={selectedPlayer.key}>
+            <div className="player-row">
+              <h2 className="player-name">{selectedPlayer.name}</h2>
+              <div className="player-points">{selectedPlayer.points}</div>
+            </div>
 
-          return (
-            <article className="player-card" key={player.key}>
-              <div className="player-row">
-                <h2 className="player-name">{player.name}</h2>
-                <div className="player-points">{player.points}</div>
+            <div className="progress-wrap">
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${Math.min((selectedPlayer.points / nextMilestone(selectedPlayer.points).points) * 100, 100)}%` }} />
               </div>
+              <div className="progress-label">Next reward at {nextMilestone(selectedPlayer.points).points} points</div>
+            </div>
 
-              <div className="progress-wrap">
-                <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${progress}%` }} />
-                </div>
-                <div className="progress-label">Next reward at {next.points} points</div>
-              </div>
+            <div className="action-grid">
+              <button className="btn-new" disabled={!isEditable} onClick={() => openTaskModal(selectedPlayer.key, "new_class")}>+ New Class</button>
+              <button className="btn-revise" disabled={!isEditable} onClick={() => openTaskModal(selectedPlayer.key, "revision")}>+ Revision</button>
+              {selectedPlayer.key === "divya" ? (
+                <button className="btn-ticket" disabled={!isEditable} onClick={() => openTaskModal(selectedPlayer.key, "test_completed")}>+ Tests</button>
+              ) : (
+                <button className="btn-ticket" disabled={!isEditable} onClick={() => openTaskModal(selectedPlayer.key, "ticket_resolved")}>+ Ticket</button>
+              )}
+            </div>
 
-              <div className="action-grid">
-                <button className="btn-new" disabled={!isEditable} onClick={() => openTaskModal(player.key, "new_class")}>+ New Class</button>
-                <button className="btn-revise" disabled={!isEditable} onClick={() => openTaskModal(player.key, "revision")}>+ Revision</button>
-                {player.key === "divya" ? (
-                  <button className="btn-ticket" disabled={!isEditable} onClick={() => openTaskModal(player.key, "test_completed")}>+ Tests</button>
+            <div className="earned-wrap">
+              <h3>{selectedPlayer.name} Rewards</h3>
+              <div className="earned-list">
+                {rewardsFromReached(selectedPlayer.reached).length === 0 ? (
+                  <span className="earned-empty">No rewards yet</span>
                 ) : (
-                  <button className="btn-ticket" disabled={!isEditable} onClick={() => openTaskModal(player.key, "ticket_resolved")}>+ Ticket</button>
+                  rewardsFromReached(selectedPlayer.reached).map((r) => (
+                    <span key={`${selectedPlayer.key}-${r.points}`} className="earned-chip">
+                      {r.reward} ({r.points})
+                    </span>
+                  ))
                 )}
               </div>
+            </div>
 
-              <div className="earned-wrap">
-                <h3>{player.name} Rewards</h3>
-                <div className="earned-list">
-                  {earnedRewards.length === 0 ? (
-                    <span className="earned-empty">No rewards yet</span>
+            <button
+              className="history-toggle"
+              onClick={() => setHistoryOpen((prev) => ({ ...prev, [selectedPlayer.key]: !prev[selectedPlayer.key] }))}
+            >
+              {historyOpen[selectedPlayer.key] ? "Hide History" : "View History"}
+            </button>
+
+            {historyOpen[selectedPlayer.key] ? (
+              <div className="history-wrap">
+                <h3>{selectedPlayer.name} Activity History</h3>
+                <div className="history-list">
+                  {selectedPlayer.history.length === 0 ? (
+                    <span className="history-empty">No activity logged yet</span>
                   ) : (
-                    earnedRewards.map((r) => (
-                      <span key={`${player.key}-${r.points}`} className="earned-chip">
-                        {r.reward} ({r.points})
-                      </span>
+                    selectedPlayer.history.slice(0, 8).map((item, idx) => (
+                      <div key={`${selectedPlayer.key}-${item.created_at}-${idx}`} className="history-item">
+                        <div className="history-top">
+                          <span className="history-action">{item.action_label || ACTION_LABELS[item.action_type] || "Task"}</span>
+                          <span className="history-points">+{item.points}</span>
+                        </div>
+                        <div className="history-detail">{item.detail}</div>
+                        <div className="history-time">{formatTime(item.created_at)}</div>
+                      </div>
                     ))
                   )}
                 </div>
               </div>
+            ) : null}
+          </article>
+        ) : null}
 
-              <button
-                className="history-toggle"
-                onClick={() => setHistoryOpen((prev) => ({ ...prev, [player.key]: !prev[player.key] }))}
-              >
-                {historyOpen[player.key] ? "Hide History" : "View History"}
-              </button>
-
-              {historyOpen[player.key] ? (
-                <div className="history-wrap">
-                  <h3>{player.name} Activity History</h3>
-                  <div className="history-list">
-                    {player.history.length === 0 ? (
-                      <span className="history-empty">No activity logged yet</span>
-                    ) : (
-                      player.history.slice(0, 8).map((item, idx) => (
-                        <div key={`${player.key}-${item.created_at}-${idx}`} className="history-item">
-                          <div className="history-top">
-                            <span className="history-action">{item.action_label || ACTION_LABELS[item.action_type] || "Task"}</span>
-                            <span className="history-points">+{item.points}</span>
-                          </div>
-                          <div className="history-detail">{item.detail}</div>
-                          <div className="history-time">{formatTime(item.created_at)}</div>
+        <article className="player-card extras-card">
+          <div className="player-row">
+            <h2 className="player-name">Extras</h2>
+            <button className="btn-day secondary" onClick={openExtraModal}>+ Add Row</button>
+          </div>
+          <div className="extras-table-wrap">
+            <table className="extras-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Link (optional)</th>
+                  <th>Duration</th>
+                  <th>Selector</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedExtras.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="extras-empty">No extras yet</td>
+                  </tr>
+                ) : (
+                  selectedExtras.map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.title || "-"}</td>
+                      <td>
+                        {row.link ? (
+                          <a href={row.link} target="_blank" rel="noreferrer" className="extras-link">
+                            {row.link}
+                          </a>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td>{row.duration || "-"}</td>
+                      <td>
+                        <span className={`extras-kind-chip ${extraKindClass(row.kind)}`}>
+                          {extraKindLabel(row.kind)}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="extras-action-wrap">
+                          <button
+                            className="icon-action-btn"
+                            onClick={() => setExtraActionOpenId((prev) => (prev === row.id ? "" : row.id))}
+                            aria-label="Open extra actions"
+                          >
+                            ⋯
+                          </button>
+                          {extraActionOpenId === row.id ? (
+                            <div className="extras-action-menu">
+                              <button className="context-item" onClick={() => openEditExtraModal(row)}>Edit</button>
+                              <button className="context-item danger" onClick={() => removeExtraRow(row.id)}>Delete</button>
+                            </div>
+                          ) : null}
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </article>
-          );
-        })}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </article>
       </section>
 
       <section className="milestone-panel">
@@ -895,6 +1167,51 @@ export default function HomePage() {
       </section>
 
       {toast ? <div className="reward-toast">{toast}</div> : null}
+      {extraModalOpen ? (
+        <div className="task-modal-overlay" role="dialog" aria-modal="true">
+          <div className="task-modal">
+            <h3>{extraModalMode === "edit" ? "Edit Extra" : "Add Extra"}</h3>
+            <p>{players.find((p) => p.key === selectedUserId)?.name || "User"}</p>
+            <div className="session-form-grid">
+              <input
+                className="task-select"
+                placeholder="Title"
+                value={extraDraft.title}
+                onChange={(e) => setExtraDraft((prev) => ({ ...prev, title: e.target.value }))}
+              />
+              <input
+                className="task-select"
+                placeholder="Link (optional)"
+                value={extraDraft.link}
+                onChange={(e) => setExtraDraft((prev) => ({ ...prev, link: e.target.value }))}
+              />
+              <input
+                className="task-select"
+                placeholder="Duration (e.g. 30m)"
+                value={extraDraft.duration}
+                onChange={(e) => setExtraDraft((prev) => ({ ...prev, duration: e.target.value }))}
+              />
+              <select
+                className="task-select"
+                value={extraDraft.kind}
+                onChange={(e) => setExtraDraft((prev) => ({ ...prev, kind: e.target.value }))}
+              >
+                {EXTRAS_TYPE_OPTIONS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {EXTRAS_KIND_META[kind]?.label || kind}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="task-modal-actions">
+              <button className="btn-day secondary" onClick={closeExtraModal}>Cancel</button>
+              <button className="btn-new" onClick={saveExtraRow} disabled={!extraDraft.title.trim()}>
+                {extraModalMode === "edit" ? "Save" : "Add"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {taskModal.open ? (
         <div className="task-modal-overlay" role="dialog" aria-modal="true">
           <div className="task-modal">
