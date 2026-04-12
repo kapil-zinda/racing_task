@@ -39,6 +39,8 @@ def settings() -> Dict[str, Any]:
         "mongodb_content_folders_collection": os.getenv("MONGODB_CONTENT_FOLDERS_COLLECTION", "content_folders"),
         "mongodb_content_files_collection": os.getenv("MONGODB_CONTENT_FILES_COLLECTION", "content_files"),
         "mongodb_extras_collection": os.getenv("MONGODB_EXTRAS_COLLECTION", "home_extras"),
+        "mongodb_qna_sessions_collection": os.getenv("MONGODB_QNA_SESSIONS_COLLECTION", "qna_sessions"),
+        "mongodb_qna_messages_collection": os.getenv("MONGODB_QNA_MESSAGES_COLLECTION", "qna_messages"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
         "aws_region": os.getenv("AWS_REGION", "ap-south-1"),
         "recording_bucket": os.getenv("RECORDING_BUCKET", ""),
@@ -47,6 +49,7 @@ def settings() -> Dict[str, Any]:
         "content_bucket": os.getenv("CONTENT_BUCKET", os.getenv("RECORDING_BUCKET", "")),
         "content_prefix": os.getenv("CONTENT_PREFIX", "content"),
         "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
+        "openai_chat_model": os.getenv("OPENAI_CHAT_MODEL", "gpt-5.4"),
         "openai_embeddings_model": os.getenv("OPENAI_EMBEDDINGS_MODEL", "text-embedding-3-large"),
         "openai_embeddings_dimensions": os.getenv("OPENAI_EMBEDDINGS_DIMENSIONS", "512"),
         "mongodb_pdf_vector_index_name": os.getenv("MONGODB_PDF_VECTOR_INDEX_NAME", "pdf_embedding_index"),
@@ -113,6 +116,16 @@ def content_files_collection():
 def extras_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_extras_collection"]]
+
+
+def qna_sessions_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_qna_sessions_collection"]]
+
+
+def qna_messages_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_qna_messages_collection"]]
 
 
 def s3_client():

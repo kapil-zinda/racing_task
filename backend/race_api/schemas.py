@@ -123,6 +123,12 @@ class ContentDownloadRequest(BaseModel):
     recursive: bool = True
 
 
+class ContentMakeSearchableRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    course: str
+
+
 class ExtraRowInput(BaseModel):
     id: str = ""
     title: str = ""
@@ -134,3 +140,15 @@ class ExtraRowInput(BaseModel):
 class ExtrasUpsertRequest(BaseModel):
     user_id: str
     rows: List[ExtraRowInput] = []
+
+
+class QnaAskRequest(BaseModel):
+    session_id: str
+    question: str
+    course: str = ""
+    limit: int = 8
+
+
+class QnaSessionCreateRequest(BaseModel):
+    user_id: str
+    title: str = ""

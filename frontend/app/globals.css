@@ -1,4 +1,6 @@
 :root {
+  --font-manrope: "Manrope", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-bebas: "Bebas Neue", "Impact", "Arial Narrow", "Franklin Gothic Medium", sans-serif;
   --bg-1: #0f1021;
   --bg-2: #1a1238;
   --card: rgba(255, 255, 255, 0.08);
@@ -1759,12 +1761,192 @@ h1 {
   min-height: 100%;
 }
 
+.qna-chat-shell {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+}
+
+.qna-chat-list {
+  max-height: 68vh;
+  overflow: auto;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.qna-msg {
+  display: flex;
+}
+
+.qna-msg-user {
+  justify-content: flex-end;
+}
+
+.qna-msg-assistant {
+  justify-content: flex-start;
+}
+
+.qna-msg-bubble {
+  max-width: min(86%, 840px);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 10px 12px;
+}
+
+.qna-msg-user .qna-msg-bubble {
+  background: rgba(14, 165, 233, 0.22);
+  border-color: rgba(14, 165, 233, 0.45);
+}
+
+.qna-msg-assistant .qna-msg-bubble {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.qna-msg-text {
+  color: #edf3ff;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.qna-inline-cite {
+  display: inline;
+  border: 0;
+  background: transparent;
+  color: #8edbff;
+  padding: 0;
+  margin: 0 2px;
+  border-radius: 0;
+  text-decoration: underline;
+  font-weight: 700;
+}
+
+.qna-inline-cite:hover {
+  color: #b8ebff;
+  filter: none;
+  transform: none;
+}
+
+.qna-citation-lines {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.qna-cited-line {
+  width: 100%;
+  text-align: left;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: #eaf2ff;
+  padding: 8px 10px;
+}
+
+.qna-cited-line:hover {
+  border-color: rgba(114, 221, 247, 0.72);
+  background: rgba(114, 221, 247, 0.16);
+}
+
+.qna-cited-tag {
+  color: #9fdfff;
+  font-weight: 700;
+}
+
+.qna-source-chip-wrap {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qna-chat-input {
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  background: rgba(13, 17, 34, 0.72);
+}
+
+.qna-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.qna-sessions {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.16);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  max-height: 76vh;
+  overflow: auto;
+}
+
+.qna-sessions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.qna-sessions-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.qna-sessions-list {
+  display: grid;
+  gap: 6px;
+}
+
+.qna-session-item {
+  text-align: left;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 8px;
+  color: #edf3ff;
+}
+
+.qna-session-item.active {
+  border-color: rgba(114, 221, 247, 0.7);
+  background: rgba(114, 221, 247, 0.18);
+}
+
+.qna-session-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qna-session-sub {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #c8d8ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qna-main {
+  min-width: 0;
+}
+
 @media (max-width: 900px) {
   .content-grid {
     grid-template-columns: 1fr;
   }
 
   .drive-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .qna-layout {
     grid-template-columns: 1fr;
   }
 

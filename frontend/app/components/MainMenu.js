@@ -8,7 +8,7 @@ function isActive(groupActive, values) {
 
 export default function MainMenu({ active = "" }) {
   const activityActive = isActive(active, ["recorder", "syllabus", "mission"]);
-  const resourcesActive = isActive(active, ["content", "search"]);
+  const resourcesActive = isActive(active, ["content", "search", "qna"]);
 
   return (
     <div className="main-menu">
