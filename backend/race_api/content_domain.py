@@ -137,6 +137,41 @@ def _file_node(file_doc: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _unique_folder_name(parent_id: str, base_name: str, exclude_id: str | None = None) -> str:
+    folders = content_folders_collection()
+    name = _safe_name(base_name)
+    if not folders.find_one({"parent_id": parent_id, "name": name, "_id": {"$ne": exclude_id}}):
+        return name
+    idx = 1
+    while True:
+        candidate = f"{name} ({idx})"
+        if not folders.find_one({"parent_id": parent_id, "name": candidate, "_id": {"$ne": exclude_id}}):
+            return candidate
+        idx += 1
+
+
+def _unique_file_name(parent_id: str, base_name: str, exclude_id: str | None = None) -> str:
+    files = content_files_collection()
+    name = _safe_name(base_name)
+    query: Dict[str, Any] = {"name": name, "_id": {"$ne": exclude_id}}
+    query["$or"] = [{"parent_id": parent_id}, {"folder_id": parent_id}]
+    if not files.find_one(query):
+        return name
+    stem = name
+    ext = ""
+    if "." in name and not name.startswith("."):
+        stem, ext = name.rsplit(".", 1)
+        ext = f".{ext}"
+    idx = 1
+    while True:
+        candidate = f"{stem} ({idx}){ext}"
+        candidate_query: Dict[str, Any] = {"name": candidate, "_id": {"$ne": exclude_id}}
+        candidate_query["$or"] = [{"parent_id": parent_id}, {"folder_id": parent_id}]
+        if not files.find_one(candidate_query):
+            return candidate
+        idx += 1
+
+
 def list_content(folder_id: str | None, q: str | None, sort_by: str | None, sort_dir: str | None) -> Dict[str, Any]:
     _ensure_indexes()
     fid = (folder_id or ROOT_FOLDER_ID).strip()
@@ -355,6 +390,328 @@ def _collect_descendant_folder_ids(folder_id: str) -> List[str]:
         for child in children_by_parent.get(node, []):
             stack.append(child)
     return out
+
+
+def _copy_object(src_key: str, dst_key: str) -> None:
+    if not src_key or not dst_key:
+        return
+    s3_client().copy_object(
+        Bucket=_bucket(),
+        CopySource={"Bucket": _bucket(), "Key": src_key},
+        Key=dst_key,
+    )
+
+
+def _move_object(src_key: str, dst_key: str) -> None:
+    if not src_key or not dst_key:
+        return
+    _copy_object(src_key, dst_key)
+    try:
+        s3_client().delete_object(Bucket=_bucket(), Key=src_key)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _is_descendant_folder(parent_id: str, candidate_child_id: str) -> bool:
+    if not parent_id or not candidate_child_id:
+        return False
+    if parent_id == candidate_child_id:
+        return True
+    return candidate_child_id in _collect_descendant_folder_ids(parent_id)
+
+
+def copy_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[str, Any]:
+    _ensure_indexes()
+    iid = (item_id or "").strip()
+    kind = (item_type or "").strip().lower()
+    dest_id = (destination_folder_id or ROOT_FOLDER_ID).strip() or ROOT_FOLDER_ID
+    if kind not in {"file", "folder"}:
+        raise ValueError("item_type must be file or folder")
+    if not iid:
+        raise ValueError("id is required")
+    dest_folder = _get_folder_or_404(dest_id)
+    now = _now()
+    files = content_files_collection()
+    folders = content_folders_collection()
+
+    if kind == "file":
+        src = files.find_one({"_id": iid})
+        if not src:
+            raise LookupError("File not found")
+        target_name = _unique_file_name(dest_folder["_id"], src.get("name", "file"))
+        dst_key = _build_object_key(dest_folder, target_name)
+        src_key = src.get("s3_key", "")
+        if src_key:
+            _copy_object(src_key, dst_key)
+        new_id = _new_id("file")
+        files.insert_one({
+            "_id": new_id,
+            "node_type": "file",
+            "parent_id": dest_folder["_id"],
+            "folder_id": dest_folder["_id"],
+            "name": target_name,
+            "content_type": src.get("content_type", "application/octet-stream"),
+            "size": int(src.get("size", 0) or 0),
+            "etag": src.get("etag", ""),
+            "s3_key": dst_key,
+            "status": "ready",
+            "created_at": now,
+            "updated_at": now,
+        })
+        return {"message": "File copied", "item": _file_node(files.find_one({"_id": new_id}))}
+
+    if iid == ROOT_FOLDER_ID:
+        raise ValueError("Root folder cannot be copied")
+    src_root = folders.find_one({"_id": iid})
+    if not src_root:
+        raise LookupError("Folder not found")
+    if _is_descendant_folder(iid, dest_folder["_id"]):
+        raise ValueError("Cannot copy folder into itself or its descendant")
+
+    descendants = _collect_descendant_folder_ids(iid)
+    folder_docs = list(folders.find({"_id": {"$in": descendants}}))
+    by_id = {d["_id"]: d for d in folder_docs}
+    src_path = _folder_path(src_root)
+    new_root_name = _unique_folder_name(dest_folder["_id"], src_root.get("name", "Folder"))
+    dest_parent_path = _folder_path(dest_folder)
+    new_root_path = f"{dest_parent_path}/{new_root_name}".strip("/")
+
+    id_map: Dict[str, str] = {iid: _new_id("folder")}
+    path_map: Dict[str, str] = {iid: new_root_path}
+    name_map: Dict[str, str] = {iid: new_root_name}
+
+    remaining = [d for d in folder_docs if d["_id"] != iid]
+    while remaining:
+        progressed = False
+        for doc in list(remaining):
+            parent_old = doc.get("parent_id")
+            if parent_old not in id_map:
+                continue
+            old_id = doc["_id"]
+            old_path = _folder_path(doc)
+            suffix = old_path[len(src_path):].lstrip("/") if src_path and old_path.startswith(src_path) else old_path
+            segment = suffix.split("/")[-1] if suffix else doc.get("name", "Folder")
+            new_path = f"{new_root_path}/{suffix}".strip("/") if suffix else new_root_path
+            id_map[old_id] = _new_id("folder")
+            path_map[old_id] = new_path
+            name_map[old_id] = segment
+            remaining.remove(doc)
+            progressed = True
+        if not progressed:
+            raise RuntimeError("Failed to resolve folder copy hierarchy")
+
+    for old_id, new_id in id_map.items():
+        old_doc = by_id[old_id]
+        folders.insert_one({
+            "_id": new_id,
+            "name": name_map[old_id],
+            "node_type": "folder",
+            "parent_id": dest_folder["_id"] if old_id == iid else id_map.get(old_doc.get("parent_id")),
+            "path": path_map[old_id],
+            "created_at": now,
+            "updated_at": now,
+        })
+
+    file_docs = list(files.find({"$or": [{"parent_id": {"$in": descendants}}, {"folder_id": {"$in": descendants}}]}))
+    copied_files = 0
+    for src in file_docs:
+        old_parent = src.get("parent_id") or src.get("folder_id")
+        if old_parent not in id_map:
+            continue
+        new_parent = id_map[old_parent]
+        target_name = _unique_file_name(new_parent, src.get("name", "file"))
+        new_parent_doc = folders.find_one({"_id": new_parent})
+        if not new_parent_doc:
+            continue
+        dst_key = _build_object_key(new_parent_doc, target_name)
+        if src.get("s3_key"):
+            _copy_object(src.get("s3_key"), dst_key)
+        files.insert_one({
+            "_id": _new_id("file"),
+            "node_type": "file",
+            "parent_id": new_parent,
+            "folder_id": new_parent,
+            "name": target_name,
+            "content_type": src.get("content_type", "application/octet-stream"),
+            "size": int(src.get("size", 0) or 0),
+            "etag": src.get("etag", ""),
+            "s3_key": dst_key,
+            "status": "ready",
+            "created_at": now,
+            "updated_at": now,
+        })
+        copied_files += 1
+
+    return {
+        "message": "Folder copied",
+        "item": _folder_node(folders.find_one({"_id": id_map[iid]})),
+        "copied_folders": len(id_map),
+        "copied_files": copied_files,
+    }
+
+
+def move_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[str, Any]:
+    _ensure_indexes()
+    iid = (item_id or "").strip()
+    kind = (item_type or "").strip().lower()
+    dest_id = (destination_folder_id or ROOT_FOLDER_ID).strip() or ROOT_FOLDER_ID
+    if kind not in {"file", "folder"}:
+        raise ValueError("item_type must be file or folder")
+    if not iid:
+        raise ValueError("id is required")
+    dest_folder = _get_folder_or_404(dest_id)
+    files = content_files_collection()
+    folders = content_folders_collection()
+    now = _now()
+
+    if kind == "file":
+        doc = files.find_one({"_id": iid})
+        if not doc:
+            raise LookupError("File not found")
+        if (doc.get("parent_id") or doc.get("folder_id")) == dest_folder["_id"]:
+            return {"message": "File already in destination folder", "item": _file_node(doc)}
+        target_name = _unique_file_name(dest_folder["_id"], doc.get("name", "file"), exclude_id=iid)
+        dst_key = _build_object_key(dest_folder, target_name)
+        if doc.get("s3_key") and doc.get("s3_key") != dst_key:
+            _move_object(doc.get("s3_key"), dst_key)
+        files.update_one(
+            {"_id": iid},
+            {"$set": {
+                "parent_id": dest_folder["_id"],
+                "folder_id": dest_folder["_id"],
+                "name": target_name,
+                "s3_key": dst_key,
+                "updated_at": now,
+            }},
+        )
+        return {"message": "File moved", "item": _file_node(files.find_one({"_id": iid}))}
+
+    if iid == ROOT_FOLDER_ID:
+        raise ValueError("Root folder cannot be moved")
+    root = folders.find_one({"_id": iid})
+    if not root:
+        raise LookupError("Folder not found")
+    if _is_descendant_folder(iid, dest_folder["_id"]):
+        raise ValueError("Cannot move folder into itself or its descendant")
+    if root.get("parent_id") == dest_folder["_id"]:
+        return {"message": "Folder already in destination", "item": _folder_node(root)}
+
+    old_root_path = _folder_path(root)
+    new_name = _unique_folder_name(dest_folder["_id"], root.get("name", "Folder"), exclude_id=iid)
+    new_parent_path = _folder_path(dest_folder)
+    new_root_path = f"{new_parent_path}/{new_name}".strip("/")
+
+    folders.update_one(
+        {"_id": iid},
+        {"$set": {"parent_id": dest_folder["_id"], "name": new_name, "path": new_root_path, "updated_at": now}},
+    )
+    descendants = list(folders.find({"path": {"$regex": f"^{old_root_path}/"}}))
+    for d in descendants:
+        d_path = _folder_path(d)
+        suffix = d_path[len(old_root_path):].lstrip("/")
+        folders.update_one(
+            {"_id": d["_id"]},
+            {"$set": {"path": f"{new_root_path}/{suffix}".strip("/"), "updated_at": now}},
+        )
+
+    moved_folder_ids = _collect_descendant_folder_ids(iid)
+    file_docs = list(files.find({"$or": [{"parent_id": {"$in": moved_folder_ids}}, {"folder_id": {"$in": moved_folder_ids}}]}))
+    folder_docs = {f["_id"]: f for f in folders.find({"_id": {"$in": moved_folder_ids}})}
+    for fdoc in file_docs:
+        parent_id = fdoc.get("parent_id") or fdoc.get("folder_id")
+        parent_folder = folder_docs.get(parent_id)
+        if not parent_folder:
+            continue
+        target_name = _unique_file_name(parent_folder["_id"], fdoc.get("name", "file"), exclude_id=fdoc["_id"])
+        dst_key = _build_object_key(parent_folder, target_name)
+        src_key = fdoc.get("s3_key", "")
+        if src_key and src_key != dst_key:
+            _move_object(src_key, dst_key)
+        files.update_one(
+            {"_id": fdoc["_id"]},
+            {"$set": {
+                "parent_id": parent_folder["_id"],
+                "folder_id": parent_folder["_id"],
+                "name": target_name,
+                "s3_key": dst_key,
+                "updated_at": now,
+            }},
+        )
+
+    return {"message": "Folder moved", "item": _folder_node(folders.find_one({"_id": iid}))}
+
+
+def download_item(item_id: str, item_type: str, recursive: bool = True) -> Dict[str, Any]:
+    _ensure_indexes()
+    iid = (item_id or "").strip()
+    kind = (item_type or "").strip().lower()
+    if kind not in {"file", "folder"}:
+        raise ValueError("item_type must be file or folder")
+    if not iid:
+        raise ValueError("id is required")
+    files = content_files_collection()
+    folders = content_folders_collection()
+    s3 = s3_client()
+    expires = 3600
+
+    if kind == "file":
+        doc = files.find_one({"_id": iid})
+        if not doc:
+            raise LookupError("File not found")
+        key = doc.get("s3_key")
+        if not key:
+            raise ValueError("File key is missing")
+        url = s3.generate_presigned_url("get_object", Params={"Bucket": _bucket(), "Key": key}, ExpiresIn=expires)
+        return {"type": "file", "file": _file_node(doc), "download_url": url, "expires_in": expires}
+
+    folder = folders.find_one({"_id": iid})
+    if not folder:
+        raise LookupError("Folder not found")
+    if iid == ROOT_FOLDER_ID:
+        base_name = "Root"
+    else:
+        base_name = folder.get("name", "Folder")
+
+    folder_ids = [iid]
+    if recursive:
+        folder_ids = _collect_descendant_folder_ids(iid)
+    file_docs = list(files.find({"$or": [{"parent_id": {"$in": folder_ids}}, {"folder_id": {"$in": folder_ids}}], "status": "ready"}))
+    folder_by_id = {f["_id"]: f for f in folders.find({"_id": {"$in": folder_ids}})}
+    root_path = _folder_path(folder)
+    downloads: List[Dict[str, Any]] = []
+    for fdoc in file_docs:
+        key = fdoc.get("s3_key")
+        if not key:
+            continue
+        parent_id = fdoc.get("parent_id") or fdoc.get("folder_id")
+        parent = folder_by_id.get(parent_id)
+        parent_path = _folder_path(parent) if parent else ""
+        rel_dir = ""
+        if parent_path and root_path and parent_path.startswith(root_path):
+            rel_dir = parent_path[len(root_path):].lstrip("/")
+        elif parent_path and not root_path:
+            rel_dir = parent_path
+        rel_path = f"{rel_dir}/{fdoc.get('name', '')}".strip("/")
+        if base_name:
+            rel_path = f"{base_name}/{rel_path}".strip("/")
+        url = s3.generate_presigned_url("get_object", Params={"Bucket": _bucket(), "Key": key}, ExpiresIn=expires)
+        downloads.append({
+            "file_id": fdoc.get("_id"),
+            "name": fdoc.get("name", ""),
+            "content_type": fdoc.get("content_type", ""),
+            "size": int(fdoc.get("size", 0) or 0),
+            "relative_path": rel_path,
+            "download_url": url,
+        })
+    downloads.sort(key=lambda x: x.get("relative_path", ""))
+    return {
+        "type": "folder",
+        "folder": _folder_node(folder),
+        "recursive": bool(recursive),
+        "count": len(downloads),
+        "files": downloads,
+        "expires_in": expires,
+    }
 
 
 def delete_item(item_id: str, item_type: str, recursive: bool = False) -> Dict[str, Any]:

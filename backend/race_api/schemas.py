@@ -105,6 +105,24 @@ class ContentCompleteUploadRequest(BaseModel):
     size: int = 0
 
 
+class ContentCopyRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    destination_folder_id: str = "content_root"
+
+
+class ContentMoveRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    destination_folder_id: str = "content_root"
+
+
+class ContentDownloadRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    recursive: bool = True
+
+
 class ExtraRowInput(BaseModel):
     id: str = ""
     title: str = ""

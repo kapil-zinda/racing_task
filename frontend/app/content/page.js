@@ -70,6 +70,17 @@ function uploadWithProgress(url, file, contentType, onProgress) {
   });
 }
 
+function triggerBrowserDownload(url, suggestedName = "") {
+  const link = document.createElement("a");
+  link.href = url;
+  if (suggestedName) link.setAttribute("download", suggestedName);
+  link.setAttribute("rel", "noopener noreferrer");
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 export default function ContentPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -100,6 +111,14 @@ export default function ContentPage() {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [preview, setPreview] = useState({ loading: false, data: null, error: "", text: "" });
   const [contextMenu, setContextMenu] = useState({ open: false, x: 0, y: 0, item: null });
+  const [destinationPicker, setDestinationPicker] = useState({
+    open: false,
+    mode: "copy",
+    item: null,
+    stack: [{ id: "content_root", name: "Root", path: "" }],
+    loading: false,
+    submitting: false,
+  });
 
   const uploadInputRef = useRef(null);
   const folderInputRef = useRef(null);
@@ -276,6 +295,70 @@ export default function ContentPage() {
     await openFolder(currentParent);
   };
 
+  const isBlockedDestinationFolder = (candidateFolder, sourceItem) => {
+    if (!candidateFolder || !sourceItem || sourceItem.type !== "folder") return false;
+    const sourcePath = String(sourceItem.path || "").trim();
+    const candidatePath = String(candidateFolder.path || "").trim();
+    if (!sourcePath) return false;
+    return candidatePath === sourcePath || candidatePath.startsWith(`${sourcePath}/`);
+  };
+
+  const ensureTreeChildrenLoaded = async (parentId) => {
+    if (Object.prototype.hasOwnProperty.call(treeChildrenByParent, parentId)) return;
+    await loadTree(parentId);
+  };
+
+  const openDestinationPicker = async (item, mode) => {
+    if (!item || !API_BASE_URL) return;
+    setDestinationPicker({
+      open: true,
+      mode,
+      item,
+      stack: [{ id: "content_root", name: "Root", path: "" }],
+      loading: true,
+      submitting: false,
+    });
+    try {
+      await ensureTreeChildrenLoaded("content_root");
+      setDestinationPicker((prev) => ({ ...prev, loading: false }));
+    } catch (err) {
+      setDestinationPicker((prev) => ({ ...prev, loading: false, open: false }));
+      setError(String(err.message || err));
+    }
+  };
+
+  const closeDestinationPicker = () => {
+    setDestinationPicker({
+      open: false,
+      mode: "copy",
+      item: null,
+      stack: [{ id: "content_root", name: "Root", path: "" }],
+      loading: false,
+      submitting: false,
+    });
+  };
+
+  const navigateDestinationPickerTo = async (folder) => {
+    const blocked = isBlockedDestinationFolder(folder, destinationPicker.item);
+    if (blocked) return;
+    setDestinationPicker((prev) => ({ ...prev, loading: true }));
+    try {
+      await ensureTreeChildrenLoaded(folder.id);
+      setDestinationPicker((prev) => ({
+        ...prev,
+        loading: false,
+        stack: [...prev.stack, { id: folder.id, name: folder.name, path: folder.path || "" }],
+      }));
+    } catch (err) {
+      setDestinationPicker((prev) => ({ ...prev, loading: false }));
+      setError(String(err.message || err));
+    }
+  };
+
+  const navigateDestinationPickerBreadcrumb = async (index) => {
+    setDestinationPicker((prev) => ({ ...prev, stack: prev.stack.slice(0, index + 1) }));
+  };
+
   const createFolder = async () => {
     if (!API_BASE_URL || !newFolderName.trim()) return;
     setCreating(true);
@@ -358,6 +441,79 @@ export default function ContentPage() {
         setPreview({ loading: false, data: null, error: "", text: "" });
       }
       await refresh();
+    } catch (err) {
+      setError(String(err.message || err));
+    }
+  };
+
+  const executeCopyMove = async (item, mode, destination_folder_id) => {
+    if (!API_BASE_URL || !item) return;
+    setError("");
+    setMessage("");
+    setDestinationPicker((prev) => ({ ...prev, submitting: true }));
+    try {
+      const res = await fetch(`${API_BASE_URL}/content/${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: item.id,
+          item_type: item.type,
+          destination_folder_id,
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`${mode === "copy" ? "Copy" : "Move"} failed: ${res.status} ${txt}`);
+      }
+      setMessage(`${item.type} ${mode === "copy" ? "copied" : "moved"}`);
+      closeDestinationPicker();
+      if (selectedFile?.id === item.id) {
+        setSelectedFile(null);
+        setPreview({ loading: false, data: null, error: "", text: "" });
+      }
+      await refresh();
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setDestinationPicker((prev) => ({ ...prev, submitting: false }));
+    }
+  };
+
+  const downloadItem = async (item) => {
+    if (!API_BASE_URL || !item) return;
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/content/download`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: item.id,
+          item_type: item.type,
+          recursive: true,
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Download failed: ${res.status} ${txt}`);
+      }
+      const data = await res.json();
+      if (data.type === "file" && data.download_url) {
+        triggerBrowserDownload(data.download_url, data.file?.name || "");
+        setMessage("Download started");
+        return;
+      }
+      const files = Array.isArray(data.files) ? data.files : [];
+      if (!files.length) {
+        setMessage("No downloadable files found");
+        return;
+      }
+      for (const entry of files) {
+        if (!entry.download_url) continue;
+        triggerBrowserDownload(entry.download_url, entry.relative_path || entry.name || "");
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+      setMessage(`Started download for ${files.length} file(s)`);
     } catch (err) {
       setError(String(err.message || err));
     }
@@ -518,6 +674,13 @@ export default function ContentPage() {
       item,
     });
   };
+
+  const pickerCurrent = destinationPicker.stack[destinationPicker.stack.length - 1] || { id: "content_root", name: "Root", path: "" };
+  const pickerChildren = treeChildrenByParent[pickerCurrent.id] || [];
+  const pickerCurrentBlocked = isBlockedDestinationFolder(
+    { id: pickerCurrent.id, path: pickerCurrent.path || "" },
+    destinationPicker.item,
+  );
 
   const toggleFolderNode = async (nodeId) => {
     const isExpanded = Boolean(expandedFolders[nodeId]);
@@ -832,6 +995,36 @@ export default function ContentPage() {
             Rename
           </button>
           <button
+            className="context-item"
+            onClick={() => {
+              const it = contextMenu.item;
+              setContextMenu({ open: false, x: 0, y: 0, item: null });
+              openDestinationPicker(it, "copy");
+            }}
+          >
+            Copy
+          </button>
+          <button
+            className="context-item"
+            onClick={() => {
+              const it = contextMenu.item;
+              setContextMenu({ open: false, x: 0, y: 0, item: null });
+              openDestinationPicker(it, "move");
+            }}
+          >
+            Move
+          </button>
+          <button
+            className="context-item"
+            onClick={() => {
+              const it = contextMenu.item;
+              setContextMenu({ open: false, x: 0, y: 0, item: null });
+              downloadItem(it);
+            }}
+          >
+            Download
+          </button>
+          <button
             className="context-item danger"
             onClick={() => {
               const it = contextMenu.item;
@@ -865,6 +1058,72 @@ export default function ContentPage() {
               </button>
               <button className="btn-day" onClick={createFolder} disabled={creating || !newFolderName.trim()}>
                 {creating ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {destinationPicker.open && destinationPicker.item ? (
+        <div className="task-modal-overlay" onClick={closeDestinationPicker}>
+          <div className="task-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{destinationPicker.mode === "copy" ? "Copy To" : "Move To"}</h3>
+            <p>
+              {destinationPicker.item.name} ({destinationPicker.item.type})
+            </p>
+
+            <div className="content-breadcrumbs">
+              {destinationPicker.stack.map((node, idx) => (
+                <button
+                  key={`${node.id}-${idx}`}
+                  className="crumb-btn"
+                  onClick={() => navigateDestinationPickerBreadcrumb(idx)}
+                >
+                  {node.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="picker-folder-list">
+              {destinationPicker.loading ? <p className="day-state">Loading folders...</p> : null}
+              {!destinationPicker.loading && pickerChildren.length === 0 ? (
+                <p className="day-state">No subfolders here.</p>
+              ) : null}
+              {!destinationPicker.loading
+                ? pickerChildren.map((folder) => {
+                    const blocked = isBlockedDestinationFolder(folder, destinationPicker.item);
+                    return (
+                      <button
+                        key={folder.id}
+                        className={`picker-folder-row ${blocked ? "disabled" : ""}`}
+                        onClick={() => navigateDestinationPickerTo(folder)}
+                        disabled={blocked}
+                        title={blocked ? "Cannot choose source folder or its child folders" : "Open folder"}
+                      >
+                        <span className="item-icon" aria-hidden="true">📁</span>
+                        <span>{folder.name}</span>
+                      </button>
+                    );
+                  })
+                : null}
+            </div>
+
+            <div className="task-modal-actions">
+              <button className="btn-day secondary" onClick={closeDestinationPicker}>
+                Cancel
+              </button>
+              <button
+                className="btn-day"
+                disabled={destinationPicker.submitting || pickerCurrentBlocked}
+                onClick={() => executeCopyMove(destinationPicker.item, destinationPicker.mode, pickerCurrent.id)}
+              >
+                {destinationPicker.submitting
+                  ? destinationPicker.mode === "copy"
+                    ? "Copying..."
+                    : "Moving..."
+                  : destinationPicker.mode === "copy"
+                    ? "Copy Here"
+                    : "Move Here"}
               </button>
             </div>
           </div>

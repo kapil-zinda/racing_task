@@ -4,12 +4,15 @@ from mangum import Mangum
 
 from .constants import PLAYERS, POINTS_MAP
 from .content_domain import (
+    copy_item,
     complete_upload,
     create_folder,
     create_upload_url,
     delete_item,
+    download_item,
     list_content,
     list_folder_tree,
+    move_item,
     preview_by_id,
     rename_item,
 )
@@ -33,8 +36,11 @@ from .schemas import (
     ContentCreateFolderRequest,
     ContentDeleteRequest,
     ContentCompleteUploadRequest,
+    ContentCopyRequest,
+    ContentDownloadRequest,
     ContentPresignUploadRequest,
     ContentRenameRequest,
+    ContentMoveRequest,
     CreateSessionRequest,
     ExtrasUpsertRequest,
     MultipartAbortRequest,
@@ -160,6 +166,27 @@ def create_app() -> FastAPI:
             return delete_item(payload.id, payload.item_type, payload.recursive)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/delete")
+
+    @app.post("/content/copy")
+    def content_copy(payload: ContentCopyRequest):
+        try:
+            return copy_item(payload.id, payload.item_type, payload.destination_folder_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/copy")
+
+    @app.post("/content/move")
+    def content_move(payload: ContentMoveRequest):
+        try:
+            return move_item(payload.id, payload.item_type, payload.destination_folder_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/move")
+
+    @app.post("/content/download")
+    def content_download(payload: ContentDownloadRequest):
+        try:
+            return download_item(payload.id, payload.item_type, payload.recursive)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/download")
 
     @app.get("/content/preview-url")
     def content_preview(file_id: str = Query(...)):
