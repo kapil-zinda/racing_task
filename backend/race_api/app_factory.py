@@ -4,15 +4,19 @@ from mangum import Mangum
 
 from .constants import PLAYERS, POINTS_MAP
 from .content_domain import (
+    copy_item,
     complete_upload,
     create_folder,
     create_upload_url,
     delete_item,
+    download_item,
     list_content,
     list_folder_tree,
+    move_item,
     preview_by_id,
     rename_item,
 )
+from .extras_domain import get_extras_payload, save_extras_payload
 from .context import logger
 from .race_domain import (
     add_points_payload,
@@ -32,9 +36,13 @@ from .schemas import (
     ContentCreateFolderRequest,
     ContentDeleteRequest,
     ContentCompleteUploadRequest,
+    ContentCopyRequest,
+    ContentDownloadRequest,
     ContentPresignUploadRequest,
     ContentRenameRequest,
+    ContentMoveRequest,
     CreateSessionRequest,
+    ExtrasUpsertRequest,
     MultipartAbortRequest,
     MultipartCompleteRequest,
     MultipartPartRequest,
@@ -159,6 +167,27 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/delete")
 
+    @app.post("/content/copy")
+    def content_copy(payload: ContentCopyRequest):
+        try:
+            return copy_item(payload.id, payload.item_type, payload.destination_folder_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/copy")
+
+    @app.post("/content/move")
+    def content_move(payload: ContentMoveRequest):
+        try:
+            return move_item(payload.id, payload.item_type, payload.destination_folder_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/move")
+
+    @app.post("/content/download")
+    def content_download(payload: ContentDownloadRequest):
+        try:
+            return download_item(payload.id, payload.item_type, payload.recursive)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/download")
+
     @app.get("/content/preview-url")
     def content_preview(file_id: str = Query(...)):
         try:
@@ -202,6 +231,21 @@ def create_app() -> FastAPI:
             return build_mission_control_payload(user_id, lookback_days)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /mission-control")
+
+    @app.get("/extras")
+    def get_extras(user_id: str = Query(default="kapil")):
+        try:
+            return get_extras_payload(user_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /extras")
+
+    @app.put("/extras")
+    def save_extras(payload: ExtrasUpsertRequest):
+        try:
+            rows = [r.model_dump() for r in payload.rows]
+            return save_extras_payload(payload.user_id, rows)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "PUT /extras")
 
     @app.post("/points")
     def add_points(payload: AddPointsRequest):

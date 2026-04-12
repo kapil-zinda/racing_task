@@ -6,6 +6,9 @@ import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
+const MULTIPART_COMPLETE_RETRIES = 3;
+const MULTIPART_COMPLETE_RETRY_DELAY_MS = 1200;
+const GLOBAL_USER_STORAGE_KEY = "global_user_id";
 const SESSION_MEDIA_TYPES = ["audio", "video", "screen", "attachment"];
 const RECORDER_TYPES = [
   { value: "time", label: "Time" },
@@ -393,6 +396,8 @@ export default function RecorderPage() {
   const [sessionList, setSessionList] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionError, setSessionError] = useState("");
+  const [pendingFinalizeModes, setPendingFinalizeModes] = useState([]);
+  const [finalizeRetrying, setFinalizeRetrying] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
   const [timerState, setTimerState] = useState({ running: false, startedAt: 0, baseElapsed: 0 });
   const [nowTick, setNowTick] = useState(Date.now());
@@ -440,6 +445,12 @@ export default function RecorderPage() {
   const explainerRecorderStreamRef = useRef(null);
   const explainerRecorderChunksRef = useRef([]);
 
+  const applyGlobalUser = async (nextUser) => {
+    const user = nextUser === "divya" ? "divya" : "kapil";
+    setSessionForm((p) => ({ ...p, user_id: user }));
+    await fetchSessions(user);
+  };
+
   useEffect(() => {
     if (!timerState.running) return;
     const id = setInterval(() => setNowTick(Date.now()), 1000);
@@ -451,6 +462,29 @@ export default function RecorderPage() {
     const id = setTimeout(() => setSessionError(""), NOTICE_TTL_MS);
     return () => clearTimeout(id);
   }, [sessionError]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const initialUser = (window.localStorage.getItem(GLOBAL_USER_STORAGE_KEY) || "kapil").toLowerCase() === "divya" ? "divya" : "kapil";
+    applyGlobalUser(initialUser).catch(() => {});
+    const onGlobalUser = (e) => {
+      const nextUser = e?.detail?.userId;
+      applyGlobalUser(nextUser).catch(() => {});
+    };
+    window.addEventListener("global-user-change", onGlobalUser);
+    return () => window.removeEventListener("global-user-change", onGlobalUser);
+  }, []);
+
+  useEffect(() => {
+    const hasPending = pendingFinalizeModes.length > 0;
+    if (!hasPending) return;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [pendingFinalizeModes]);
 
   useEffect(() => () => {
     stopAndReleaseStreams();
@@ -640,6 +674,7 @@ export default function RecorderPage() {
       }
       const data = await res.json();
       setSelectedSession(data.session);
+      setPendingFinalizeModes([]);
       setTimerState({ running: false, startedAt: 0, baseElapsed: data.session?.elapsed_seconds || 0 });
       setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
       await fetchSessions(sessionForm.user_id);
@@ -658,6 +693,7 @@ export default function RecorderPage() {
       attachment: createEmptyMultipartState()
     };
     setSelectedSession(session);
+    setPendingFinalizeModes([]);
     setTimerState({ running: false, startedAt: 0, baseElapsed: session?.elapsed_seconds || 0 });
     setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
   };
@@ -862,19 +898,27 @@ export default function RecorderPage() {
     if (state.failed || !state.initialized) return;
     if (state.completedParts.length === 0) return;
 
-    const completeRes = await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/multipart/complete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        media_type: mode,
-        upload_id: state.uploadId,
-        parts: state.completedParts
-      })
-    });
-    if (!completeRes.ok) {
+    let lastErr = null;
+    for (let attempt = 1; attempt <= MULTIPART_COMPLETE_RETRIES; attempt += 1) {
+      const completeRes = await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/multipart/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          media_type: mode,
+          upload_id: state.uploadId,
+          parts: state.completedParts
+        })
+      });
+      if (completeRes.ok) {
+        return;
+      }
       const txt = await completeRes.text();
-      throw new Error(`Multipart complete failed: ${completeRes.status} ${txt}`);
+      lastErr = new Error(`Multipart complete failed: ${completeRes.status} ${txt}`);
+      if (attempt < MULTIPART_COMPLETE_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, MULTIPART_COMPLETE_RETRY_DELAY_MS * attempt));
+      }
     }
+    throw lastErr || new Error("Multipart complete failed");
   };
 
   const abortMultipartForMode = async (mode) => {
@@ -1159,25 +1203,65 @@ export default function RecorderPage() {
         }
       });
       await stopRecordersOnly();
+      const failedModes = [];
       await Promise.all(SESSION_MEDIA_TYPES.map(async (mode) => {
         try {
           await completeMultipartForMode(mode);
-        } catch (err) {
-          await abortMultipartForMode(mode);
-          throw err;
+        } catch (_) {
+          failedModes.push(mode);
         }
       }));
       stopAndReleaseStreams();
       recorderRefs.current = {};
-      multipartUploadsRef.current = {
-        audio: createEmptyMultipartState(),
-        video: createEmptyMultipartState(),
-        screen: createEmptyMultipartState(),
-        attachment: createEmptyMultipartState()
-      };
       await pushSessionStatus("stopped");
+      if (failedModes.length === 0) {
+        multipartUploadsRef.current = {
+          audio: createEmptyMultipartState(),
+          video: createEmptyMultipartState(),
+          screen: createEmptyMultipartState(),
+          attachment: createEmptyMultipartState()
+        };
+        setPendingFinalizeModes([]);
+      } else {
+        setPendingFinalizeModes(failedModes);
+        setSessionError(
+          `Session stopped, but final upload step failed for: ${failedModes.join(", ")}. Use "Retry Pending Uploads".`
+        );
+      }
     } catch (err) {
       setSessionError(String(err.message || err));
+    }
+  };
+
+  const retryPendingUploads = async () => {
+    if (!selectedSession?._id || pendingFinalizeModes.length === 0) return;
+    setFinalizeRetrying(true);
+    try {
+      const failedModes = [];
+      for (const mode of pendingFinalizeModes) {
+        try {
+          await completeMultipartForMode(mode);
+        } catch (_) {
+          failedModes.push(mode);
+        }
+      }
+      if (failedModes.length === 0) {
+        multipartUploadsRef.current = {
+          audio: createEmptyMultipartState(),
+          video: createEmptyMultipartState(),
+          screen: createEmptyMultipartState(),
+          attachment: createEmptyMultipartState()
+        };
+        setPendingFinalizeModes([]);
+        setSessionError("");
+      } else {
+        setPendingFinalizeModes(failedModes);
+        setSessionError(`Retry still pending for: ${failedModes.join(", ")}`);
+      }
+    } catch (err) {
+      setSessionError(String(err.message || err));
+    } finally {
+      setFinalizeRetrying(false);
     }
   };
 
@@ -1478,10 +1562,6 @@ export default function RecorderPage() {
         ) : (
           <>
             <div className="session-form-grid">
-              <select className="task-select" value={sessionForm.user_id} onChange={(e) => setSessionForm((p) => ({ ...p, user_id: e.target.value }))}>
-                <option value="kapil">Kapil</option>
-                <option value="divya">Divya</option>
-              </select>
               <select
                 className="task-select"
                 value={sessionForm.exam_type}
@@ -1743,6 +1823,13 @@ export default function RecorderPage() {
                     {canStop ? <button className="btn-ticket" onClick={stopSession}>Stop</button> : null}
                   </div>
                 )}
+                {pendingFinalizeModes.length > 0 ? (
+                  <div className="task-modal-actions">
+                    <button className="btn-day" onClick={retryPendingUploads} disabled={finalizeRetrying}>
+                      {finalizeRetrying ? "Retrying..." : `Retry Pending Uploads (${pendingFinalizeModes.join(", ")})`}
+                    </button>
+                  </div>
+                ) : null}
                 {selectedRecorderType === "uploader" ? (
                   <div className="upload-inline-grid">
                     <div className="upload-inline-item">

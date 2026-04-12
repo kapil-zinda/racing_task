@@ -6,6 +6,7 @@ import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
+const GLOBAL_USER_STORAGE_KEY = "global_user_id";
 const PRELIMS_DATE = "2026-05-24";
 const HOURS_PER_DAY = 15;
 const FULL_TEST_TARGET = 17;
@@ -349,7 +350,7 @@ function buildMissionModel(syllabus, activityByDate, userId) {
 }
 
 export default function MissionControlPage() {
-  const [userId, setUserId] = useState("divya");
+  const [userId, setUserId] = useState("kapil");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [syllabus, setSyllabus] = useState({ exams: [] });
@@ -380,7 +381,20 @@ export default function MissionControlPage() {
   };
 
   useEffect(() => {
-    loadMission("divya");
+    if (typeof window === "undefined") {
+      loadMission("kapil");
+      return;
+    }
+    const initialUser = (window.localStorage.getItem(GLOBAL_USER_STORAGE_KEY) || "kapil").toLowerCase() === "divya" ? "divya" : "kapil";
+    setUserId(initialUser);
+    loadMission(initialUser);
+    const onGlobalUser = (e) => {
+      const nextUser = e?.detail?.userId === "divya" ? "divya" : "kapil";
+      setUserId(nextUser);
+      loadMission(nextUser);
+    };
+    window.addEventListener("global-user-change", onGlobalUser);
+    return () => window.removeEventListener("global-user-change", onGlobalUser);
   }, []);
 
   useEffect(() => {
@@ -431,18 +445,6 @@ export default function MissionControlPage() {
 
       <section className="milestone-panel mission-controls">
         <div className="session-form-grid">
-          <select
-            className="task-select"
-            value={userId}
-            onChange={async (e) => {
-              const next = e.target.value;
-              setUserId(next);
-              await loadMission(next);
-            }}
-          >
-            <option value="kapil">Kapil</option>
-            <option value="divya">Divya</option>
-          </select>
           <button className="btn-day" onClick={() => loadMission(userId)} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh Mission"}
           </button>

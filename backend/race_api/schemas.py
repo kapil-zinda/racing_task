@@ -103,3 +103,34 @@ class ContentCompleteUploadRequest(BaseModel):
     file_id: str
     etag: str = ""
     size: int = 0
+
+
+class ContentCopyRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    destination_folder_id: str = "content_root"
+
+
+class ContentMoveRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    destination_folder_id: str = "content_root"
+
+
+class ContentDownloadRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    recursive: bool = True
+
+
+class ExtraRowInput(BaseModel):
+    id: str = ""
+    title: str = ""
+    link: str = ""
+    kind: str = ""
+    duration: str = ""
+
+
+class ExtrasUpsertRequest(BaseModel):
+    user_id: str
+    rows: List[ExtraRowInput] = []

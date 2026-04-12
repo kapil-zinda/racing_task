@@ -6,6 +6,7 @@ import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
+const GLOBAL_USER_STORAGE_KEY = "global_user_id";
 
 function labelDate(value) {
   if (!value) return "-";
@@ -53,7 +54,20 @@ export default function SyllabusPage() {
   };
 
   useEffect(() => {
-    loadSyllabus("kapil");
+    if (typeof window === "undefined") {
+      loadSyllabus("kapil");
+      return;
+    }
+    const initialUser = (window.localStorage.getItem(GLOBAL_USER_STORAGE_KEY) || "kapil").toLowerCase() === "divya" ? "divya" : "kapil";
+    setUserId(initialUser);
+    loadSyllabus(initialUser);
+    const onGlobalUser = (e) => {
+      const nextUser = e?.detail?.userId === "divya" ? "divya" : "kapil";
+      setUserId(nextUser);
+      loadSyllabus(nextUser);
+    };
+    window.addEventListener("global-user-change", onGlobalUser);
+    return () => window.removeEventListener("global-user-change", onGlobalUser);
   }, []);
 
   useEffect(() => {
@@ -107,18 +121,6 @@ export default function SyllabusPage() {
         ) : (
           <>
             <div className="session-form-grid">
-              <select
-                className="task-select"
-                value={userId}
-                onChange={async (e) => {
-                  const next = e.target.value;
-                  setUserId(next);
-                  await loadSyllabus(next);
-                }}
-              >
-                <option value="kapil">Kapil</option>
-                <option value="divya">Divya</option>
-              </select>
               <button className="btn-day" onClick={() => loadSyllabus(userId)}>Refresh</button>
             </div>
             {error ? <p className="api-state error">{error}</p> : null}

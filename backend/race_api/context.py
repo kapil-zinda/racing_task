@@ -38,6 +38,7 @@ def settings() -> Dict[str, Any]:
         "mongodb_pdf_pages_collection": os.getenv("MONGODB_PDF_PAGES_COLLECTION", "pdf_search_pages"),
         "mongodb_content_folders_collection": os.getenv("MONGODB_CONTENT_FOLDERS_COLLECTION", "content_folders"),
         "mongodb_content_files_collection": os.getenv("MONGODB_CONTENT_FILES_COLLECTION", "content_files"),
+        "mongodb_extras_collection": os.getenv("MONGODB_EXTRAS_COLLECTION", "home_extras"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
         "aws_region": os.getenv("AWS_REGION", "ap-south-1"),
         "recording_bucket": os.getenv("RECORDING_BUCKET", ""),
@@ -107,6 +108,11 @@ def content_folders_collection():
 def content_files_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_content_files_collection"]]
+
+
+def extras_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_extras_collection"]]
 
 
 def s3_client():
