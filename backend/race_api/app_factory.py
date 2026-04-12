@@ -31,6 +31,7 @@ from .pdf_search_domain import (
     index_pdf_document,
     search_pdf,
 )
+from .qna_domain import ask_qna_in_session, create_qna_session, get_qna_messages, list_qna_sessions
 from .schemas import (
     AddPointsRequest,
     ContentCreateFolderRequest,
@@ -50,6 +51,8 @@ from .schemas import (
     PdfIndexRequest,
     PdfPresignUploadRequest,
     PresignRequest,
+    QnaAskRequest,
+    QnaSessionCreateRequest,
     SessionStatusRequest,
 )
 from .session_domain import (
@@ -219,6 +222,34 @@ def create_app() -> FastAPI:
             return search_pdf(q, limit, course)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /pdf-search/query")
+
+    @app.get("/qna/sessions")
+    def qna_list_sessions(user_id: str = Query(default="kapil")):
+        try:
+            return list_qna_sessions(user_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /qna/sessions")
+
+    @app.post("/qna/sessions")
+    def qna_create_session(payload: QnaSessionCreateRequest):
+        try:
+            return create_qna_session(payload.user_id, payload.title)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /qna/sessions")
+
+    @app.get("/qna/sessions/{session_id}/messages")
+    def qna_get_messages(session_id: str):
+        try:
+            return get_qna_messages(session_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /qna/sessions/{id}/messages")
+
+    @app.post("/qna/ask")
+    def qna_ask(payload: QnaAskRequest):
+        try:
+            return ask_qna_in_session(payload.session_id, payload.question, payload.course, payload.limit)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /qna/ask")
 
     @app.get("/mission-control")
     def get_mission_control(
