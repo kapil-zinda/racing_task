@@ -7,6 +7,13 @@ import ResourceInternalMenu from "../components/ResourceInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
+const CONTENT_SEARCH_COURSES = [
+  { value: "sfg_level_1", label: "SFG Level 1" },
+  { value: "sfg_level_2", label: "SFG Level 2" },
+  { value: "level_up_pmp", label: "Level Up PMP" },
+  { value: "spectrum", label: "Spectrum" },
+  { value: "laxmikant", label: "Laxmikant" },
+];
 
 function formatBytes(bytes) {
   const n = Number(bytes || 0);
@@ -119,6 +126,10 @@ export default function ContentPage() {
     loading: false,
     submitting: false,
   });
+  const [showMakeSearchableModal, setShowMakeSearchableModal] = useState(false);
+  const [makeSearchableItem, setMakeSearchableItem] = useState(null);
+  const [searchableCourse, setSearchableCourse] = useState(CONTENT_SEARCH_COURSES[0].value);
+  const [makingSearchable, setMakingSearchable] = useState(false);
 
   const uploadInputRef = useRef(null);
   const folderInputRef = useRef(null);
@@ -516,6 +527,50 @@ export default function ContentPage() {
       setMessage(`Started download for ${files.length} file(s)`);
     } catch (err) {
       setError(String(err.message || err));
+    }
+  };
+
+  const openMakeSearchableModal = (item) => {
+    if (!item) return;
+    setMakeSearchableItem(item);
+    setSearchableCourse(CONTENT_SEARCH_COURSES[0].value);
+    setShowMakeSearchableModal(true);
+  };
+
+  const closeMakeSearchableModal = () => {
+    setShowMakeSearchableModal(false);
+    setMakeSearchableItem(null);
+  };
+
+  const makeSearchable = async () => {
+    if (!API_BASE_URL || !makeSearchableItem || !searchableCourse) return;
+    setMakingSearchable(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/content/make-searchable`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: makeSearchableItem.id,
+          item_type: makeSearchableItem.type,
+          course: searchableCourse,
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Make searchable failed: ${res.status} ${txt}`);
+      }
+      const data = await res.json();
+      const indexed = Number(data.indexed_count || 0);
+      const failed = Number(data.failed_count || 0);
+      const skipped = Number(data.skipped_count || 0);
+      setMessage(`Indexed: ${indexed} | Failed: ${failed} | Skipped: ${skipped}`);
+      closeMakeSearchableModal();
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setMakingSearchable(false);
     }
   };
 
@@ -1025,6 +1080,16 @@ export default function ContentPage() {
             Download
           </button>
           <button
+            className="context-item"
+            onClick={() => {
+              const it = contextMenu.item;
+              setContextMenu({ open: false, x: 0, y: 0, item: null });
+              openMakeSearchableModal(it);
+            }}
+          >
+            Make Searchable
+          </button>
+          <button
             className="context-item danger"
             onClick={() => {
               const it = contextMenu.item;
@@ -1161,6 +1226,36 @@ export default function ContentPage() {
                 ) : null}
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {showMakeSearchableModal && makeSearchableItem ? (
+        <div className="task-modal-overlay" onClick={closeMakeSearchableModal}>
+          <div className="task-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Make Searchable</h3>
+            <p>
+              {makeSearchableItem.name} ({makeSearchableItem.type})
+            </p>
+            <select
+              className="task-select"
+              value={searchableCourse}
+              onChange={(e) => setSearchableCourse(e.target.value)}
+            >
+              {CONTENT_SEARCH_COURSES.map((course) => (
+                <option key={course.value} value={course.value}>
+                  {course.label}
+                </option>
+              ))}
+            </select>
+            <div className="task-modal-actions">
+              <button className="btn-day secondary" onClick={closeMakeSearchableModal} disabled={makingSearchable}>
+                Cancel
+              </button>
+              <button className="btn-day" onClick={makeSearchable} disabled={makingSearchable}>
+                {makingSearchable ? "Indexing..." : "Start Indexing"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

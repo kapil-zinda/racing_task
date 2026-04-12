@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
 import uuid
 from typing import Any, Dict, List
+from types import SimpleNamespace
 from urllib.parse import quote, unquote
 
 from pymongo import ASCENDING
 
-from .context import content_files_collection, content_folders_collection, s3_client, settings
+from .context import content_files_collection, content_folders_collection, pdf_docs_collection, s3_client, settings
+from .pdf_search_domain import COURSE_OPTIONS, _normalize_course, index_pdf_document
 
 ROOT_FOLDER_ID = "content_root"
 _content_indexes_ensured = False
@@ -788,4 +790,136 @@ def preview_by_id(file_id: str) -> Dict[str, Any]:
     return {
         "file": _file_node(doc),
         "preview_url": url,
+    }
+
+
+def _is_pdf_file(file_doc: Dict[str, Any]) -> bool:
+    name = str(file_doc.get("name", "") or "").lower()
+    content_type = str(file_doc.get("content_type", "") or "").lower()
+    return name.endswith(".pdf") or "pdf" in content_type
+
+
+def _files_for_item(item_id: str, item_type: str) -> List[Dict[str, Any]]:
+    files = content_files_collection()
+    if item_type == "file":
+        doc = files.find_one({"_id": item_id})
+        if not doc:
+            raise LookupError("File not found")
+        return [doc]
+    if item_type == "folder":
+        folder = content_folders_collection().find_one({"_id": item_id})
+        if not folder:
+            raise LookupError("Folder not found")
+        folder_ids = _collect_descendant_folder_ids(item_id)
+        return list(
+            files.find(
+                {
+                    "$or": [
+                        {"parent_id": {"$in": folder_ids}},
+                        {"folder_id": {"$in": folder_ids}},
+                    ]
+                }
+            )
+        )
+    raise ValueError("item_type must be file or folder")
+
+
+def make_item_searchable(item_id: str, item_type: str, course: str) -> Dict[str, Any]:
+    _ensure_indexes()
+    iid = (item_id or "").strip()
+    kind = (item_type or "").strip().lower()
+    normalized_course = _normalize_course(course)
+    if not iid:
+        raise ValueError("id is required")
+    if kind not in {"file", "folder"}:
+        raise ValueError("item_type must be file or folder")
+    if not normalized_course:
+        allowed = ", ".join(COURSE_OPTIONS.values())
+        raise ValueError(f"course is required and must be one of: {allowed}")
+
+    candidates = _files_for_item(iid, kind)
+    if not candidates:
+        raise ValueError("No files found for this item")
+
+    docs = pdf_docs_collection()
+    now = _now()
+    indexed: List[Dict[str, Any]] = []
+    failed: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+
+    for file_doc in candidates:
+        file_id = str(file_doc.get("_id", "") or "").strip()
+        file_name = str(file_doc.get("name", "") or "").strip()
+        status = str(file_doc.get("status", "") or "").strip().lower()
+        key = str(file_doc.get("s3_key", "") or "").strip()
+        if not file_id:
+            continue
+        if not _is_pdf_file(file_doc):
+            skipped.append({"file_id": file_id, "file_name": file_name, "reason": "not_pdf"})
+            continue
+        if status != "ready":
+            skipped.append({"file_id": file_id, "file_name": file_name, "reason": "upload_not_ready"})
+            continue
+        if not key:
+            skipped.append({"file_id": file_id, "file_name": file_name, "reason": "missing_storage_key"})
+            continue
+
+        doc_id = f"content:{file_id}"
+        docs.update_one(
+            {"doc_id": doc_id},
+            {
+                "$set": {
+                    "doc_id": doc_id,
+                    "file_name": file_name or "document.pdf",
+                    "bucket": _bucket(),
+                    "key": key,
+                    "course": normalized_course,
+                    "course_label": COURSE_OPTIONS[normalized_course],
+                    "status": "uploaded_pending_index",
+                    "source": "content_drive",
+                    "source_file_id": file_id,
+                    "updated_at": now,
+                },
+                "$setOnInsert": {"created_at": now},
+            },
+            upsert=True,
+        )
+        try:
+            result = index_pdf_document(SimpleNamespace(doc_id=doc_id))
+            indexed.append(
+                {
+                    "file_id": file_id,
+                    "file_name": file_name,
+                    "doc_id": doc_id,
+                    "page_count": int(result.get("page_count", 0) or 0),
+                }
+            )
+        except Exception as err:  # noqa: BLE001
+            failed.append(
+                {
+                    "file_id": file_id,
+                    "file_name": file_name,
+                    "doc_id": doc_id,
+                    "error": str(err),
+                }
+            )
+
+    if not indexed and failed:
+        raise RuntimeError(
+            "Unable to index selected item. "
+            f"Failures: {len(failed)}, skipped: {len(skipped)}"
+        )
+
+    return {
+        "message": "Searchable indexing completed",
+        "item_type": kind,
+        "course": normalized_course,
+        "course_label": COURSE_OPTIONS[normalized_course],
+        "total_candidates": len(candidates),
+        "indexed_count": len(indexed),
+        "failed_count": len(failed),
+        "skipped_count": len(skipped),
+        "indexed": indexed,
+        "failed": failed,
+        "skipped": skipped,
     }

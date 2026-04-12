@@ -1,4 +1,6 @@
 :root {
+  --font-manrope: "Manrope", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-bebas: "Bebas Neue", "Impact", "Arial Narrow", "Franklin Gothic Medium", sans-serif;
   --bg-1: #0f1021;
   --bg-2: #1a1238;
   --card: rgba(255, 255, 255, 0.08);

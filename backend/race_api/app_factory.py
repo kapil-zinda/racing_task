@@ -12,6 +12,7 @@ from .content_domain import (
     download_item,
     list_content,
     list_folder_tree,
+    make_item_searchable,
     move_item,
     preview_by_id,
     rename_item,
@@ -39,6 +40,7 @@ from .schemas import (
     ContentCompleteUploadRequest,
     ContentCopyRequest,
     ContentDownloadRequest,
+    ContentMakeSearchableRequest,
     ContentPresignUploadRequest,
     ContentRenameRequest,
     ContentMoveRequest,
@@ -197,6 +199,13 @@ def create_app() -> FastAPI:
             return preview_by_id(file_id)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /content/preview-url")
+
+    @app.post("/content/make-searchable")
+    def content_make_searchable(payload: ContentMakeSearchableRequest):
+        try:
+            return make_item_searchable(payload.id, payload.item_type, payload.course)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /content/make-searchable")
 
     @app.post("/pdf-search/presign-upload")
     def pdf_presign_upload(payload: PdfPresignUploadRequest):

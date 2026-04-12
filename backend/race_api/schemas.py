@@ -123,6 +123,12 @@ class ContentDownloadRequest(BaseModel):
     recursive: bool = True
 
 
+class ContentMakeSearchableRequest(BaseModel):
+    id: str
+    item_type: str  # file | folder
+    course: str
+
+
 class ExtraRowInput(BaseModel):
     id: str = ""
     title: str = ""
