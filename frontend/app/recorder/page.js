@@ -275,13 +275,49 @@ export default function RecorderPage() {
   useEffect(() => {
     const hasPending = pendingFinalizeModes.length > 0;
     if (!hasPending) return;
+    const currentStatus = selectedSession?.status || "created";
+    const hasActiveSession = ["started", "resumed", "paused"].includes(currentStatus);
+    const hasPendingFinalize = pendingFinalizeModes.length > 0;
+    if (!hasActiveSession && !hasPendingFinalize) return;
     const onBeforeUnload = (e) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [pendingFinalizeModes]);
+  }, [pendingFinalizeModes, selectedSession?.status]);
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      const currentStatus = selectedSession?.status || "created";
+      const hasActiveSession = ["started", "resumed", "paused"].includes(currentStatus);
+      const hasPendingFinalize = pendingFinalizeModes.length > 0;
+      if (!hasActiveSession && !hasPendingFinalize) return;
+
+      const anchor = e.target?.closest?.("a[href]");
+      if (!anchor) return;
+
+      const href = anchor.getAttribute("href") || "";
+      if (!href || href.startsWith("#")) return;
+
+      let targetUrl;
+      try {
+        targetUrl = new URL(href, window.location.href);
+      } catch (_) {
+        return;
+      }
+      if (targetUrl.origin !== window.location.origin) return;
+      if (targetUrl.pathname === "/recorder") return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      window.open(targetUrl.toString(), "_blank", "noopener,noreferrer");
+      setSessionError("Opened in a new tab so recording continues here.");
+    };
+
+    document.addEventListener("click", onDocClick, true);
+    return () => document.removeEventListener("click", onDocClick, true);
+  }, [selectedSession?.status, pendingFinalizeModes]);
 
   useEffect(() => () => {
     stopAndReleaseStreams();
@@ -503,7 +539,29 @@ export default function RecorderPage() {
     }
   };
 
-  const selectSession = (session) => {
+  const hasLocalRecordingInThisTab = () => {
+    if (timerState.running) return true;
+    return Object.values(recorderRefs.current || {}).some((rec) => rec && rec.state && rec.state !== "inactive");
+  };
+
+  const selectSession = async (session) => {
+    if (selectedSession?._id && session?._id === selectedSession._id) {
+      return;
+    }
+    const currentStatus = selectedSession?.status || "created";
+    const isCurrentActive = ["started", "paused", "resumed"].includes(currentStatus);
+    if (isCurrentActive && selectedSession?._id && hasLocalRecordingInThisTab()) {
+      const shouldStopAndSwitch = window.confirm(
+        "Current session is active in this tab. Stop it, upload final part, and switch to selected session?"
+      );
+      if (!shouldStopAndSwitch) return;
+      const stoppedCleanly = await stopSession();
+      if (!stoppedCleanly) {
+        setSessionError("Finalize pending for current session. Please retry pending uploads before switching.");
+        return;
+      }
+    }
+
     stopAndReleaseStreams();
     recorderRefs.current = {};
     multipartUploadsRef.current = {
@@ -952,7 +1010,7 @@ export default function RecorderPage() {
     setLiveControls({ micMuted: false, cameraOff: false, sharingScreen: false });
   };
 
-  const pushSessionStatus = async (status) => {
+  const pushSessionStatus = async (status, options = {}) => {
     if (!API_BASE_URL || !selectedSession?._id) return;
     const elapsed = timerState.running
       ? timerState.baseElapsed + Math.floor((Date.now() - timerState.startedAt) / 1000)
@@ -961,7 +1019,11 @@ export default function RecorderPage() {
       const res = await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, elapsed_seconds: elapsed })
+        body: JSON.stringify({
+          status,
+          elapsed_seconds: elapsed,
+          force_stop_previous: Boolean(options.forceStopPrevious)
+        })
       });
       if (!res.ok) {
         const txt = await res.text();
@@ -973,6 +1035,7 @@ export default function RecorderPage() {
       await fetchSessions(selectedSession?.user_id || sessionForm.user_id);
     } catch (err) {
       setSessionError(String(err.message || err));
+      throw err;
     }
   };
 
@@ -990,7 +1053,33 @@ export default function RecorderPage() {
       setSessionError(`Recorder permission/device error: ${String(err.message || err)}`);
       return;
     }
-    await pushSessionStatus("started");
+    try {
+      await pushSessionStatus("started");
+    } catch (err) {
+      const msg = String(err?.message || err || "");
+      const conflict = msg.includes("Another session is active in another tab/device");
+      if (conflict) {
+        const shouldForceStop = window.confirm(
+          "In another tab/device, you have recorder on. Are you willing to stop previous session to continue here?"
+        );
+        if (!shouldForceStop) {
+          stopAndReleaseStreams();
+          recorderRefs.current = {};
+          return;
+        }
+        try {
+          await pushSessionStatus("started", { forceStopPrevious: true });
+        } catch (_) {
+          stopAndReleaseStreams();
+          recorderRefs.current = {};
+          return;
+        }
+      } else {
+        stopAndReleaseStreams();
+        recorderRefs.current = {};
+        return;
+      }
+    }
     setTimerState({ running: true, startedAt: Date.now(), baseElapsed: selectedSession.elapsed_seconds || 0 });
   };
 
@@ -999,7 +1088,9 @@ export default function RecorderPage() {
     Object.values(recorderRefs.current).forEach((rec) => {
       if (rec && rec.state === "recording") rec.pause();
     });
-    await pushSessionStatus("paused");
+    try {
+      await pushSessionStatus("paused");
+    } catch (_) {}
   };
 
   const resumeSession = async () => {
@@ -1007,13 +1098,15 @@ export default function RecorderPage() {
     Object.values(recorderRefs.current).forEach((rec) => {
       if (rec && rec.state === "paused") rec.resume();
     });
-    await pushSessionStatus("resumed");
+    try {
+      await pushSessionStatus("resumed");
+    } catch (_) {}
     const base = selectedSession.elapsed_seconds || timerState.baseElapsed || 0;
     setTimerState({ running: true, startedAt: Date.now(), baseElapsed: base });
   };
 
   const stopSession = async () => {
-    if (!selectedSession || !["started", "paused", "resumed"].includes(selectedSession.status)) return;
+    if (!selectedSession || !["started", "paused", "resumed"].includes(selectedSession.status)) return true;
     try {
       Object.values(recorderRefs.current).forEach((rec) => {
         if (rec && rec.state !== "inactive") {
@@ -1033,7 +1126,9 @@ export default function RecorderPage() {
       }));
       stopAndReleaseStreams();
       recorderRefs.current = {};
-      await pushSessionStatus("stopped");
+      try {
+        await pushSessionStatus("stopped");
+      } catch (_) {}
       if (failedModes.length === 0) {
         multipartUploadsRef.current = {
           audio: createEmptyMultipartState(),
@@ -1042,14 +1137,17 @@ export default function RecorderPage() {
           attachment: createEmptyMultipartState()
         };
         setPendingFinalizeModes([]);
+        return true;
       } else {
         setPendingFinalizeModes(failedModes);
         setSessionError(
           `Session stopped, but final upload step failed for: ${failedModes.join(", ")}. Use "Retry Pending Uploads".`
         );
+        return false;
       }
     } catch (err) {
       setSessionError(String(err.message || err));
+      return false;
     }
   };
 
@@ -1347,23 +1445,15 @@ export default function RecorderPage() {
     ? Boolean(uploadFiles.explainerAudio)
     : Boolean(explainerRecordedBlob);
   const explainerDoneReady = explainerAttachmentReady && explainerAudioReady;
-  const statusPriority = { started: 0, resumed: 0, paused: 1, created: 2, stopped: 3 };
   const effectiveExamType = sessionForm.exam_type === OTHER_VALUE ? sessionForm.exam_type_other.trim().toLowerCase() : sessionForm.exam_type;
   const currentSubjectOptions = effectiveExamType ? getSubjectsForExam(effectiveExamType, activeCatalog) : [];
   const effectiveSubject = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other.trim() : sessionForm.subject;
   const currentTopicOptions = effectiveExamType && effectiveSubject ? getTopicsForSelection(effectiveExamType, effectiveSubject, activeCatalog) : [];
   const selectedSubjectValue = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other : sessionForm.subject;
   const selectedTopicValue = sessionForm.topic === OTHER_VALUE ? sessionForm.topic_other : sessionForm.topic;
-  const orderedSessionList = [...sessionList].sort((a, b) => {
-    if (selectedSession?._id && a._id === selectedSession._id) return -1;
-    if (selectedSession?._id && b._id === selectedSession._id) return 1;
-    const aRank = statusPriority[a.status] ?? 9;
-    const bRank = statusPriority[b.status] ?? 9;
-    if (aRank !== bRank) return aRank - bRank;
-    const aAt = Date.parse(a.updated_at || a.created_at || 0) || 0;
-    const bAt = Date.parse(b.updated_at || b.created_at || 0) || 0;
-    return bAt - aAt;
-  });
+  // Keep list order stable as returned by backend (created_at desc),
+  // so selecting a session in viewer does not reshuffle the list.
+  const orderedSessionList = sessionList;
 
   return (
     <main className="app-shell">
@@ -1647,7 +1737,11 @@ export default function RecorderPage() {
                     {canStart ? <button className="btn-day" onClick={startSession}>Start</button> : null}
                     {canPause ? <button className="btn-day secondary" onClick={pauseSession}>Pause</button> : null}
                     {canResume ? <button className="btn-day" onClick={resumeSession}>Resume</button> : null}
-                    {canStop ? <button className="btn-ticket" onClick={stopSession}>Stop</button> : null}
+                    {canStop ? (
+                      <button className="btn-ticket" onClick={stopSession}>
+                        {selectedRecorderType === "audio" ? "End" : "Stop"}
+                      </button>
+                    ) : null}
                   </div>
                 )}
                 {pendingFinalizeModes.length > 0 ? (
