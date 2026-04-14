@@ -33,6 +33,7 @@ from .pdf_search_domain import (
     search_pdf,
 )
 from .qna_domain import ask_qna_in_session, create_qna_session, get_qna_messages, list_qna_sessions
+from .mission_domain import get_or_create_mission, mission_progress_payload, mission_selector_options, upsert_mission
 from .schemas import (
     AddPointsRequest,
     ContentCreateFolderRequest,
@@ -55,6 +56,7 @@ from .schemas import (
     PresignRequest,
     QnaAskRequest,
     QnaSessionCreateRequest,
+    MissionUpsertRequest,
     SessionStatusRequest,
 )
 from .session_domain import (
@@ -268,9 +270,57 @@ def create_app() -> FastAPI:
         try:
             if user_id not in PLAYERS:
                 raise HTTPException(status_code=400, detail="Invalid user_id")
-            return build_mission_control_payload(user_id, lookback_days)
+            payload = build_mission_control_payload(user_id, lookback_days)
+            payload["mission"] = get_or_create_mission(user_id)
+            payload["mission_progress"] = mission_progress_payload(user_id, lookback_days)
+            return payload
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /mission-control")
+
+    @app.get("/mission")
+    def get_mission(user_id: str = Query(default="kapil"), lookback_days: int = Query(default=90, ge=14, le=365)):
+        try:
+            if user_id not in PLAYERS:
+                raise HTTPException(status_code=400, detail="Invalid user_id")
+            return {
+                "mission": get_or_create_mission(user_id),
+                "mission_progress": mission_progress_payload(user_id, lookback_days),
+                "selector_options": mission_selector_options(user_id),
+            }
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /mission")
+
+    @app.put("/mission")
+    def save_mission(payload: MissionUpsertRequest):
+        try:
+            if payload.user_id not in PLAYERS:
+                raise HTTPException(status_code=400, detail="Invalid user_id")
+            mission = upsert_mission(
+                payload.user_id,
+                title=payload.title,
+                target_date=payload.target_date,
+                status=payload.status,
+                weights=payload.weights,
+                targets=payload.targets,
+                plan=payload.plan,
+            )
+            return {
+                "message": "Mission saved",
+                "mission": mission,
+                "mission_progress": mission_progress_payload(payload.user_id, 90),
+                "selector_options": mission_selector_options(payload.user_id),
+            }
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "PUT /mission")
+
+    @app.get("/mission/options")
+    def get_mission_options(user_id: str = Query(default="kapil")):
+        try:
+            if user_id not in PLAYERS:
+                raise HTTPException(status_code=400, detail="Invalid user_id")
+            return mission_selector_options(user_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /mission/options")
 
     @app.get("/extras")
     def get_extras(user_id: str = Query(default="kapil")):

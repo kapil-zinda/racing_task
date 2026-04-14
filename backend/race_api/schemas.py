@@ -152,3 +152,13 @@ class QnaAskRequest(BaseModel):
 class QnaSessionCreateRequest(BaseModel):
     user_id: str
     title: str = ""
+
+
+class MissionUpsertRequest(BaseModel):
+    user_id: str
+    title: str = ""
+    target_date: str = ""
+    status: str = "active"
+    weights: dict = {}
+    targets: dict | None = None
+    plan: dict = {}

@@ -13,6 +13,8 @@ from .context import (
     sessions_collection,
     settings,
 )
+from .ledger_domain import log_activity
+from .mission_domain import get_active_mission_id
 
 
 def _normalize_modes(recorder_type: str, modes: List[str]) -> tuple[str, List[str]]:
@@ -151,6 +153,25 @@ def update_session_status_payload(session_id_value: str, payload) -> Dict[str, A
 
     collection.update_one({"_id": session_id_value}, {"$set": update_fields, "$push": {"events": event}})
     updated = collection.find_one({"_id": session_id_value})
+    if payload.status == "stopped" and updated:
+        uid = str(updated.get("user_id", "") or "").strip().lower()
+        if uid in PLAYERS:
+            mission_id = get_active_mission_id(uid)
+            log_activity(
+                uid,
+                "session_stopped",
+                count=1,
+                duration_minutes=max(1, (elapsed_seconds + 59) // 60),
+                mission_id=mission_id,
+                meta={
+                    "session_id": str(updated.get("_id", "")),
+                    "session_type": str(updated.get("session_type", "") or ""),
+                    "subject": str(updated.get("subject", "") or ""),
+                    "topic": str(updated.get("topic", "") or ""),
+                    "recorder_type": str(updated.get("recorder_type", "") or ""),
+                    "modes": updated.get("modes", []) if isinstance(updated.get("modes"), list) else [],
+                },
+            )
     return {"message": "Session status updated", "session": updated}
 
 

@@ -41,6 +41,8 @@ def settings() -> Dict[str, Any]:
         "mongodb_extras_collection": os.getenv("MONGODB_EXTRAS_COLLECTION", "home_extras"),
         "mongodb_qna_sessions_collection": os.getenv("MONGODB_QNA_SESSIONS_COLLECTION", "qna_sessions"),
         "mongodb_qna_messages_collection": os.getenv("MONGODB_QNA_MESSAGES_COLLECTION", "qna_messages"),
+        "mongodb_missions_collection": os.getenv("MONGODB_MISSIONS_COLLECTION", "missions"),
+        "mongodb_activity_ledger_collection": os.getenv("MONGODB_ACTIVITY_LEDGER_COLLECTION", "activity_ledger"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
         "aws_region": os.getenv("AWS_REGION", "ap-south-1"),
         "recording_bucket": os.getenv("RECORDING_BUCKET", ""),
@@ -126,6 +128,16 @@ def qna_sessions_collection():
 def qna_messages_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_qna_messages_collection"]]
+
+
+def missions_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_missions_collection"]]
+
+
+def activity_ledger_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_activity_ledger_collection"]]
 
 
 def s3_client():

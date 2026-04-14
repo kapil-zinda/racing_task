@@ -12,6 +12,8 @@ from .context import (
     race_collection,
     sessions_collection,
 )
+from .ledger_domain import log_activity
+from .mission_domain import get_active_mission_id, get_or_create_mission
 
 _indexes_ensured = False
 
@@ -118,7 +120,7 @@ def parse_detail_fields(detail: str) -> Dict[str, str]:
 def _event_fields_from_detail(detail: str) -> Dict[str, str]:
     parsed = parse_detail_fields(detail)
     stage = (parsed.get("stage") or "").strip().lower().replace(" ", "_")
-    if stage not in {"test_given", "revision", "second_revision"}:
+    if stage not in {"test_given", "analysis_done", "revision", "second_revision"}:
         stage = ""
 
     return {
@@ -126,14 +128,15 @@ def _event_fields_from_detail(detail: str) -> Dict[str, str]:
         "subject": (parsed.get("subject") or "").strip(),
         "topic": (parsed.get("topic") or "").strip(),
         "note": (parsed.get("note") or "").strip(),
+        "work_type": (parsed.get("work") or parsed.get("work_type") or "").strip().lower(),
         "source": (parsed.get("source") or "").strip(),
         "org": (parsed.get("org") or "").strip(),
         "test_number": (
             parsed.get("test number")
             or parsed.get("test_number")
-            or parsed.get("test")
             or ""
         ).strip(),
+        "test_name": (parsed.get("test") or parsed.get("test_name") or "").strip(),
         "stage": stage,
     }
 
@@ -268,6 +271,8 @@ def ensure_topic_node(exam_node: Dict[str, Any], subject: str, topic: str) -> Di
             "topic": topic_key,
             "class_study_dates": [],
             "revision_dates": [],
+            "revision_limit": 5,
+            "note_dates": [],
             "notes": [],
             "recording_dates": [],
             "recordings": [],
@@ -287,9 +292,90 @@ def find_exam_for_subject_topic(tree: "OrderedDict[str, Dict[str, Any]]", subjec
     return "General"
 
 
+def _norm_key(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def _build_revision_limits(user_id: str) -> Dict[str, Dict[str, int]]:
+    mission = get_or_create_mission(user_id)
+    plan = mission.get("plan", {}) if isinstance(mission.get("plan"), dict) else {}
+    courses = plan.get("courses", []) if isinstance(plan.get("courses"), list) else []
+    books = plan.get("books", []) if isinstance(plan.get("books"), list) else []
+    random_rows = plan.get("random", []) if isinstance(plan.get("random"), list) else []
+
+    course_limits: Dict[str, int] = {}
+    for row in courses:
+        if not isinstance(row, dict):
+            continue
+        course_name = _norm_key(str(row.get("course_name") or ""))
+        subject_name = _norm_key(str(row.get("subject_name") or ""))
+        if not course_name or not subject_name:
+            continue
+        try:
+            revision_count = max(0, min(5, int(row.get("revision_count", 1) or 1)))
+        except (TypeError, ValueError):
+            revision_count = 1
+        course_limits[f"{course_name}||{subject_name}"] = revision_count
+
+    book_limits: Dict[str, int] = {}
+    for row in books:
+        if not isinstance(row, dict):
+            continue
+        book_name = _norm_key(str(row.get("book_name") or ""))
+        if not book_name:
+            continue
+        try:
+            revision_count = max(0, min(5, int(row.get("revision_count", 1) or 1)))
+        except (TypeError, ValueError):
+            revision_count = 1
+        book_limits[book_name] = revision_count
+
+    random_limits: Dict[str, int] = {}
+    for row in random_rows:
+        if not isinstance(row, dict):
+            continue
+        source_name = _norm_key(str(row.get("source") or ""))
+        topic_name = _norm_key(str(row.get("topic_name") or ""))
+        if not source_name or not topic_name:
+            continue
+        try:
+            revision_count = max(0, min(5, int(row.get("revision_count", 1) or 1)))
+        except (TypeError, ValueError):
+            revision_count = 1
+        random_limits[f"{source_name}||{topic_name}"] = revision_count
+
+    return {
+        "course": course_limits,
+        "book": book_limits,
+        "random": random_limits,
+    }
+
+
+def _topic_revision_limit(exam: str, subject: str, topic: str, limits: Dict[str, Dict[str, int]]) -> int:
+    exam_key = _norm_key(exam)
+    subject_key = _norm_key(subject)
+    topic_key = _norm_key(topic)
+
+    if exam_key.startswith("random:"):
+        value = limits.get("random", {}).get(f"{subject_key}||{topic_key}")
+        if isinstance(value, int):
+            return max(0, min(5, value))
+
+    if exam_key.startswith("book:"):
+        value = limits.get("book", {}).get(subject_key)
+        if isinstance(value, int):
+            return max(0, min(5, value))
+
+    value = limits.get("course", {}).get(f"{exam_key}||{subject_key}")
+    if isinstance(value, int):
+        return max(0, min(5, value))
+    return 5
+
+
 def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
     ensure_indexes()
     tree: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+    revision_limits = _build_revision_limits(user_id)
 
     event_cursor = events_collection().find({"player_id": user_id}).sort("created_at", ASCENDING)
     for event in event_cursor:
@@ -302,13 +388,24 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
         subject = (fields.get("subject") or "General").strip() or "General"
         topic = (fields.get("topic") or "General").strip() or "General"
         note = (fields.get("note") or "").strip()
+        work_type = (fields.get("work_type") or "").strip().lower()
 
         if action_type in {"new_class", "revision"}:
             topic_node = ensure_topic_node(ensure_exam_node(tree, exam), subject, topic)
+            revision_limit = _topic_revision_limit(exam, subject, topic, revision_limits)
+            topic_node["revision_limit"] = revision_limit
             if action_type == "new_class":
                 append_unique(topic_node["class_study_dates"], created_date)
             else:
-                append_unique(topic_node["revision_dates"], created_date)
+                # Revision progression is event-order based:
+                # 1st revision event -> first revision, 2nd -> second revision.
+                # Keep duplicate dates as separate entries so same-day two revisions are counted.
+                # Cap tracked revisions at 5. Beyond this, points can still be counted from events,
+                # but syllabus progression won't add extra revision entries.
+                if created_date and len(topic_node["revision_dates"]) < max(0, revision_limit):
+                    topic_node["revision_dates"].append(created_date)
+            if action_type == "new_class" and work_type == "notes":
+                append_unique(topic_node["note_dates"], created_date)
             if note:
                 append_unique(topic_node["notes"], note)
             continue
@@ -318,25 +415,32 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
             source = (fields.get("source") or "General").strip() or "General"
             test_number = (fields.get("test_number") or "1").strip() or "1"
             stage_raw = (fields.get("stage") or "test_given").strip().lower().replace(" ", "_")
-            if stage_raw not in {"test_given", "revision", "second_revision"}:
+            if stage_raw not in {"test_given", "analysis_done", "revision", "second_revision"}:
                 stage_raw = "test_given"
             test_note = (fields.get("note") or "").strip()
+            test_name = (fields.get("test_name") or "").strip()
 
             if source not in exam_node["tests"]:
                 exam_node["tests"][source] = OrderedDict()
             if test_number not in exam_node["tests"][source]:
                 exam_node["tests"][source][test_number] = {
+                    "test_name": test_name,
                     "test_number": test_number,
                     "note": test_note,
                     "test_given_date": "",
+                    "analysis_done_date": "",
                     "revision_date": "",
                     "second_revision_date": "",
                 }
             entry = exam_node["tests"][source][test_number]
+            if test_name:
+                entry["test_name"] = test_name
             if test_note:
                 entry["note"] = test_note
             if stage_raw == "test_given":
                 entry["test_given_date"] = entry["test_given_date"] or created_date
+            elif stage_raw == "analysis_done":
+                entry["analysis_done_date"] = entry["analysis_done_date"] or created_date
             elif stage_raw == "revision":
                 entry["revision_date"] = entry["revision_date"] or created_date
             else:
@@ -403,6 +507,7 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
             for topic_key, topic_node in subject_node["topics"].items():
                 class_dates = sort_dates(topic_node.get("class_study_dates", []))
                 revision_dates = sort_dates(topic_node.get("revision_dates", []))
+                note_dates = sort_dates(topic_node.get("note_dates", []))
                 recording_dates = sort_dates(topic_node.get("recording_dates", []))
                 recordings = sorted(
                     [r for r in topic_node.get("recordings", []) if isinstance(r, dict)],
@@ -414,6 +519,14 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
                         "class_study_first_date": class_dates[0] if class_dates else "",
                         "first_revision_date": revision_dates[0] if len(revision_dates) > 0 else "",
                         "second_revision_date": revision_dates[1] if len(revision_dates) > 1 else "",
+                        "third_revision_date": revision_dates[2] if len(revision_dates) > 2 else "",
+                        "fourth_revision_date": revision_dates[3] if len(revision_dates) > 3 else "",
+                        "fifth_revision_date": revision_dates[4] if len(revision_dates) > 4 else "",
+                        "revision_dates": revision_dates,
+                        "revision_count": len(revision_dates),
+                        "revision_limit": int(topic_node.get("revision_limit", 5) or 5),
+                        "note_first_date": note_dates[0] if note_dates else "",
+                        "note_dates": note_dates,
                         "recording_dates": recording_dates,
                         "recordings": recordings,
                         "notes": topic_node.get("notes", []),
@@ -427,9 +540,11 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
             for test_number, test_node in tests_map.items():
                 test_items.append(
                     {
+                        "test_name": test_node.get("test_name", ""),
                         "test_number": str(test_number),
                         "note": test_node.get("note", ""),
                         "test_given_date": test_node.get("test_given_date", ""),
+                        "analysis_done_date": test_node.get("analysis_done_date", ""),
                         "revision_date": test_node.get("revision_date", ""),
                         "second_revision_date": test_node.get("second_revision_date", ""),
                     }
@@ -574,11 +689,31 @@ def add_points_payload(player_id: str, action_type: str, test_type: str, detail:
         "source": fields.get("source", ""),
         "org": fields.get("org", ""),
         "test_number": fields.get("test_number", ""),
+        "test_name": fields.get("test_name", ""),
         "stage": fields.get("stage", ""),
         "note": fields.get("note", ""),
         "fields": fields,
     }
     events_collection().insert_one(event_doc)
+    mission_id = get_active_mission_id(player_id)
+    log_activity(
+        player_id,
+        f"points_{action_type}",
+        points=POINTS_MAP[action_type],
+        count=1,
+        mission_id=mission_id,
+        created_at=created_at,
+        meta={
+            "event_type": action_type,
+            "exam": fields.get("exam", ""),
+            "subject": fields.get("subject", ""),
+            "topic": fields.get("topic", ""),
+            "source": fields.get("source", ""),
+            "test_name": fields.get("test_name", ""),
+            "org": fields.get("org", ""),
+            "stage": fields.get("stage", ""),
+        },
+    )
 
     points = _aggregate_points_for_date(today)
     daily_state = _upsert_daily_state(today, points)

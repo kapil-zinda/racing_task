@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
@@ -17,6 +17,12 @@ const RECORDER_TYPES = [
   { value: "call", label: "Call (Video + Screen)" },
   { value: "pdf_explainer", label: "PDF Explainer" },
   { value: "uploader", label: "Uploader" }
+];
+const TEST_STAGE_OPTIONS = [
+  { value: "test_given", label: "Test Given" },
+  { value: "analysis_done", label: "Analysis Done" },
+  { value: "revision", label: "Revision" },
+  { value: "second_revision", label: "Second Revision" },
 ];
 const OTHER_VALUE = "__other__";
 const EXAM_CATALOG = {
@@ -310,12 +316,14 @@ const EXAM_CATALOG = {
   ]
 };
 
-const getSubjectsForExam = (examType) => (EXAM_CATALOG[examType] || []).map((entry) => entry.subject);
+const getSubjectsForExam = (examType, catalog = EXAM_CATALOG) => (catalog[examType] || []).map((entry) => entry.subject);
 
-const getTopicsForSelection = (examType, subject) => {
-  const found = (EXAM_CATALOG[examType] || []).find((entry) => entry.subject === subject);
+const getTopicsForSelection = (examType, subject, catalog = EXAM_CATALOG) => {
+  const found = (catalog[examType] || []).find((entry) => entry.subject === subject);
   return found?.topics || [];
 };
+const getExamOptionsFromCatalog = (catalog = EXAM_CATALOG) =>
+  Object.keys(catalog || {}).map((key) => ({ value: key, label: key.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 const MULTIPART_MIN_PART_BYTES = 5 * 1024 * 1024;
 
 function formatTime(value) {
@@ -381,6 +389,40 @@ function createEmptyMultipartState() {
 export default function RecorderPage() {
   const defaultSubject = getSubjectsForExam("prelims")[0] || "";
   const defaultTopic = getTopicsForSelection("prelims", defaultSubject)[0] || "";
+  const [missionSelector, setMissionSelector] = useState({ exam_options: [], catalog: {}, plan: {} });
+  const activeCatalog = useMemo(
+    () => (Object.keys(missionSelector.catalog || {}).length ? missionSelector.catalog : EXAM_CATALOG),
+    [missionSelector.catalog],
+  );
+  const activeExamOptions = useMemo(
+    () => (
+      (missionSelector.exam_options || []).length
+        ? missionSelector.exam_options
+        : getExamOptionsFromCatalog(activeCatalog)
+    ),
+    [missionSelector.exam_options, activeCatalog],
+  );
+  const missionTestPlan = useMemo(
+    () => (Array.isArray(missionSelector?.plan?.tests) ? missionSelector.plan.tests : []),
+    [missionSelector?.plan?.tests],
+  );
+  const missionTestSources = useMemo(
+    () => [...new Set(missionTestPlan.map((row) => String(row?.source || "").trim()).filter(Boolean))],
+    [missionTestPlan],
+  );
+  const activeTestSources = missionTestSources.length ? missionTestSources : ["sfg1", "sfg2", "pmp", "cava"];
+  const getMissionTestRowsBySource = (sourceValue) =>
+    missionTestPlan.filter((row) => String(row?.source || "").trim() === String(sourceValue || "").trim());
+  const getMissionTestNamesBySource = (sourceValue) =>
+    [...new Set(getMissionTestRowsBySource(sourceValue).map((row) => String(row?.test_name || "").trim()).filter(Boolean))];
+  const getMissionTestNumberOptions = (sourceValue) => {
+    const rows = getMissionTestRowsBySource(sourceValue);
+    const maxCount = rows.reduce((mx, row) => Math.max(mx, Number(row?.number_of_tests || 1)), 1);
+    return Array.from({ length: maxCount }, (_, idx) => String(idx + 1));
+  };
+  const defaultTestSource = activeTestSources[0] || "";
+  const defaultTestName = getMissionTestNamesBySource(defaultTestSource)[0] || "";
+  const defaultTestNumber = getMissionTestNumberOptions(defaultTestSource)[0] || "1";
   const [sessionForm, setSessionForm] = useState({
     user_id: "kapil",
     exam_type: "prelims",
@@ -392,6 +434,16 @@ export default function RecorderPage() {
     session_type: "study",
     recorder_type: "call",
     notes: "",
+  });
+  const [trackTestProgress, setTrackTestProgress] = useState(false);
+  const [sessionTestMeta, setSessionTestMeta] = useState({
+    source: defaultTestSource,
+    source_other: "",
+    test_name: defaultTestName,
+    test_name_other: "",
+    test_number: defaultTestNumber,
+    stage: "test_given",
+    note: "",
   });
   const [sessionList, setSessionList] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -448,6 +500,19 @@ export default function RecorderPage() {
   const applyGlobalUser = async (nextUser) => {
     const user = nextUser === "divya" ? "divya" : "kapil";
     setSessionForm((p) => ({ ...p, user_id: user }));
+    if (API_BASE_URL) {
+      try {
+        const optionsRes = await fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(user)}`);
+        if (optionsRes.ok) {
+          const optionsData = await optionsRes.json();
+          setMissionSelector({ exam_options: optionsData.exam_options || [], catalog: optionsData.catalog || {}, plan: optionsData.plan || {} });
+        } else {
+          setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
+        }
+      } catch (_) {
+        setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
+      }
+    }
     await fetchSessions(user);
   };
 
@@ -474,6 +539,46 @@ export default function RecorderPage() {
     window.addEventListener("global-user-change", onGlobalUser);
     return () => window.removeEventListener("global-user-change", onGlobalUser);
   }, []);
+
+  useEffect(() => {
+    if (!activeExamOptions.length) return;
+    const validExamValues = new Set(activeExamOptions.map((o) => o.value));
+    setSessionForm((prev) => {
+      const nextExam = validExamValues.has(prev.exam_type) ? prev.exam_type : activeExamOptions[0].value;
+      const subjects = getSubjectsForExam(nextExam, activeCatalog);
+      const nextSubject = subjects.includes(prev.subject) ? prev.subject : (subjects[0] || OTHER_VALUE);
+      const topics = nextSubject === OTHER_VALUE ? [] : getTopicsForSelection(nextExam, nextSubject, activeCatalog);
+      const nextTopic = topics.includes(prev.topic) ? prev.topic : (topics[0] || OTHER_VALUE);
+      if (nextExam === prev.exam_type && nextSubject === prev.subject && nextTopic === prev.topic) {
+        return prev;
+      }
+      return { ...prev, exam_type: nextExam, subject: nextSubject, topic: nextTopic };
+    });
+  }, [activeExamOptions, activeCatalog]);
+
+  useEffect(() => {
+    const firstSource = activeTestSources[0] || "";
+    setSessionTestMeta((prev) => {
+      const nextSource = activeTestSources.includes(prev.source) ? prev.source : firstSource;
+      const nextNames = getMissionTestNamesBySource(nextSource);
+      const nextNumbers = getMissionTestNumberOptions(nextSource);
+      const nextTestName = (prev.test_name && nextNames.includes(prev.test_name)) ? prev.test_name : (nextNames[0] || "");
+      const nextTestNumber = (prev.test_number && nextNumbers.includes(prev.test_number)) ? prev.test_number : (nextNumbers[0] || "1");
+      if (
+        nextSource === prev.source
+        && nextTestName === prev.test_name
+        && nextTestNumber === prev.test_number
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        source: nextSource,
+        test_name: nextTestName,
+        test_number: nextTestNumber,
+      };
+    });
+  }, [activeTestSources, missionTestPlan]);
 
   useEffect(() => {
     const hasPending = pendingFinalizeModes.length > 0;
@@ -617,6 +722,39 @@ export default function RecorderPage() {
     render();
   };
 
+  const humanize = (value) =>
+    String(value || "")
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const logTestProgressFromRecorder = async () => {
+    if (!API_BASE_URL || !trackTestProgress) return;
+    const examLabelMap = Object.fromEntries(activeExamOptions.map((o) => [o.value, o.label]));
+    const effectiveExam = sessionForm.exam_type === OTHER_VALUE ? sessionForm.exam_type_other.trim().toLowerCase() : sessionForm.exam_type;
+    const examLabel = examLabelMap[effectiveExam] || effectiveExam || "General";
+    const source = sessionTestMeta.source === OTHER_VALUE ? sessionTestMeta.source_other.trim().toLowerCase() : sessionTestMeta.source;
+    const testName = sessionTestMeta.test_name === OTHER_VALUE ? sessionTestMeta.test_name_other.trim() : sessionTestMeta.test_name;
+    const testNumber = (sessionTestMeta.test_number || "").trim();
+    const stage = sessionTestMeta.stage;
+    const note = (sessionTestMeta.note || "").trim();
+    if (!source || !testNumber || !stage || !note) return;
+    const detail = `Exam: ${examLabel} | Source: ${source}${testName ? ` | Test: ${testName}` : ""} | Test Number: ${testNumber} | Stage: ${stage} | Note: ${note}`;
+    const res = await fetch(`${API_BASE_URL}/points`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        player_id: sessionForm.user_id,
+        action_type: "test_completed",
+        test_type: "Test Completed",
+        detail,
+      }),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Test sync failed: ${res.status} ${txt}`);
+    }
+  };
+
   const fetchSessions = async (userValue = sessionForm.user_id) => {
     if (!API_BASE_URL || !userValue) return;
     setSessionLoading(true);
@@ -654,6 +792,19 @@ export default function RecorderPage() {
       setSessionError("Subject, topic, and notes are required.");
       return;
     }
+    if (trackTestProgress) {
+      const source = sessionTestMeta.source === OTHER_VALUE ? sessionTestMeta.source_other.trim() : sessionTestMeta.source;
+      const testNumber = (sessionTestMeta.test_number || "").trim();
+      const note = (sessionTestMeta.note || "").trim();
+      if (!source || !testNumber || !sessionTestMeta.stage || !note) {
+        setSessionError("For test sync, source, test number, stage, and note are required.");
+        return;
+      }
+      if (sessionTestMeta.test_name === OTHER_VALUE && !sessionTestMeta.test_name_other.trim()) {
+        setSessionError("For test sync, test name is required when Other is selected.");
+        return;
+      }
+    }
     try {
       const payload = {
         user_id: sessionForm.user_id,
@@ -673,6 +824,7 @@ export default function RecorderPage() {
         throw new Error(`Create session failed: ${res.status} ${txt}`);
       }
       const data = await res.json();
+      await logTestProgressFromRecorder();
       setSelectedSession(data.session);
       setPendingFinalizeModes([]);
       setTimerState({ running: false, startedAt: 0, baseElapsed: data.session?.elapsed_seconds || 0 });
@@ -1433,6 +1585,19 @@ export default function RecorderPage() {
       setSessionError("Subject, topic, and notes are required.");
       return;
     }
+    if (trackTestProgress) {
+      const source = sessionTestMeta.source === OTHER_VALUE ? sessionTestMeta.source_other.trim() : sessionTestMeta.source;
+      const testNumber = (sessionTestMeta.test_number || "").trim();
+      const note = (sessionTestMeta.note || "").trim();
+      if (!source || !testNumber || !sessionTestMeta.stage || !note) {
+        setSessionError("For test sync, source, test number, stage, and note are required.");
+        return;
+      }
+      if (sessionTestMeta.test_name === OTHER_VALUE && !sessionTestMeta.test_name_other.trim()) {
+        setSessionError("For test sync, test name is required when Other is selected.");
+        return;
+      }
+    }
     if (!uploadFiles.explainerAttachment) {
       setSessionError("Please select PDF/image for explainer.");
       return;
@@ -1466,6 +1631,7 @@ export default function RecorderPage() {
       const createData = await createRes.json();
       const sessionId = createData.session?._id;
       if (!sessionId) throw new Error("Session id missing in create response");
+      await logTestProgressFromRecorder();
 
       await uploadMediaForSession(sessionId, "attachment", uploadFiles.explainerAttachment, uploadFiles.explainerAttachment.name);
       if (hasUploadAudio) {
@@ -1529,9 +1695,9 @@ export default function RecorderPage() {
   const explainerDoneReady = explainerAttachmentReady && explainerAudioReady;
   const statusPriority = { started: 0, resumed: 0, paused: 1, created: 2, stopped: 3 };
   const effectiveExamType = sessionForm.exam_type === OTHER_VALUE ? sessionForm.exam_type_other.trim().toLowerCase() : sessionForm.exam_type;
-  const currentSubjectOptions = effectiveExamType ? getSubjectsForExam(effectiveExamType) : [];
+  const currentSubjectOptions = effectiveExamType ? getSubjectsForExam(effectiveExamType, activeCatalog) : [];
   const effectiveSubject = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other.trim() : sessionForm.subject;
-  const currentTopicOptions = effectiveExamType && effectiveSubject ? getTopicsForSelection(effectiveExamType, effectiveSubject) : [];
+  const currentTopicOptions = effectiveExamType && effectiveSubject ? getTopicsForSelection(effectiveExamType, effectiveSubject, activeCatalog) : [];
   const selectedSubjectValue = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other : sessionForm.subject;
   const selectedTopicValue = sessionForm.topic === OTHER_VALUE ? sessionForm.topic_other : sessionForm.topic;
   const orderedSessionList = [...sessionList].sort((a, b) => {
@@ -1568,10 +1734,10 @@ export default function RecorderPage() {
                 onChange={(e) => {
                   const nextExam = e.target.value;
                   const nextExamForCatalog = nextExam === OTHER_VALUE ? "" : nextExam;
-                  const nextSubjects = nextExamForCatalog ? getSubjectsForExam(nextExamForCatalog) : [];
+                  const nextSubjects = nextExamForCatalog ? getSubjectsForExam(nextExamForCatalog, activeCatalog) : [];
                   const nextSubject = nextExam === OTHER_VALUE ? OTHER_VALUE : (nextSubjects[0] || OTHER_VALUE);
                   const nextTopics = nextExamForCatalog && nextSubject !== OTHER_VALUE
-                    ? getTopicsForSelection(nextExamForCatalog, nextSubject)
+                    ? getTopicsForSelection(nextExamForCatalog, nextSubject, activeCatalog)
                     : [];
                   setSessionForm((p) => {
                     const nextState = {
@@ -1593,11 +1759,9 @@ export default function RecorderPage() {
                   });
                 }}
               >
-                <option value="prelims">Prelims</option>
-                <option value="mains">Mains</option>
-                <option value="csat">CSAT</option>
-                <option value="sociology_1">Sociology 1</option>
-                <option value="sociology_2">Sociology 2</option>
+                {activeExamOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
                 <option value={OTHER_VALUE}>Other</option>
               </select>
               {sessionForm.exam_type === OTHER_VALUE ? (
@@ -1615,7 +1779,7 @@ export default function RecorderPage() {
                   const nextSubject = e.target.value;
                   const nextTopics = nextSubject === OTHER_VALUE
                     ? []
-                    : getTopicsForSelection(effectiveExamType, nextSubject);
+                    : getTopicsForSelection(effectiveExamType, nextSubject, activeCatalog);
                   setSessionForm((p) => {
                     const nextState = { ...p, subject: nextSubject, topic: nextTopics[0] || OTHER_VALUE };
                     if (nextSubject !== OTHER_VALUE) {
@@ -1668,6 +1832,100 @@ export default function RecorderPage() {
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
+            </div>
+            <div className="mission-sync-box">
+              <label className="task-check" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={trackTestProgress}
+                  onChange={(e) => setTrackTestProgress(e.target.checked)}
+                />
+                Sync this session to Tests (Points + Syllabus)
+              </label>
+              {trackTestProgress ? (
+                <div className="session-form-grid" style={{ marginTop: 10 }}>
+                  <select
+                    className="task-select"
+                    value={sessionTestMeta.source}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      const nextNames = getMissionTestNamesBySource(next);
+                      const nextNumbers = getMissionTestNumberOptions(next);
+                      setSessionTestMeta((p) => ({
+                        ...p,
+                        source: next,
+                        source_other: next === OTHER_VALUE ? p.source_other : "",
+                        test_name: nextNames[0] || "",
+                        test_name_other: "",
+                        test_number: nextNumbers[0] || "1",
+                      }));
+                    }}
+                  >
+                    {activeTestSources.map((src) => (
+                      <option key={src} value={src}>{humanize(src)}</option>
+                    ))}
+                    <option value={OTHER_VALUE}>Other</option>
+                  </select>
+                  {sessionTestMeta.source === OTHER_VALUE ? (
+                    <input
+                      className="task-select"
+                      placeholder="Type custom source"
+                      value={sessionTestMeta.source_other}
+                      onChange={(e) => setSessionTestMeta((p) => ({ ...p, source_other: e.target.value }))}
+                    />
+                  ) : null}
+                  <select
+                    className="task-select"
+                    value={sessionTestMeta.test_name}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setSessionTestMeta((p) => ({
+                        ...p,
+                        test_name: next,
+                        test_name_other: next === OTHER_VALUE ? p.test_name_other : "",
+                      }));
+                    }}
+                  >
+                    {getMissionTestNamesBySource(sessionTestMeta.source).map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                    <option value="">General</option>
+                    <option value={OTHER_VALUE}>Other</option>
+                  </select>
+                  {sessionTestMeta.test_name === OTHER_VALUE ? (
+                    <input
+                      className="task-select"
+                      placeholder="Type test name"
+                      value={sessionTestMeta.test_name_other}
+                      onChange={(e) => setSessionTestMeta((p) => ({ ...p, test_name_other: e.target.value }))}
+                    />
+                  ) : null}
+                  <select
+                    className="task-select"
+                    value={sessionTestMeta.test_number}
+                    onChange={(e) => setSessionTestMeta((p) => ({ ...p, test_number: e.target.value }))}
+                  >
+                    {getMissionTestNumberOptions(sessionTestMeta.source).map((num) => (
+                      <option key={num} value={num}>{num}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="task-select"
+                    value={sessionTestMeta.stage}
+                    onChange={(e) => setSessionTestMeta((p) => ({ ...p, stage: e.target.value }))}
+                  >
+                    {TEST_STAGE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    className="task-select"
+                    placeholder="Test note (required for sync)"
+                    value={sessionTestMeta.note}
+                    onChange={(e) => setSessionTestMeta((p) => ({ ...p, note: e.target.value }))}
+                  />
+                </div>
+              ) : null}
             </div>
             {sessionForm.recorder_type === "pdf_explainer" ? (
               <div className="explainer-setup-card">

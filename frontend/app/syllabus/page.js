@@ -7,6 +7,13 @@ import ActivityInternalMenu from "../components/ActivityInternalMenu";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
 const GLOBAL_USER_STORAGE_KEY = "global_user_id";
+const REVISION_HEADERS = [
+  "First Revision Date",
+  "Second Revision Date",
+  "Third Revision Date",
+  "Fourth Revision Date",
+  "Fifth Revision Date",
+];
 
 function labelDate(value) {
   if (!value) return "-";
@@ -30,6 +37,7 @@ export default function SyllabusPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState({ exams: [] });
+  const [missionPlanTests, setMissionPlanTests] = useState([]);
   const [playbackByKey, setPlaybackByKey] = useState({});
   const [playbackLoadingKey, setPlaybackLoadingKey] = useState("");
 
@@ -45,6 +53,18 @@ export default function SyllabusPage() {
       }
       const json = await res.json();
       setData(json || { exams: [] });
+      try {
+        const optRes = await fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(nextUser)}`);
+        if (optRes.ok) {
+          const optJson = await optRes.json();
+          const planTests = Array.isArray(optJson?.plan?.tests) ? optJson.plan.tests : [];
+          setMissionPlanTests(planTests);
+        } else {
+          setMissionPlanTests([]);
+        }
+      } catch (_) {
+        setMissionPlanTests([]);
+      }
       setPlaybackByKey({});
     } catch (err) {
       setError(String(err.message || err));
@@ -137,6 +157,15 @@ export default function SyllabusPage() {
                     <div className="syllabus-subjects">
                       {(exam.subjects || []).map((subject) => {
                         const recordings = subjectRecordings(subject);
+                        const topicRows = subject.topics || [];
+                        const maxRevisionCols = Math.max(
+                          1,
+                          ...topicRows.map((topic) => {
+                            const n = Number(topic?.revision_limit || 0);
+                            if (!Number.isFinite(n)) return 1;
+                            return Math.max(1, Math.min(5, n));
+                          }),
+                        );
                         return (
                           <details key={`${exam.exam}-${subject.subject}`} className="syllabus-subject">
                             <summary>{subject.subject}</summary>
@@ -147,17 +176,21 @@ export default function SyllabusPage() {
                                   <tr>
                                     <th>Topic</th>
                                     <th>Class/Study First Date</th>
-                                    <th>First Revision Date</th>
-                                    <th>Second Revision Date</th>
+                                    {REVISION_HEADERS.slice(0, maxRevisionCols).map((header) => (
+                                      <th key={`${subject.subject}-${header}`}>{header}</th>
+                                    ))}
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {(subject.topics || []).map((topic) => (
+                                  {topicRows.map((topic) => (
                                     <tr key={`${subject.subject}-${topic.topic}`}>
                                       <td>{topic.topic}</td>
                                       <td>{labelDate(topic.class_study_first_date)}</td>
-                                      <td>{labelDate(topic.first_revision_date)}</td>
-                                      <td>{labelDate(topic.second_revision_date)}</td>
+                                      {Array.from({ length: maxRevisionCols }, (_, idx) => (
+                                        <td key={`${topic.topic}-rev-${idx}`}>
+                                          {labelDate((topic.revision_dates || [])[idx] || "")}
+                                        </td>
+                                      ))}
                                     </tr>
                                   ))}
                                 </tbody>
@@ -213,6 +246,34 @@ export default function SyllabusPage() {
                     {userId === "divya" ? (
                       <details className="syllabus-tests">
                         <summary>Tests</summary>
+                        {missionPlanTests.length > 0 ? (
+                          <div className="syllabus-table-wrap">
+                            <table className="syllabus-table">
+                              <thead>
+                                <tr>
+                                  <th>Test</th>
+                                  <th>Source</th>
+                                  <th>Number of Tests</th>
+                                  <th>Given</th>
+                                  <th>Analysis</th>
+                                  <th>Revisions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {missionPlanTests.map((row, idx) => (
+                                  <tr key={`mission-test-${idx}`}>
+                                    <td>{row.test_name || "-"}</td>
+                                    <td>{row.source || "-"}</td>
+                                    <td>{row.number_of_tests ?? 0}</td>
+                                    <td>{row.test_given ?? 0}</td>
+                                    <td>{row.analysis_done ?? 0}</td>
+                                    <td>{row.revisions ?? 0}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : null}
                         {(exam.tests || []).length === 0 ? (
                           <p className="day-state">No tests logged for this exam yet.</p>
                         ) : (
@@ -223,9 +284,11 @@ export default function SyllabusPage() {
                                 <table className="syllabus-table">
                                   <thead>
                                     <tr>
+                                      <th>Test</th>
                                       <th>Test Number</th>
                                       <th>Note</th>
                                       <th>Test Given Date</th>
+                                      <th>Analysis</th>
                                       <th>Revision</th>
                                       <th>Second Revision</th>
                                     </tr>
@@ -233,14 +296,16 @@ export default function SyllabusPage() {
                                   <tbody>
                                     {(source.tests || []).length === 0 ? (
                                       <tr>
-                                        <td colSpan={5}>No tests</td>
+                                        <td colSpan={7}>No tests</td>
                                       </tr>
                                     ) : (
                                       (source.tests || []).map((test) => (
                                         <tr key={`${source.source}-${test.test_number}`}>
+                                          <td>{test.test_name || "-"}</td>
                                           <td>{test.test_number || "-"}</td>
                                           <td>{test.note || "-"}</td>
                                           <td>{labelDate(test.test_given_date)}</td>
+                                          <td>{labelDate(test.analysis_done_date)}</td>
                                           <td>{labelDate(test.revision_date)}</td>
                                           <td>{labelDate(test.second_revision_date)}</td>
                                         </tr>

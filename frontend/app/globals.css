@@ -2072,6 +2072,7 @@ button:hover {
   place-items: center;
   z-index: 40;
   padding: 12px;
+  overflow-y: auto;
 }
 
 .task-modal {
@@ -2081,6 +2082,8 @@ button:hover {
   background: linear-gradient(160deg, #171934, #111225);
   padding: 16px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
 }
 
 .task-modal h3 {

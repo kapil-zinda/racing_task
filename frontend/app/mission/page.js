@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
 const GLOBAL_USER_STORAGE_KEY = "global_user_id";
-const PRELIMS_DATE = "2026-05-24";
-const HOURS_PER_DAY = 15;
 const FULL_TEST_TARGET = 17;
 const FORUM_TARGET = 34;
 const CAVA_TARGET = 25;
@@ -44,6 +42,280 @@ const AXIS_KEYWORDS = {
   "Mock Tests": ["test", "mock", "sfg", "pmp", "cava"],
 };
 
+function sanitizeMissionTestRows(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => ({
+    test_name: String(row?.test_name || ""),
+    source: String(row?.source || ""),
+    number_of_tests: Math.max(1, Number(row?.number_of_tests || 1)),
+    revisions: Math.max(0, Number(row?.revisions || 0)),
+  }));
+}
+
+function norm(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function revisionCountFromTopic(topicNode) {
+  if (!topicNode || typeof topicNode !== "object") return 0;
+  if (Array.isArray(topicNode.revision_dates) && topicNode.revision_dates.length > 0) {
+    return topicNode.revision_dates.length;
+  }
+  let count = 0;
+  if (topicNode.first_revision_date) count += 1;
+  if (topicNode.second_revision_date) count += 1;
+  return count;
+}
+
+function hasVideoForTopic(topicNode) {
+  const recordings = Array.isArray(topicNode?.recordings) ? topicNode.recordings : [];
+  return recordings.some((rec) => {
+    const media = Array.isArray(rec?.media_types) ? rec.media_types : [];
+    return media.includes("video") || media.includes("screen");
+  });
+}
+
+function hasNotesForTopic(topicNode) {
+  const noteDates = Array.isArray(topicNode?.note_dates) ? topicNode.note_dates : [];
+  if (noteDates.length > 0) return true;
+  if (topicNode?.note_first_date) return true;
+  return Array.isArray(topicNode?.notes) && topicNode.notes.length > 0;
+}
+
+function buildMissionExecution(plan, syllabus) {
+  const safePlan = plan && typeof plan === "object" ? plan : {};
+  const courses = Array.isArray(safePlan.courses) ? safePlan.courses : [];
+  const books = Array.isArray(safePlan.books) ? safePlan.books : [];
+  const randomRows = Array.isArray(safePlan.random) ? safePlan.random : [];
+  const tests = Array.isArray(safePlan.tests) ? safePlan.tests : [];
+  const exams = Array.isArray(syllabus?.exams) ? syllabus.exams : [];
+
+  const topicMap = new Map();
+  const topicFallbackMap = new Map();
+  const testsBySource = new Map();
+
+  exams.forEach((examNode) => {
+    const examKey = norm(examNode?.exam);
+    (examNode?.subjects || []).forEach((subjectNode) => {
+      const subjectKey = norm(subjectNode?.subject);
+      (subjectNode?.topics || []).forEach((topicNode) => {
+        const topicKey = norm(topicNode?.topic);
+        topicMap.set(`${examKey}||${subjectKey}||${topicKey}`, topicNode);
+        topicFallbackMap.set(`${subjectKey}||${topicKey}`, topicNode);
+      });
+    });
+    (examNode?.tests || []).forEach((sourceNode) => {
+      const sourceKey = norm(sourceNode?.source);
+      if (!sourceKey) return;
+      const list = testsBySource.get(sourceKey) || [];
+      (sourceNode?.tests || []).forEach((testNode) => list.push(testNode));
+      testsBySource.set(sourceKey, list);
+    });
+  });
+
+  const getTopicNode = (examName, subjectName, topicName) => {
+    const exact = topicMap.get(`${norm(examName)}||${norm(subjectName)}||${norm(topicName)}`);
+    if (exact) return exact;
+    return topicFallbackMap.get(`${norm(subjectName)}||${norm(topicName)}`) || null;
+  };
+
+  const findTestSlot = (sourceName, testNumber, testName) => {
+    const sourceKey = norm(sourceName);
+    const list = testsBySource.get(sourceKey) || [];
+    const num = String(testNumber || "").trim();
+    if (!num) return null;
+    const byNum = list.filter((node) => String(node?.test_number || "").trim() === num);
+    if (byNum.length === 0) return null;
+    const testNameKey = norm(testName);
+    if (!testNameKey) return byNum[0];
+    const exact = byNum.find((node) => norm(node?.test_name) === testNameKey);
+    return exact || byNum[0];
+  };
+
+  const out = {
+    coursesDone: 0,
+    coursesTotal: 0,
+    subjectsDone: 0,
+    subjectsTotal: 0,
+    classesDone: 0,
+    classesTotal: 0,
+    classVideosDone: 0,
+    classVideosTotal: 0,
+    classNotesDone: 0,
+    classNotesTotal: 0,
+    classRevisionsDone: 0,
+    classRevisionsTotal: 0,
+
+    booksDone: 0,
+    booksTotal: 0,
+    chaptersDone: 0,
+    chaptersTotal: 0,
+    chapterNotesDone: 0,
+    chapterNotesTotal: 0,
+    chapterRevisionsDone: 0,
+    chapterRevisionsTotal: 0,
+
+    randomDone: 0,
+    randomTotal: 0,
+    randomNotesDone: 0,
+    randomNotesTotal: 0,
+    randomRevisionsDone: 0,
+    randomRevisionsTotal: 0,
+
+    testRowsDone: 0,
+    testRowsTotal: 0,
+    testsGivenDone: 0,
+    testsGivenTotal: 0,
+    testsAnalysisDone: 0,
+    testsAnalysisTotal: 0,
+    testRevisionsDone: 0,
+    testRevisionsTotal: 0,
+    classVideoItems: [],
+  };
+
+  const courseGroups = new Map();
+  courses.forEach((row) => {
+    const key = norm(row?.course_name);
+    if (!key) return;
+    const existing = courseGroups.get(key) || { courseName: String(row?.course_name || ""), rows: [] };
+    existing.rows.push(row);
+    courseGroups.set(key, existing);
+  });
+
+  out.coursesTotal = courseGroups.size;
+  courseGroups.forEach((group) => {
+    let courseDone = group.rows.length > 0;
+    group.rows.forEach((row) => {
+      out.subjectsTotal += 1;
+      const classCount = Math.max(1, Number(row?.class_count || 1));
+      const requiredRevisions = Math.max(0, Number(row?.revision_count || 0));
+      let subjectDone = true;
+      for (let i = 1; i <= classCount; i += 1) {
+        const topicNode = getTopicNode(group.courseName, row?.subject_name, `Class ${i}`);
+        const hasClass = Boolean(topicNode?.class_study_first_date);
+        const hasVideo = hasVideoForTopic(topicNode);
+        const hasNotes = hasNotesForTopic(topicNode);
+        const revDone = revisionCountFromTopic(topicNode);
+
+        out.classesTotal += 1;
+        out.classVideosTotal += 1;
+        out.classNotesTotal += 1;
+        out.classRevisionsTotal += requiredRevisions;
+
+        if (hasVideo) out.classVideosDone += 1;
+        if (hasNotes) out.classNotesDone += 1;
+        out.classRevisionsDone += Math.min(revDone, requiredRevisions);
+        out.classVideoItems.push({
+          course: group.courseName,
+          subject: String(row?.subject_name || ""),
+          classNo: i,
+          done: hasVideo,
+        });
+
+        if (hasClass && hasVideo && hasNotes && revDone >= requiredRevisions) {
+          out.classesDone += 1;
+        } else {
+          subjectDone = false;
+        }
+      }
+      if (subjectDone) out.subjectsDone += 1;
+      else courseDone = false;
+    });
+    if (courseDone) out.coursesDone += 1;
+  });
+
+  books.forEach((row) => {
+    out.booksTotal += 1;
+    const chapterCount = Math.max(1, Number(row?.chapter_count || 1));
+    const requiredRevisions = Math.max(0, Number(row?.revision_count || 0));
+    const examName = `Book: ${String(row?.book_name || "").trim()}`;
+    const subjectName = String(row?.book_name || "").trim();
+    let bookDone = true;
+    for (let i = 1; i <= chapterCount; i += 1) {
+      const topicNode = getTopicNode(examName, subjectName, `Chapter ${i}`);
+      const hasRead = Boolean(topicNode?.class_study_first_date);
+      const hasNotes = hasNotesForTopic(topicNode);
+      const revDone = revisionCountFromTopic(topicNode);
+
+      out.chaptersTotal += 1;
+      out.chapterNotesTotal += 1;
+      out.chapterRevisionsTotal += requiredRevisions;
+      if (hasNotes) out.chapterNotesDone += 1;
+      out.chapterRevisionsDone += Math.min(revDone, requiredRevisions);
+      if (hasRead) out.chaptersDone += 1;
+      if (!(hasRead && hasNotes && revDone >= requiredRevisions)) bookDone = false;
+    }
+    if (bookDone) out.booksDone += 1;
+  });
+
+  randomRows.forEach((row) => {
+    out.randomTotal += 1;
+    const requiredRevisions = Math.max(0, Number(row?.revision_count || 0));
+    const needsNotes = Boolean(row?.notes_required ?? true);
+    const examName = `Random: ${String(row?.source || "").trim()}`;
+    const subjectName = String(row?.source || "").trim();
+    const topicName = String(row?.topic_name || "").trim();
+    const topicNode = getTopicNode(examName, subjectName, topicName);
+    const hasRead = Boolean(topicNode?.class_study_first_date);
+    const hasNotes = hasNotesForTopic(topicNode);
+    const revDone = revisionCountFromTopic(topicNode);
+
+    if (needsNotes) {
+      out.randomNotesTotal += 1;
+      if (hasNotes) out.randomNotesDone += 1;
+    }
+    out.randomRevisionsTotal += requiredRevisions;
+    out.randomRevisionsDone += Math.min(revDone, requiredRevisions);
+    if (hasRead && (!needsNotes || hasNotes) && revDone >= requiredRevisions) out.randomDone += 1;
+  });
+
+  tests.forEach((row) => {
+    out.testRowsTotal += 1;
+    const totalTests = Math.max(1, Number(row?.number_of_tests || 1));
+    const requiredRevisions = Math.max(0, Number(row?.revisions || 0));
+    out.testsGivenTotal += totalTests;
+    out.testsAnalysisTotal += totalTests;
+    out.testRevisionsTotal += totalTests * requiredRevisions;
+
+    let rowDone = true;
+    for (let i = 1; i <= totalTests; i += 1) {
+      const slot = findTestSlot(row?.source, i, row?.test_name);
+      const given = Boolean(slot?.test_given_date);
+      const analysis = Boolean(slot?.analysis_done_date);
+      const revOne = Boolean(slot?.revision_date);
+      const revTwo = Boolean(slot?.second_revision_date);
+      const revDone = (revOne ? 1 : 0) + (revTwo ? 1 : 0);
+      if (given) out.testsGivenDone += 1;
+      if (analysis) out.testsAnalysisDone += 1;
+      out.testRevisionsDone += Math.min(revDone, requiredRevisions);
+      if (!(given && analysis && revDone >= requiredRevisions)) rowDone = false;
+    }
+    if (rowDone) out.testRowsDone += 1;
+  });
+
+  const ratios = [
+    out.coursesTotal ? out.coursesDone / out.coursesTotal : 1,
+    out.subjectsTotal ? out.subjectsDone / out.subjectsTotal : 1,
+    out.classesTotal ? out.classesDone / out.classesTotal : 1,
+    out.classVideosTotal ? out.classVideosDone / out.classVideosTotal : 1,
+    out.classNotesTotal ? out.classNotesDone / out.classNotesTotal : 1,
+    out.classRevisionsTotal ? out.classRevisionsDone / out.classRevisionsTotal : 1,
+    out.booksTotal ? out.booksDone / out.booksTotal : 1,
+    out.chaptersTotal ? out.chaptersDone / out.chaptersTotal : 1,
+    out.chapterNotesTotal ? out.chapterNotesDone / out.chapterNotesTotal : 1,
+    out.chapterRevisionsTotal ? out.chapterRevisionsDone / out.chapterRevisionsTotal : 1,
+    out.randomTotal ? out.randomDone / out.randomTotal : 1,
+    out.randomNotesTotal ? out.randomNotesDone / out.randomNotesTotal : 1,
+    out.randomRevisionsTotal ? out.randomRevisionsDone / out.randomRevisionsTotal : 1,
+    out.testRowsTotal ? out.testRowsDone / out.testRowsTotal : 1,
+    out.testsGivenTotal ? out.testsGivenDone / out.testsGivenTotal : 1,
+    out.testsAnalysisTotal ? out.testsAnalysisDone / out.testsAnalysisTotal : 1,
+    out.testRevisionsTotal ? out.testRevisionsDone / out.testRevisionsTotal : 1,
+  ];
+  out.progressPercent = Math.round((ratios.reduce((acc, v) => acc + v, 0) / ratios.length) * 100);
+  return out;
+}
+
 function toDate(value) {
   if (!value) return null;
   const d = new Date(value);
@@ -56,12 +328,6 @@ function daysSince(value) {
   const now = new Date();
   const diff = now.getTime() - d.getTime();
   return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
-}
-
-function daysLeft() {
-  const today = new Date();
-  const exam = new Date(PRELIMS_DATE);
-  return Math.max(0, Math.ceil((exam.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
 function classifyAxis(exam, subject, topic) {
@@ -349,12 +615,37 @@ function buildMissionModel(syllabus, activityByDate, userId) {
   };
 }
 
+function ratioLabel(done, total) {
+  return `${Number(done || 0)}/${Number(total || 0)}`;
+}
+
 export default function MissionControlPage() {
+  const courseGroupIdRef = useRef(0);
+  const nextCourseGroupId = () => {
+    courseGroupIdRef.current += 1;
+    return `course_group_${Date.now()}_${courseGroupIdRef.current}`;
+  };
   const [userId, setUserId] = useState("kapil");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [syllabus, setSyllabus] = useState({ exams: [] });
   const [activityByDate, setActivityByDate] = useState({});
+  const [missionConfig, setMissionConfig] = useState(null);
+  const [missionModalOpen, setMissionModalOpen] = useState(false);
+  const [courseActionOpen, setCourseActionOpen] = useState("");
+  const [missionSaving, setMissionSaving] = useState(false);
+  const [classVideosModalOpen, setClassVideosModalOpen] = useState(false);
+  const [missionDraft, setMissionDraft] = useState({
+    title: "",
+    target_date: "",
+    status: "active",
+    plan: {
+      courses: [],
+      books: [],
+      random: [],
+      tests: [],
+    },
+  });
   const [battleDone, setBattleDone] = useState([false, false, false]);
 
   const loadMission = async (nextUser = userId) => {
@@ -372,6 +663,7 @@ export default function MissionControlPage() {
       const payload = await res.json();
       setSyllabus(payload?.syllabus || { exams: [] });
       setActivityByDate(payload?.activity_by_date || {});
+      setMissionConfig(payload?.mission || null);
       setBattleDone([false, false, false]);
     } catch (err) {
       setError(String(err.message || err));
@@ -405,13 +697,90 @@ export default function MissionControlPage() {
 
   const mission = useMemo(() => buildMissionModel(syllabus, activityByDate, userId), [syllabus, activityByDate, userId]);
 
-  const dayLeftCount = daysLeft();
-  const hourLeftCount = dayLeftCount * HOURS_PER_DAY;
+  useEffect(() => {
+    if (!missionConfig) return;
+    const rawCourses = Array.isArray(missionConfig?.plan?.courses) ? missionConfig.plan.courses : [];
+    const groupByName = new Map();
+    const coursesWithGroup = rawCourses.map((row) => {
+      const existingGroup = String(row?.__group_id || "").trim();
+      if (existingGroup) {
+        return { ...row, __group_id: existingGroup };
+      }
+      const courseNameKey = String(row?.course_name || "").trim().toLowerCase();
+      if (courseNameKey) {
+        if (!groupByName.has(courseNameKey)) {
+          groupByName.set(courseNameKey, nextCourseGroupId());
+        }
+        return { ...row, __group_id: groupByName.get(courseNameKey) };
+      }
+      return { ...row, __group_id: nextCourseGroupId() };
+    });
+    setMissionDraft({
+      title: missionConfig.title || "",
+      target_date: missionConfig.target_date || "",
+      status: missionConfig.status || "active",
+      plan: {
+        courses: coursesWithGroup,
+        books: Array.isArray(missionConfig?.plan?.books) ? missionConfig.plan.books : [],
+        random: Array.isArray(missionConfig?.plan?.random) ? missionConfig.plan.random : [],
+        tests: sanitizeMissionTestRows(missionConfig?.plan?.tests),
+      },
+    });
+  }, [missionConfig]);
+
+  const saveMission = async () => {
+    if (!API_BASE_URL) return;
+    setMissionSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/mission`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          title: missionDraft.title,
+          target_date: missionDraft.target_date,
+          status: missionDraft.status,
+          plan: {
+            ...missionDraft.plan,
+            tests: sanitizeMissionTestRows(missionDraft?.plan?.tests),
+          },
+        }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Mission save failed: ${res.status} ${txt}`);
+      }
+      const payload = await res.json();
+      setMissionConfig(payload?.mission || null);
+      setMissionModalOpen(false);
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setMissionSaving(false);
+    }
+  };
+
   const battleProgress = Math.round((battleDone.filter(Boolean).length / 3) * 100);
 
   const radarValuesCoverage = AXES.map((axis) => mission.axisStats[axis]?.coverage || 0);
   const radarValuesRetention = AXES.map((axis) => mission.axisStats[axis]?.retention || 0);
   const radarValuesPerformance = AXES.map((axis) => mission.axisStats[axis]?.performance || 0);
+  const planExecution = useMemo(
+    () => buildMissionExecution(missionConfig?.plan, syllabus),
+    [missionConfig?.plan, syllabus],
+  );
+  const classVideoItems = useMemo(
+    () =>
+      [...(planExecution.classVideoItems || [])].sort((a, b) => {
+        const c = a.course.localeCompare(b.course);
+        if (c !== 0) return c;
+        const s = a.subject.localeCompare(b.subject);
+        if (s !== 0) return s;
+        return a.classNo - b.classNo;
+      }),
+    [planExecution.classVideoItems],
+  );
 
   const recent45 = buildRecentDates(45);
 
@@ -427,6 +796,23 @@ export default function MissionControlPage() {
     "Tracks and closes mistakes",
     "Protects CSAT safety buffer",
   ];
+  const courseRows = Array.isArray(missionDraft?.plan?.courses) ? missionDraft.plan.courses : [];
+  const courseGroups = (() => {
+    const groups = [];
+    const map = new Map();
+    courseRows.forEach((row, idx) => {
+      const courseName = String(row?.course_name || "");
+      const trimmed = courseName.trim();
+      const rowGroupId = String(row?.__group_id || "").trim();
+      const key = rowGroupId || (trimmed ? `name:${trimmed.toLowerCase()}` : `empty:${idx}`);
+      if (!map.has(key)) {
+        map.set(key, { key, course_name: courseName, rowIndexes: [] });
+        groups.push(map.get(key));
+      }
+      map.get(key).rowIndexes.push(idx);
+    });
+    return groups;
+  })();
 
   return (
     <main className="app-shell mission-shell">
@@ -448,16 +834,50 @@ export default function MissionControlPage() {
           <button className="btn-day" onClick={() => loadMission(userId)} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh Mission"}
           </button>
+          <button className="btn-day secondary" onClick={() => setMissionModalOpen(true)} disabled={loading}>
+            Set Mission
+          </button>
         </div>
 
-        <div className="mission-status-grid">
-          <article className="mission-kpi"><h3>Days Left</h3><p>{dayLeftCount}</p></article>
-          <article className="mission-kpi"><h3>Hours Left</h3><p>{hourLeftCount}</p></article>
-          <article className="mission-kpi"><h3>Full Tests Left</h3><p>{mission.fullTestsLeft}</p></article>
-          <article className="mission-kpi"><h3>Forum Targets Left</h3><p>{mission.forumLeft}</p></article>
-          <article className="mission-kpi"><h3>CA-VA Left</h3><p>{mission.cavaLeft}</p></article>
-          <article className="mission-kpi"><h3>Revision Debt</h3><p>{mission.revisionDebt}</p></article>
-        </div>
+        {missionConfig ? (
+          <div className="mission-status-grid" style={{ marginTop: 10 }}>
+            <article className="mission-kpi"><h3>Mission</h3><p>{missionConfig.title || "UPSC Selection Mission"}</p></article>
+            <article className="mission-kpi"><h3>Target Date</h3><p>{missionConfig.target_date || "-"}</p></article>
+            <article className="mission-kpi"><h3>Status</h3><p>{missionConfig.status || "active"}</p></article>
+            <article className="mission-kpi"><h3>Mission Progress</h3><p>{planExecution.progressPercent}%</p></article>
+            <article className="mission-kpi"><h3>Courses</h3><p>{ratioLabel(planExecution.coursesDone, planExecution.coursesTotal)}</p></article>
+            <article className="mission-kpi"><h3>Subjects</h3><p>{ratioLabel(planExecution.subjectsDone, planExecution.subjectsTotal)}</p></article>
+            <article className="mission-kpi"><h3>Classes</h3><p>{ratioLabel(planExecution.classesDone, planExecution.classesTotal)}</p></article>
+            <article className="mission-kpi">
+              <h3>Class Videos</h3>
+              <p>{ratioLabel(planExecution.classVideosDone, planExecution.classVideosTotal)}</p>
+              <button
+                type="button"
+                className="btn-day secondary"
+                style={{ marginTop: 8 }}
+                onClick={() => setClassVideosModalOpen(true)}
+              >
+                View List
+              </button>
+            </article>
+            <article className="mission-kpi"><h3>Class Notes</h3><p>{ratioLabel(planExecution.classNotesDone, planExecution.classNotesTotal)}</p></article>
+            <article className="mission-kpi"><h3>Class Revisions</h3><p>{ratioLabel(planExecution.classRevisionsDone, planExecution.classRevisionsTotal)}</p></article>
+
+            <article className="mission-kpi"><h3>Books</h3><p>{ratioLabel(planExecution.booksDone, planExecution.booksTotal)}</p></article>
+            <article className="mission-kpi"><h3>Chapters</h3><p>{ratioLabel(planExecution.chaptersDone, planExecution.chaptersTotal)}</p></article>
+            <article className="mission-kpi"><h3>Chapter Notes</h3><p>{ratioLabel(planExecution.chapterNotesDone, planExecution.chapterNotesTotal)}</p></article>
+            <article className="mission-kpi"><h3>Chapter Revisions</h3><p>{ratioLabel(planExecution.chapterRevisionsDone, planExecution.chapterRevisionsTotal)}</p></article>
+
+            <article className="mission-kpi"><h3>Random Topics</h3><p>{ratioLabel(planExecution.randomDone, planExecution.randomTotal)}</p></article>
+            <article className="mission-kpi"><h3>Random Notes</h3><p>{ratioLabel(planExecution.randomNotesDone, planExecution.randomNotesTotal)}</p></article>
+            <article className="mission-kpi"><h3>Random Revisions</h3><p>{ratioLabel(planExecution.randomRevisionsDone, planExecution.randomRevisionsTotal)}</p></article>
+
+            <article className="mission-kpi"><h3>Test Rows</h3><p>{ratioLabel(planExecution.testRowsDone, planExecution.testRowsTotal)}</p></article>
+            <article className="mission-kpi"><h3>Tests Given</h3><p>{ratioLabel(planExecution.testsGivenDone, planExecution.testsGivenTotal)}</p></article>
+            <article className="mission-kpi"><h3>Tests Analysis</h3><p>{ratioLabel(planExecution.testsAnalysisDone, planExecution.testsAnalysisTotal)}</p></article>
+            <article className="mission-kpi"><h3>Test Revisions</h3><p>{ratioLabel(planExecution.testRevisionsDone, planExecution.testRevisionsTotal)}</p></article>
+          </div>
+        ) : null}
       </section>
 
       <section className="milestone-panel summit-panel">
@@ -665,6 +1085,531 @@ export default function MissionControlPage() {
           </ul>
         </article>
       </section>
+
+      {missionModalOpen ? (
+        <div className="task-modal-overlay" onClick={() => setMissionModalOpen(false)}>
+          <div className="task-modal" onClick={(e) => { e.stopPropagation(); setCourseActionOpen(""); }}>
+            <h3>Set Mission</h3>
+            <p className="day-state" style={{ marginTop: 0 }}>
+              Saved values are loaded for edit.
+            </p>
+            <div className="session-form-grid" style={{ gridTemplateColumns: "1fr" }}>
+              <label>
+                <strong>Mission Title</strong>
+                <input
+                  className="task-select"
+                  placeholder="Mission Title (e.g. UPSC Selection Mission)"
+                  value={missionDraft.title}
+                  onChange={(e) => setMissionDraft((prev) => ({ ...prev, title: e.target.value }))}
+                />
+              </label>
+              <label>
+                <strong>Target Date</strong>
+                <input
+                  className="task-select"
+                  type="date"
+                  value={missionDraft.target_date}
+                  onChange={(e) => setMissionDraft((prev) => ({ ...prev, target_date: e.target.value }))}
+                />
+              </label>
+              <label>
+                <strong>Status</strong>
+                <select
+                  className="task-select"
+                  value={missionDraft.status}
+                  onChange={(e) => setMissionDraft((prev) => ({ ...prev, status: e.target.value }))}
+                >
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                </select>
+              </label>
+            </div>
+            <h4 style={{ marginBottom: 8 }}>Course Plan</h4>
+            <p className="day-state" style={{ marginTop: 0 }}>
+              Add one course, then add multiple subjects under it. Backend will store each subject as a separate row.
+            </p>
+            <div className="session-form-grid" style={{ gridTemplateColumns: "1fr" }}>
+              {courseGroups.map((group, gidx) => (
+                <div key={group.key} className="content-modal-card" style={{ borderRadius: 12, padding: 12 }}>
+                  <div className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr auto", opacity: 0.8 }}>
+                    <small>Course</small>
+                    <small>Subject</small>
+                    <small>Classes</small>
+                    <small>Revisions</small>
+                    <small>Action</small>
+                  </div>
+                  {group.rowIndexes.map((rowIdx, idxInGroup) => {
+                    const row = courseRows[rowIdx] || {};
+                    const isFirstRow = idxInGroup === 0;
+                    return (
+                      <div key={`course-${rowIdx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr auto" }}>
+                        {isFirstRow ? (
+                          <input
+                            className="task-select"
+                            placeholder="Course"
+                            value={group.course_name || ""}
+                            onChange={(e) =>
+                              setMissionDraft((prev) => {
+                                const list = [...(prev.plan.courses || [])];
+                                group.rowIndexes.forEach((i) => {
+                                  list[i] = { ...list[i], course_name: e.target.value };
+                                });
+                                return { ...prev, plan: { ...prev.plan, courses: list } };
+                              })
+                            }
+                          />
+                        ) : (
+                          <div />
+                        )}
+                        <input
+                          className="task-select"
+                          placeholder="Subject"
+                          value={row.subject_name || ""}
+                          onChange={(e) =>
+                            setMissionDraft((prev) => {
+                              const list = [...(prev.plan.courses || [])];
+                              list[rowIdx] = { ...list[rowIdx], subject_name: e.target.value };
+                              return { ...prev, plan: { ...prev.plan, courses: list } };
+                            })
+                          }
+                        />
+                        <input
+                          className="task-select"
+                          type="number"
+                          min={1}
+                          placeholder="Classes"
+                          value={row.class_count ?? 1}
+                          onChange={(e) =>
+                            setMissionDraft((prev) => {
+                              const list = [...(prev.plan.courses || [])];
+                              list[rowIdx] = { ...list[rowIdx], class_count: Number(e.target.value || 1) };
+                              return { ...prev, plan: { ...prev.plan, courses: list } };
+                            })
+                          }
+                        />
+                        <input
+                          className="task-select"
+                          type="number"
+                          min={0}
+                          max={5}
+                          placeholder="Revisions"
+                          value={row.revision_count ?? 1}
+                          onChange={(e) =>
+                            setMissionDraft((prev) => {
+                              const list = [...(prev.plan.courses || [])];
+                              list[rowIdx] = { ...list[rowIdx], revision_count: Math.min(5, Number(e.target.value || 0)) };
+                              return { ...prev, plan: { ...prev.plan, courses: list } };
+                            })
+                          }
+                        />
+                        <div style={{ position: "relative" }}>
+                          <button
+                            className="btn-day secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const key = `${group.key}:${rowIdx}`;
+                              setCourseActionOpen((prev) => (prev === key ? "" : key));
+                            }}
+                          >
+                            ...
+                          </button>
+                          {courseActionOpen === `${group.key}:${rowIdx}` ? (
+                            <div
+                              className="content-row-actions-menu"
+                              style={{
+                                position: "absolute",
+                                right: 0,
+                                top: "calc(100% + 4px)",
+                                zIndex: 40,
+                                minWidth: 170,
+                                padding: 6,
+                                borderRadius: 10,
+                                border: "1px solid rgba(255,255,255,0.16)",
+                                background: "rgba(15, 22, 40, 0.98)",
+                                boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                className="content-row-action danger"
+                                style={{
+                                  width: "100%",
+                                  textAlign: "left",
+                                  border: "none",
+                                  background: "transparent",
+                                  color: "#fda4af",
+                                  fontWeight: 700,
+                                  padding: "8px 10px",
+                                  borderRadius: 8,
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => {
+                                  setMissionDraft((prev) => {
+                                    const list = [...(prev.plan.courses || [])];
+                                    list.splice(rowIdx, 1);
+                                    return { ...prev, plan: { ...prev.plan, courses: list } };
+                                  });
+                                  setCourseActionOpen("");
+                                }}
+                              >
+                                Remove Subject
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <button
+                    className="btn-day secondary"
+                    style={{ width: "100%" }}
+                    onClick={() =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.courses || [])];
+                        const sample = list[group.rowIndexes[0]] || {};
+                        list.push({
+                          course_name: sample.course_name || "",
+                          subject_name: "",
+                          class_count: Number(sample.class_count || 1),
+                          revision_count: Math.min(5, Number(sample.revision_count || 1)),
+                          __group_id: sample.__group_id || nextCourseGroupId(),
+                        });
+                        return { ...prev, plan: { ...prev.plan, courses: list } };
+                      })
+                    }
+                  >
+                    + Add Subject
+                  </button>
+                </div>
+              ))}
+              <button
+                className="btn-day secondary"
+                style={{ width: "100%" }}
+                onClick={() =>
+                  setMissionDraft((prev) => ({
+                    ...prev,
+                    plan: {
+                      ...prev.plan,
+                      courses: [
+                        ...(prev.plan.courses || []),
+                        { course_name: "", subject_name: "", class_count: 1, revision_count: 1, __group_id: nextCourseGroupId() },
+                      ],
+                    },
+                  }))
+                }
+              >
+                + Add Course
+              </button>
+            </div>
+            <h4 style={{ marginBottom: 8, marginTop: 12 }}>Book Plan</h4>
+            <div className="session-form-grid" style={{ gridTemplateColumns: "1fr" }}>
+              <div className="session-form-grid" style={{ gridTemplateColumns: "2fr 1fr 1fr auto", opacity: 0.8 }}>
+                <small>Book Name</small>
+                <small>Chapters</small>
+                <small>Revisions</small>
+                <small>Action</small>
+              </div>
+              {(missionDraft.plan.books || []).map((row, idx) => (
+                <div key={`book-${idx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 1fr 1fr auto" }}>
+                  <input
+                    className="task-select"
+                    placeholder="Book name"
+                    value={row.book_name || ""}
+                    onChange={(e) =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.books || [])];
+                        list[idx] = { ...list[idx], book_name: e.target.value };
+                        return { ...prev, plan: { ...prev.plan, books: list } };
+                      })
+                    }
+                  />
+                  <input
+                    className="task-select"
+                    type="number"
+                    min={1}
+                    placeholder="Chapters"
+                    value={row.chapter_count ?? 1}
+                    onChange={(e) =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.books || [])];
+                        list[idx] = { ...list[idx], chapter_count: Number(e.target.value || 1) };
+                        return { ...prev, plan: { ...prev.plan, books: list } };
+                      })
+                    }
+                  />
+                  <input
+                    className="task-select"
+                          type="number"
+                          min={0}
+                          max={5}
+                          placeholder="Revisions"
+                          value={row.revision_count ?? 1}
+                          onChange={(e) =>
+                            setMissionDraft((prev) => {
+                              const list = [...(prev.plan.books || [])];
+                              list[idx] = { ...list[idx], revision_count: Math.min(5, Number(e.target.value || 0)) };
+                              return { ...prev, plan: { ...prev.plan, books: list } };
+                            })
+                          }
+                        />
+                  <button
+                    className="btn-day secondary"
+                    onClick={() =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.books || [])];
+                        list.splice(idx, 1);
+                        return { ...prev, plan: { ...prev.plan, books: list } };
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                className="btn-day secondary"
+                onClick={() =>
+                  setMissionDraft((prev) => ({
+                    ...prev,
+                    plan: {
+                      ...prev.plan,
+                      books: [...(prev.plan.books || []), { book_name: "", chapter_count: 1, revision_count: 1 }],
+                    },
+                  }))
+                }
+              >
+                + Add Book
+              </button>
+            </div>
+            <h4 style={{ marginBottom: 8, marginTop: 12 }}>Random Plan</h4>
+            <div className="session-form-grid" style={{ gridTemplateColumns: "1fr" }}>
+              <div className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr auto", opacity: 0.8 }}>
+                <small>Source</small>
+                <small>Topic</small>
+                <small>Revisions</small>
+                <small>Action</small>
+              </div>
+              {(missionDraft.plan.random || []).map((row, idx) => (
+                <div key={`random-${idx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr auto" }}>
+                  <input
+                    className="task-select"
+                    placeholder="Source"
+                    value={row.source || ""}
+                    onChange={(e) =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.random || [])];
+                        list[idx] = { ...list[idx], source: e.target.value };
+                        return { ...prev, plan: { ...prev.plan, random: list } };
+                      })
+                    }
+                  />
+                  <input
+                    className="task-select"
+                    placeholder="Topic name"
+                    value={row.topic_name || ""}
+                    onChange={(e) =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.random || [])];
+                        list[idx] = { ...list[idx], topic_name: e.target.value };
+                        return { ...prev, plan: { ...prev.plan, random: list } };
+                      })
+                    }
+                  />
+                  <input
+                    className="task-select"
+                          type="number"
+                          min={0}
+                          max={5}
+                          placeholder="Revisions"
+                          value={row.revision_count ?? 1}
+                          onChange={(e) =>
+                            setMissionDraft((prev) => {
+                              const list = [...(prev.plan.random || [])];
+                              list[idx] = { ...list[idx], revision_count: Math.min(5, Number(e.target.value || 0)) };
+                              return { ...prev, plan: { ...prev.plan, random: list } };
+                            })
+                          }
+                        />
+                  <button
+                    className="btn-day secondary"
+                    onClick={() =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.random || [])];
+                        list.splice(idx, 1);
+                        return { ...prev, plan: { ...prev.plan, random: list } };
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                className="btn-day secondary"
+                onClick={() =>
+                  setMissionDraft((prev) => ({
+                    ...prev,
+                    plan: {
+                      ...prev.plan,
+                      random: [...(prev.plan.random || []), { source: "", topic_name: "", revision_count: 1 }],
+                    },
+                  }))
+                }
+              >
+                + Add Random Topic
+              </button>
+            </div>
+            <h4 style={{ marginBottom: 8, marginTop: 12 }}>Test Plan</h4>
+            <div className="session-form-grid" style={{ gridTemplateColumns: "1fr" }}>
+              <p className="day-state" style={{ marginTop: 0 }}>
+                `Given` and `Analysis` are automatic defaults from `No. Tests`.
+              </p>
+              <div className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr auto", opacity: 0.8 }}>
+                <small>Test</small>
+                <small>Source</small>
+                <small>No. Tests</small>
+                <small>Revisions</small>
+                <small>Action</small>
+              </div>
+              {(missionDraft.plan.tests || []).map((row, idx) => (
+                <div key={`test-${idx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr auto" }}>
+                  <input
+                    className="task-select"
+                    placeholder="Test"
+                    value={row.test_name || ""}
+                    onChange={(e) =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.tests || [])];
+                        list[idx] = { ...list[idx], test_name: e.target.value };
+                        return { ...prev, plan: { ...prev.plan, tests: list } };
+                      })
+                    }
+                  />
+                  <input
+                    className="task-select"
+                    placeholder="Source"
+                    value={row.source || ""}
+                    onChange={(e) =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.tests || [])];
+                        list[idx] = { ...list[idx], source: e.target.value };
+                        return { ...prev, plan: { ...prev.plan, tests: list } };
+                      })
+                    }
+                  />
+                  <input
+                    className="task-select"
+                    type="number"
+                    min={1}
+                    placeholder="No. Tests"
+                    value={row.number_of_tests ?? 1}
+                    onChange={(e) =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.tests || [])];
+                        list[idx] = { ...list[idx], number_of_tests: Number(e.target.value || 1) };
+                        return { ...prev, plan: { ...prev.plan, tests: list } };
+                      })
+                    }
+                  />
+                  <input
+                    className="task-select"
+                    type="number"
+                    min={0}
+                    max={5}
+                    placeholder="Revisions"
+                    value={row.revisions ?? 0}
+                    onChange={(e) =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.tests || [])];
+                        list[idx] = { ...list[idx], revisions: Math.min(5, Number(e.target.value || 0)) };
+                        return { ...prev, plan: { ...prev.plan, tests: list } };
+                      })
+                    }
+                  />
+                  <button
+                    className="btn-day secondary"
+                    onClick={() =>
+                      setMissionDraft((prev) => {
+                        const list = [...(prev.plan.tests || [])];
+                        list.splice(idx, 1);
+                        return { ...prev, plan: { ...prev.plan, tests: list } };
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                className="btn-day secondary"
+                onClick={() =>
+                  setMissionDraft((prev) => ({
+                    ...prev,
+                    plan: {
+                      ...prev.plan,
+                      tests: [
+                        ...(prev.plan.tests || []),
+                        {
+                          test_name: "",
+                          source: "",
+                          number_of_tests: 1,
+                          revisions: 0,
+                        },
+                      ],
+                    },
+                  }))
+                }
+              >
+                + Add Test Plan
+              </button>
+            </div>
+            <div className="task-modal-actions">
+              <button className="btn-day secondary" onClick={() => setMissionModalOpen(false)} disabled={missionSaving}>
+                Cancel
+              </button>
+              <button className="btn-day" onClick={saveMission} disabled={missionSaving}>
+                {missionSaving ? "Saving..." : "Save Mission"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {classVideosModalOpen ? (
+        <div className="task-modal-overlay" onClick={() => setClassVideosModalOpen(false)}>
+          <div className="task-modal" style={{ maxHeight: "80vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <h3>Class Video Status</h3>
+            <p className="day-state" style={{ marginTop: 0 }}>
+              Course - Subject - Class No - Status
+            </p>
+            <div className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 80px", opacity: 0.8 }}>
+              <small>Course</small>
+              <small>Subject</small>
+              <small>Class</small>
+              <small>Status</small>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {classVideoItems.length === 0 ? (
+                <p className="day-state">No planned classes found in mission.</p>
+              ) : (
+                classVideoItems.map((item, idx) => (
+                  <div key={`${item.course}-${item.subject}-${item.classNo}-${idx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 80px" }}>
+                    <span>{item.course}</span>
+                    <span>{item.subject}</span>
+                    <span>{`Class ${item.classNo}`}</span>
+                    <strong>{item.done ? "✔" : "✖"}</strong>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="task-modal-actions">
+              <button className="btn-day secondary" onClick={() => setClassVideosModalOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
