@@ -14,10 +14,13 @@ class CreateSessionRequest(BaseModel):
     user_id: str
     subject: str
     topic: str
-    session_type: str  # study | revision
+    session_type: str  # study | revision | analysis
     recorder_type: str = "call"
     modes: List[str] = []  # audio | video | screen
-    notes: str = ""
+    notes: str
+    test_source: str = ""
+    test_name: str = ""
+    test_number: str = ""
 
 
 class SessionStatusRequest(BaseModel):
@@ -92,6 +95,7 @@ class ContentDeleteRequest(BaseModel):
     id: str
     item_type: str  # file | folder
     recursive: bool = False
+    scope: str = "all"  # all | searchable
 
 
 class ContentRenameRequest(BaseModel):
@@ -110,12 +114,14 @@ class ContentCopyRequest(BaseModel):
     id: str
     item_type: str  # file | folder
     destination_folder_id: str = "content_root"
+    scope: str = "all"  # all | searchable
 
 
 class ContentMoveRequest(BaseModel):
     id: str
     item_type: str  # file | folder
     destination_folder_id: str = "content_root"
+    scope: str = "all"  # all | searchable
 
 
 class ContentDownloadRequest(BaseModel):
@@ -153,3 +159,13 @@ class QnaAskRequest(BaseModel):
 class QnaSessionCreateRequest(BaseModel):
     user_id: str
     title: str = ""
+
+
+class MissionUpsertRequest(BaseModel):
+    user_id: str
+    title: str = ""
+    target_date: str = ""
+    status: str = "active"
+    weights: dict = {}
+    targets: dict | None = None
+    plan: dict = {}

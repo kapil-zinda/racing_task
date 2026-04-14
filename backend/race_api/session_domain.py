@@ -37,8 +37,8 @@ def _normalize_modes(recorder_type: str, modes: List[str]) -> tuple[str, List[st
 def create_session_payload(payload) -> Dict[str, Any]:
     if payload.user_id not in PLAYERS:
         raise ValueError("Invalid user_id")
-    if payload.session_type not in {"study", "revision"}:
-        raise ValueError("session_type must be study or revision")
+    if payload.session_type not in {"study", "revision", "analysis", "test"}:
+        raise ValueError("session_type must be study, revision or analysis")
 
     subject = payload.subject.strip()
     topic = payload.topic.strip()
@@ -48,6 +48,10 @@ def create_session_payload(payload) -> Dict[str, Any]:
     if not topic:
         raise ValueError("topic is required")
     recorder_type, modes = _normalize_modes(payload.recorder_type, payload.modes)
+    test_source = (getattr(payload, "test_source", "") or "").strip()
+    test_name = (getattr(payload, "test_name", "") or "").strip()
+    test_number = str(getattr(payload, "test_number", "") or "").strip()
+
     date_str = current_date_str()
     doc = {
         "_id": session_id(),
@@ -72,6 +76,12 @@ def create_session_payload(payload) -> Dict[str, Any]:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if test_source or test_name or test_number:
+        doc["test_ref"] = {
+            "source": test_source,
+            "test_name": test_name,
+            "test_number": test_number,
+        }
 
     sessions_collection().insert_one(doc)
     return {"message": "Session created", "session": doc}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
@@ -19,304 +19,37 @@ const RECORDER_TYPES = [
   { value: "uploader", label: "Uploader" }
 ];
 const OTHER_VALUE = "__other__";
-const EXAM_CATALOG = {
-  prelims: [
-    "Latest Current Affairs",
-    "Static GK",
-    "History of India and Indian National Movement",
-    "Indian and World Geography",
-    "Physical Geography",
-    "Social Geography",
-    "Economic Geography",
-    "Indian Polity and Governance",
-    "Constitution",
-    "Public Policy Rights",
-    "Political System",
-    "Rights Issues",
-    "Panchayati Raj",
-    "Economic and Social Development",
-    "Sustainable Development",
-    "Poverty",
-    "Inclusion",
-    "Demographics",
-    "Social Sector Initiatives",
-    "Environment and Ecology",
-    "Biodiversity",
-    "Climate Change",
-    "Science and Technology"
-  ].map((subject) => ({ subject, topics: ["General"] })),
-  mains: [
-    "History",
-    "Modern",
-    "World History",
-    "Art & Culture",
-    "Indian Heritage and Culture",
-    "Geography",
-    "Human Geography",
-    "World Physical Geography",
-    "Society",
-    "Salient Features of Indian Society",
-    "Polity",
-    "Indian Constitution & its features, amendments, provisions and bodies",
-    "Governance",
-    "Social Justice",
-    "International Relations",
-    "Technology",
-    "Economic Development",
-    "Biodiversity",
-    "Environment",
-    "Security",
-    "Disaster Management",
-    "Ethics",
-    "Integrity",
-    "Aptitude"
-  ].map((subject) => ({ subject, topics: ["General"] })),
-  csat: [
-    "Comprehension",
-    "Interpersonal Skills Including Communication Skills",
-    "Logical Reasoning and Analytical Ability",
-    "Decision Making and Problem Solving",
-    "General Mental Ability",
-    "Basic Numeracy",
-    "Data Interpretation",
-    "English Language Comprehension Skills"
-  ].map((subject) => ({ subject, topics: ["General"] })),
-  sociology_1: [
-    {
-      subject: "Sociology - The Discipline",
-      topics: [
-        "Modernity and social changes in Europe and emergence of Sociology",
-        "Scope of the subject and comparison with other social sciences",
-        "Sociology and common sense"
-      ]
-    },
-    {
-      subject: "Sociology as Science",
-      topics: [
-        "Science, scientific method, and critique",
-        "Major theoretical strands of research methodology",
-        "Positivism and its critique",
-        "Fact value and objectivity",
-        "Non-positivist methodologies"
-      ]
-    },
-    {
-      subject: "Research Methods and Analysis",
-      topics: [
-        "Qualitative and quantitative methods",
-        "Techniques of data collection",
-        "Variables, sampling, hypothesis, reliability, and validity"
-      ]
-    },
-    {
-      subject: "Sociological Thinkers",
-      topics: [
-        "Karl Marx - historical materialism, mode of production, alienation, class struggle",
-        "Emile Durkheim - division of labour, social fact, suicide, religion and society",
-        "Max Weber - social action, ideal types, authority, bureaucracy, protestant ethics",
-        "Talcott Parsons - social system, pattern variables",
-        "Robert K. Merton - latent/manifest functions, deviance, reference groups",
-        "Mead - self and identity"
-      ]
-    },
-    {
-      subject: "Stratification and Mobility",
-      topics: [
-        "Equality, inequality, hierarchy, exclusion, poverty, deprivation",
-        "Structural functionalist, Marxist and Weberian theories",
-        "Class, status groups, gender, ethnicity, race",
-        "Open/closed systems and types/sources/causes of mobility"
-      ]
-    },
-    {
-      subject: "Works and Economic Life",
-      topics: [
-        "Work in slave, feudal and industrial capitalist societies",
-        "Formal and informal organisation of work",
-        "Labour and society"
-      ]
-    },
-    {
-      subject: "Politics and Society",
-      topics: [
-        "Sociological theories of power",
-        "Power elite, bureaucracy, pressure groups, political parties",
-        "Nation, state, citizenship, democracy, civil society, ideology",
-        "Protest, agitation, social movements, collective action, revolution"
-      ]
-    },
-    {
-      subject: "Religion and Society",
-      topics: [
-        "Sociological theories of religion",
-        "Animism, monism, pluralism, sects, cults",
-        "Religion and science, secularisation, revivalism, fundamentalism"
-      ]
-    },
-    {
-      subject: "Systems of Kinship",
-      topics: [
-        "Family, household, marriage",
-        "Types and forms of family",
-        "Lineage and descent",
-        "Patriarchy and sexual division of labour",
-        "Contemporary trends"
-      ]
-    },
-    {
-      subject: "Social Change in Modern Society",
-      topics: [
-        "Sociological theories of social change",
-        "Development and dependency",
-        "Agents of social change",
-        "Education and social change",
-        "Science, technology, and social change"
-      ]
-    }
-  ],
-  sociology_2: [
-    {
-      subject: "Perspectives on the Study of Indian Society",
-      topics: [
-        "Indology (G.S. Ghure)",
-        "Structural functionalism (M. N. Srinivas)",
-        "Marxist sociology (A. R. Desai)"
-      ]
-    },
-    {
-      subject: "Impact of Colonial Rule on Indian Society",
-      topics: [
-        "Social background of Indian nationalism",
-        "Modernization of Indian tradition",
-        "Protests and movements during colonial period",
-        "Social reforms"
-      ]
-    },
-    {
-      subject: "Rural and Agrarian Social Structure",
-      topics: [
-        "Idea of Indian village and village studies",
-        "Evolution of land tenure system and land reforms"
-      ]
-    },
-    {
-      subject: "Caste System",
-      topics: [
-        "Perspectives - Ghurye, Srinivas, Dumont, Beteille",
-        "Features of caste system",
-        "Untouchability - forms and perspectives"
-      ]
-    },
-    {
-      subject: "Tribal Communities in India",
-      topics: [
-        "Definitional problems",
-        "Geographical spread",
-        "Colonial policies and tribes",
-        "Integration and autonomy issues"
-      ]
-    },
-    {
-      subject: "Social Classes in India",
-      topics: [
-        "Agrarian class structure",
-        "Industrial class structure",
-        "Middle classes in India"
-      ]
-    },
-    {
-      subject: "Systems of Kinship in India",
-      topics: [
-        "Lineage and descent in India",
-        "Types of kinship systems",
-        "Family and marriage in India",
-        "Household dimensions",
-        "Patriarchy, entitlements, sexual division of labour"
-      ]
-    },
-    {
-      subject: "Religion and Society",
-      topics: [
-        "Religious communities in India",
-        "Problems of religious minorities"
-      ]
-    },
-    {
-      subject: "Visions of Social Change in India",
-      topics: [
-        "Development planning and mixed economy",
-        "Constitution, law and social change",
-        "Education and social change"
-      ]
-    },
-    {
-      subject: "Rural and Agrarian Transformation in India",
-      topics: [
-        "Rural development programmes and cooperatives",
-        "Green revolution and social change",
-        "Changing agricultural production modes",
-        "Rural labour, bondage, migration"
-      ]
-    },
-    {
-      subject: "Industrialization and Urbanisation in India",
-      topics: [
-        "Evolution of modern industry",
-        "Growth of urban settlements",
-        "Working class structure and mobilisation",
-        "Informal sector and child labour",
-        "Slums and urban deprivation"
-      ]
-    },
-    {
-      subject: "Politics and Society",
-      topics: [
-        "Nation, democracy, citizenship",
-        "Political parties, pressure groups, elite",
-        "Regionalism and decentralisation",
-        "Secularization"
-      ]
-    },
-    {
-      subject: "Social Movements in Modern India",
-      topics: [
-        "Peasants and farmers movements",
-        "Womens movement",
-        "Backward classes and Dalit movements",
-        "Environmental movements",
-        "Ethnicity and identity movements"
-      ]
-    },
-    {
-      subject: "Population Dynamics",
-      topics: [
-        "Population size, growth, composition, distribution",
-        "Birth, death, migration",
-        "Population policy and family planning",
-        "Ageing, sex ratios, infant mortality, reproductive health"
-      ]
-    },
-    {
-      subject: "Challenges of Social Transformation",
-      topics: [
-        "Crisis of development, displacement, sustainability",
-        "Poverty, deprivation, inequalities",
-        "Violence against women",
-        "Caste conflicts",
-        "Ethnic conflicts, communalism, revivalism",
-        "Illiteracy and educational disparities"
-      ]
-    }
-  ]
-};
+const getSubjectsForExam = (examType, catalog = {}) => (catalog[examType] || []).map((entry) => entry.subject);
 
-const getSubjectsForExam = (examType) => (EXAM_CATALOG[examType] || []).map((entry) => entry.subject);
-
-const getTopicsForSelection = (examType, subject) => {
-  const found = (EXAM_CATALOG[examType] || []).find((entry) => entry.subject === subject);
+const getTopicsForSelection = (examType, subject, catalog = {}) => {
+  const found = (catalog[examType] || []).find((entry) => entry.subject === subject);
   return found?.topics || [];
 };
+const getExamOptionsFromCatalog = (catalog = {}) =>
+  Object.keys(catalog || {}).map((key) => ({ value: key, label: key.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 const MULTIPART_MIN_PART_BYTES = 5 * 1024 * 1024;
+
+function buildTestsCatalogFromPlan(testPlanRows) {
+  const bySource = new Map();
+  (Array.isArray(testPlanRows) ? testPlanRows : []).forEach((row) => {
+    const source = String(row?.source || "").trim();
+    if (!source) return;
+    const testName = String(row?.test_name || "").trim() || "Test";
+    const count = Math.max(1, Number(row?.number_of_tests || 1));
+    if (!bySource.has(source)) bySource.set(source, []);
+    const list = bySource.get(source);
+    for (let i = 1; i <= count; i += 1) {
+      list.push(`${testName} ${i}`);
+    }
+  });
+  const out = [];
+  [...bySource.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([source, topics]) => {
+      out.push({ subject: source, topics: [...new Set(topics)] });
+    });
+  return out;
+}
 
 function formatTime(value) {
   if (!value) return "";
@@ -379,8 +112,37 @@ function createEmptyMultipartState() {
 }
 
 export default function RecorderPage() {
-  const defaultSubject = getSubjectsForExam("prelims")[0] || "";
-  const defaultTopic = getTopicsForSelection("prelims", defaultSubject)[0] || "";
+  const defaultSubject = "";
+  const defaultTopic = "";
+  const [missionSelector, setMissionSelector] = useState({ exam_options: [], catalog: {}, plan: {} });
+  const [missionSelectorLoading, setMissionSelectorLoading] = useState(Boolean(API_BASE_URL));
+  const missionTestPlan = useMemo(
+    () => (Array.isArray(missionSelector?.plan?.tests) ? missionSelector.plan.tests : []),
+    [missionSelector?.plan?.tests],
+  );
+  const activeCatalog = useMemo(() => {
+    const base = Object.keys(missionSelector.catalog || {}).length ? missionSelector.catalog : {};
+    const testsCatalog = buildTestsCatalogFromPlan(missionTestPlan);
+    if (!testsCatalog.length) return base;
+    return { ...base, tests: testsCatalog };
+  }, [missionSelector.catalog, missionTestPlan]);
+  const activeExamOptions = useMemo(
+    () => (
+      (() => {
+        const fromMission = Array.isArray(missionSelector.exam_options) ? [...missionSelector.exam_options] : [];
+        const hasTests = fromMission.some((opt) => String(opt?.value || "") === "tests");
+        const testsAvailable = Array.isArray(activeCatalog.tests) && activeCatalog.tests.length > 0;
+        if (fromMission.length) {
+          if (testsAvailable && !hasTests) {
+            fromMission.push({ value: "tests", label: "Tests" });
+          }
+          return fromMission;
+        }
+        return getExamOptionsFromCatalog(activeCatalog);
+      })()
+    ),
+    [missionSelector.exam_options, activeCatalog],
+  );
   const [sessionForm, setSessionForm] = useState({
     user_id: "kapil",
     exam_type: "prelims",
@@ -448,6 +210,25 @@ export default function RecorderPage() {
   const applyGlobalUser = async (nextUser) => {
     const user = nextUser === "divya" ? "divya" : "kapil";
     setSessionForm((p) => ({ ...p, user_id: user }));
+    if (API_BASE_URL) {
+      setMissionSelectorLoading(true);
+      try {
+        const optionsRes = await fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(user)}`);
+        if (optionsRes.ok) {
+          const optionsData = await optionsRes.json();
+          setMissionSelector({ exam_options: optionsData.exam_options || [], catalog: optionsData.catalog || {}, plan: optionsData.plan || {} });
+        } else {
+          setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
+        }
+      } catch (_) {
+        setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
+      } finally {
+        setMissionSelectorLoading(false);
+      }
+    } else {
+      setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
+      setMissionSelectorLoading(false);
+    }
     await fetchSessions(user);
   };
 
@@ -476,6 +257,24 @@ export default function RecorderPage() {
   }, []);
 
   useEffect(() => {
+    if (!activeExamOptions.length) return;
+    const validExamValues = new Set(activeExamOptions.map((o) => o.value));
+    setSessionForm((prev) => {
+      const nextExam = validExamValues.has(prev.exam_type) ? prev.exam_type : activeExamOptions[0].value;
+      const subjects = getSubjectsForExam(nextExam, activeCatalog);
+      const nextSubject = subjects.includes(prev.subject) ? prev.subject : (subjects[0] || OTHER_VALUE);
+      const topics = nextSubject === OTHER_VALUE ? [] : getTopicsForSelection(nextExam, nextSubject, activeCatalog);
+      const nextTopic = topics.includes(prev.topic) ? prev.topic : (topics[0] || OTHER_VALUE);
+      if (nextExam === prev.exam_type && nextSubject === prev.subject && nextTopic === prev.topic) {
+        return prev;
+      }
+      return { ...prev, exam_type: nextExam, subject: nextSubject, topic: nextTopic };
+    });
+  }, [activeExamOptions, activeCatalog]);
+
+  useEffect(() => {
+    const hasPending = pendingFinalizeModes.length > 0;
+    if (!hasPending) return;
     const currentStatus = selectedSession?.status || "created";
     const hasActiveSession = ["started", "resumed", "paused"].includes(currentStatus);
     const hasPendingFinalize = pendingFinalizeModes.length > 0;
@@ -651,6 +450,28 @@ export default function RecorderPage() {
     render();
   };
 
+  const buildSessionSubjectTopic = () => {
+    const subject = (selectedSubjectValue || "").trim();
+    const topic = (selectedTopicValue || "").trim();
+    return { subject, topic };
+  };
+
+  const buildSessionTestRef = () => {
+    if (effectiveExamType !== "tests") return { test_source: "", test_name: "", test_number: "" };
+    const source = (selectedSubjectValue || "").trim();
+    const topic = (selectedTopicValue || "").trim();
+    if (!source || !topic) return { test_source: "", test_name: "", test_number: "" };
+
+    const match = topic.match(/^(.*?)(?:\s+(\d+))?$/);
+    const maybeName = (match?.[1] || topic).trim();
+    const maybeNumber = (match?.[2] || "").trim();
+    return {
+      test_source: source,
+      test_name: maybeName || topic,
+      test_number: maybeNumber,
+    };
+  };
+
   const fetchSessions = async (userValue = sessionForm.user_id) => {
     if (!API_BASE_URL || !userValue) return;
     setSessionLoading(true);
@@ -681,14 +502,14 @@ export default function RecorderPage() {
       return;
     }
     setSessionError("");
-    const subject = (selectedSubjectValue || "").trim();
-    const topic = (selectedTopicValue || "").trim();
+    const { subject, topic } = buildSessionSubjectTopic();
     const notes = sessionForm.notes.trim();
     if (!subject || !topic) {
       setSessionError("Subject and topic are required.");
       return;
     }
     try {
+      const testRef = buildSessionTestRef();
       const payload = {
         user_id: sessionForm.user_id,
         subject,
@@ -696,6 +517,7 @@ export default function RecorderPage() {
         session_type: sessionForm.session_type,
         recorder_type: sessionForm.recorder_type,
         notes,
+        ...testRef,
       };
       const res = await fetch(`${API_BASE_URL}/sessions`, {
         method: "POST",
@@ -1522,8 +1344,7 @@ export default function RecorderPage() {
 
   const createExplainerSessionWithUploads = async () => {
     if (!API_BASE_URL) return;
-    const subject = (selectedSubjectValue || "").trim();
-    const topic = (selectedTopicValue || "").trim();
+    const { subject, topic } = buildSessionSubjectTopic();
     const notes = sessionForm.notes.trim();
     if (!subject || !topic) {
       setSessionError("Subject and topic are required.");
@@ -1542,6 +1363,7 @@ export default function RecorderPage() {
     try {
       setExplainerDoneLoading(true);
       setSessionError("");
+      const testRef = buildSessionTestRef();
       const payload = {
         user_id: sessionForm.user_id,
         subject,
@@ -1549,6 +1371,7 @@ export default function RecorderPage() {
         session_type: sessionForm.session_type,
         recorder_type: "pdf_explainer",
         notes,
+        ...testRef,
       };
       const createRes = await fetch(`${API_BASE_URL}/sessions`, {
         method: "POST",
@@ -1562,7 +1385,6 @@ export default function RecorderPage() {
       const createData = await createRes.json();
       const sessionId = createData.session?._id;
       if (!sessionId) throw new Error("Session id missing in create response");
-
       await uploadMediaForSession(sessionId, "attachment", uploadFiles.explainerAttachment, uploadFiles.explainerAttachment.name);
       if (hasUploadAudio) {
         await uploadMediaForSession(sessionId, "audio", uploadFiles.explainerAudio, uploadFiles.explainerAudio.name);
@@ -1624,9 +1446,9 @@ export default function RecorderPage() {
     : Boolean(explainerRecordedBlob);
   const explainerDoneReady = explainerAttachmentReady && explainerAudioReady;
   const effectiveExamType = sessionForm.exam_type === OTHER_VALUE ? sessionForm.exam_type_other.trim().toLowerCase() : sessionForm.exam_type;
-  const currentSubjectOptions = effectiveExamType ? getSubjectsForExam(effectiveExamType) : [];
+  const currentSubjectOptions = effectiveExamType ? getSubjectsForExam(effectiveExamType, activeCatalog) : [];
   const effectiveSubject = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other.trim() : sessionForm.subject;
-  const currentTopicOptions = effectiveExamType && effectiveSubject ? getTopicsForSelection(effectiveExamType, effectiveSubject) : [];
+  const currentTopicOptions = effectiveExamType && effectiveSubject ? getTopicsForSelection(effectiveExamType, effectiveSubject, activeCatalog) : [];
   const selectedSubjectValue = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other : sessionForm.subject;
   const selectedTopicValue = sessionForm.topic === OTHER_VALUE ? sessionForm.topic_other : sessionForm.topic;
   // Keep list order stable as returned by backend (created_at desc),
@@ -1649,6 +1471,12 @@ export default function RecorderPage() {
           <p className="api-state warn">Backend URL needed for session recorder APIs.</p>
         ) : (
           <>
+            {missionSelectorLoading ? (
+              <p className="day-state">Loading mission options...</p>
+            ) : activeExamOptions.length === 0 ? (
+              <p className="api-state warn">Mission options not available for this user yet.</p>
+            ) : (
+              <>
             <div className="session-form-grid">
               <select
                 className="task-select"
@@ -1656,10 +1484,10 @@ export default function RecorderPage() {
                 onChange={(e) => {
                   const nextExam = e.target.value;
                   const nextExamForCatalog = nextExam === OTHER_VALUE ? "" : nextExam;
-                  const nextSubjects = nextExamForCatalog ? getSubjectsForExam(nextExamForCatalog) : [];
+                  const nextSubjects = nextExamForCatalog ? getSubjectsForExam(nextExamForCatalog, activeCatalog) : [];
                   const nextSubject = nextExam === OTHER_VALUE ? OTHER_VALUE : (nextSubjects[0] || OTHER_VALUE);
                   const nextTopics = nextExamForCatalog && nextSubject !== OTHER_VALUE
-                    ? getTopicsForSelection(nextExamForCatalog, nextSubject)
+                    ? getTopicsForSelection(nextExamForCatalog, nextSubject, activeCatalog)
                     : [];
                   setSessionForm((p) => {
                     const nextState = {
@@ -1681,11 +1509,9 @@ export default function RecorderPage() {
                   });
                 }}
               >
-                <option value="prelims">Prelims</option>
-                <option value="mains">Mains</option>
-                <option value="csat">CSAT</option>
-                <option value="sociology_1">Sociology 1</option>
-                <option value="sociology_2">Sociology 2</option>
+                {activeExamOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
                 <option value={OTHER_VALUE}>Other</option>
               </select>
               {sessionForm.exam_type === OTHER_VALUE ? (
@@ -1703,7 +1529,7 @@ export default function RecorderPage() {
                   const nextSubject = e.target.value;
                   const nextTopics = nextSubject === OTHER_VALUE
                     ? []
-                    : getTopicsForSelection(effectiveExamType, nextSubject);
+                    : getTopicsForSelection(effectiveExamType, nextSubject, activeCatalog);
                   setSessionForm((p) => {
                     const nextState = { ...p, subject: nextSubject, topic: nextTopics[0] || OTHER_VALUE };
                     if (nextSubject !== OTHER_VALUE) {
@@ -1750,6 +1576,7 @@ export default function RecorderPage() {
               <select className="task-select" value={sessionForm.session_type} onChange={(e) => setSessionForm((p) => ({ ...p, session_type: e.target.value }))}>
                 <option value="study">Study</option>
                 <option value="revision">Revision</option>
+                <option value="analysis">Analysis</option>
               </select>
               <select className="task-select" value={sessionForm.recorder_type} onChange={(e) => setSessionForm((p) => ({ ...p, recorder_type: e.target.value }))}>
                 {RECORDER_TYPES.map((opt) => (
@@ -1877,6 +1704,8 @@ export default function RecorderPage() {
               )}
               <button className="btn-day secondary" onClick={() => fetchSessions(sessionForm.user_id)}>Load Sessions</button>
             </div>
+              </>
+            )}
             {sessionError ? <p className="api-state error">{sessionError}</p> : null}
             {sessionLoading ? <p className="day-state">Loading sessions...</p> : null}
 

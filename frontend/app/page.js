@@ -38,11 +38,10 @@ const ACTION_LABELS = {
   test_completed: "Test Completed"
 };
 
-const TEST_SOURCE_OPTIONS = ["sfg1", "sfg2", "pmp", "cava"];
 const TEST_STAGE_OPTIONS = [
   { value: "test_given", label: "Test Given" },
+  { value: "analysis_done", label: "Analysis Done" },
   { value: "revision", label: "Revision" },
-  { value: "second_revision", label: "Second Revision" },
 ];
 const TICKET_ORG_OPTIONS = ["uchhal", "elucidata", "divya"];
 const OTHER_VALUE = "__other__";
@@ -139,11 +138,13 @@ const EXAM_CATALOG = {
   ]
 };
 
-const getSubjectsForExam = (examType) => (EXAM_CATALOG[examType] || []).map((entry) => entry.subject);
-const getTopicsForSelection = (examType, subject) => {
-  const found = (EXAM_CATALOG[examType] || []).find((entry) => entry.subject === subject);
+const getSubjectsForExam = (examType, catalog = {}) => (catalog[examType] || []).map((entry) => entry.subject);
+const getTopicsForSelection = (examType, subject, catalog = {}) => {
+  const found = (catalog[examType] || []).find((entry) => entry.subject === subject);
   return found?.topics || [];
 };
+const getExamOptionsFromCatalog = (catalog = {}) =>
+  Object.keys(catalog || {}).map((key) => ({ value: key, label: key.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 const SESSION_MEDIA_TYPES = ["audio", "video", "screen"];
 
 const INITIAL_PLAYERS = [
@@ -206,29 +207,46 @@ function extraKindClass(value) {
   return `extras-kind-${normalizeExtraKind(value)}`;
 }
 
+function toTitle(text) {
+  return String(text || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function HomePage() {
-  const defaultSubject = getSubjectsForExam("prelims")[0] || "";
-  const defaultTopic = getTopicsForSelection("prelims", defaultSubject)[0] || "";
+  const [missionSelector, setMissionSelector] = useState({ exam_options: [], catalog: {} });
+  const [missionSelectorLoading, setMissionSelectorLoading] = useState(Boolean(API_BASE_URL));
+  const hasMissionCatalog = Object.keys(missionSelector.catalog || {}).length > 0;
+  const activeCatalog = hasMissionCatalog ? missionSelector.catalog : {};
+  const activeExamOptions = hasMissionCatalog ? (missionSelector.exam_options || []) : [];
+  const missionTestPlan = Array.isArray(missionSelector?.plan?.tests) ? missionSelector.plan.tests : [];
+  const missionTestSources = [...new Set(missionTestPlan.map((row) => String(row?.source || "").trim()).filter(Boolean))];
+  const activeTestSources = missionTestSources;
+  const defaultExam = activeExamOptions[0]?.value || "";
+  const defaultSubject = getSubjectsForExam(defaultExam, activeCatalog)[0] || "";
+  const defaultTopic = getTopicsForSelection(defaultExam, defaultSubject, activeCatalog)[0] || "";
+  const defaultTestSource = activeTestSources[0] || "";
   const [players, setPlayers] = useState(INITIAL_PLAYERS);
   const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState("");
   const [taskModal, setTaskModal] = useState({ open: false, playerId: "", actionType: "" });
   const [taskComment, setTaskComment] = useState("");
   const [taskMeta, setTaskMeta] = useState({
-    exam_type: "prelims",
+    exam_type: defaultExam,
     subject: defaultSubject,
     topic: defaultTopic,
     exam_type_other: "",
     subject_other: "",
     topic_other: "",
+    work_type: "study",
     note: ""
   });
   const [taskTestMeta, setTaskTestMeta] = useState({
-    exam_type: "prelims",
+    exam_type: defaultExam,
     exam_type_other: "",
-    source: TEST_SOURCE_OPTIONS[0],
+    source: defaultTestSource,
     source_other: "",
-    test_number: "",
+    test_number: "1",
     stage: "test_given",
     note: "",
   });
@@ -279,6 +297,14 @@ export default function HomePage() {
   const chunkRefs = useRef({ audio: [], video: [], screen: [] });
   const extrasSaveTimerRef = useRef(null);
   const extrasHydratingRef = useRef({ kapil: false, divya: false });
+
+  const getMissionTestRowsBySource = (sourceValue) =>
+    missionTestPlan.filter((row) => String(row?.source || "").trim() === String(sourceValue || "").trim());
+  const getMissionTestNumberOptions = (sourceValue) => {
+    const rows = getMissionTestRowsBySource(sourceValue);
+    const maxCount = rows.reduce((mx, row) => Math.max(mx, Number(row?.number_of_tests || 1)), 1);
+    return Array.from({ length: maxCount }, (_, idx) => String(idx + 1));
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -362,10 +388,43 @@ export default function HomePage() {
       const nextUser = e?.detail?.userId === "divya" ? "divya" : "kapil";
       setSelectedUserId(nextUser);
       setSessionForm((prev) => ({ ...prev, user_id: nextUser }));
+      if (API_BASE_URL) {
+        setMissionSelectorLoading(true);
+        fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(nextUser)}`)
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Mission options failed"))))
+          .then((data) => setMissionSelector({ exam_options: data.exam_options || [], catalog: data.catalog || {}, plan: data.plan || {} }))
+          .catch(() => setMissionSelector({ exam_options: [], catalog: {}, plan: {} }))
+          .finally(() => setMissionSelectorLoading(false));
+      }
     };
     window.addEventListener("global-user-change", onGlobalUser);
     return () => window.removeEventListener("global-user-change", onGlobalUser);
   }, [API_BASE_URL]);
+
+  useEffect(() => {
+    if (!API_BASE_URL || !selectedUserId) return;
+    setMissionSelectorLoading(true);
+    fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(selectedUserId)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Mission options failed"))))
+      .then((data) => setMissionSelector({ exam_options: data.exam_options || [], catalog: data.catalog || {}, plan: data.plan || {} }))
+      .catch(() => setMissionSelector({ exam_options: [], catalog: {}, plan: {} }))
+      .finally(() => setMissionSelectorLoading(false));
+  }, [API_BASE_URL, selectedUserId]);
+
+  useEffect(() => {
+    if (!(taskModal.open && (taskModal.actionType === "new_class" || taskModal.actionType === "revision"))) return;
+    if (taskMeta.exam_type) return;
+    if (!activeExamOptions.length) return;
+    const firstExam = activeExamOptions[0]?.value || "";
+    const firstSubject = getSubjectsForExam(firstExam, activeCatalog)[0] || "";
+    const firstTopic = getTopicsForSelection(firstExam, firstSubject, activeCatalog)[0] || "";
+    setTaskMeta((prev) => ({
+      ...prev,
+      exam_type: firstExam,
+      subject: firstSubject,
+      topic: firstTopic,
+    }));
+  }, [taskModal.open, taskModal.actionType, taskMeta.exam_type, activeExamOptions, activeCatalog]);
 
   useEffect(() => {
     const loadExtrasForUser = async () => {
@@ -553,27 +612,56 @@ export default function HomePage() {
     return true;
   };
 
-  const openTaskModal = (playerId, actionType) => {
+  const openTaskModal = async (playerId, actionType) => {
     if (!isEditable) return;
     setTaskModal({ open: true, playerId, actionType });
     setTaskComment("");
-    const firstSubject = getSubjectsForExam("prelims")[0] || "";
-    const firstTopic = getTopicsForSelection("prelims", firstSubject)[0] || "";
+    let nextExamOptions = activeExamOptions;
+    let nextCatalog = activeCatalog;
+    let nextPlan = missionSelector?.plan || {};
+
+    if (API_BASE_URL && (actionType === "new_class" || actionType === "revision" || actionType === "test_completed")) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(playerId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          nextExamOptions = Array.isArray(data?.exam_options) ? data.exam_options : [];
+          nextCatalog = data?.catalog && typeof data.catalog === "object" ? data.catalog : {};
+          nextPlan = data?.plan && typeof data.plan === "object" ? data.plan : {};
+          setMissionSelector({ exam_options: nextExamOptions, catalog: nextCatalog, plan: nextPlan });
+        }
+      } catch (_) {
+        // Keep existing selector state if refresh fails.
+      }
+    }
+
+    const firstExam = nextExamOptions[0]?.value || "";
+    const firstSubject = getSubjectsForExam(firstExam, nextCatalog)[0] || "";
+    const firstTopic = getTopicsForSelection(firstExam, firstSubject, nextCatalog)[0] || "";
+    const nextMissionTests = Array.isArray(nextPlan?.tests) ? nextPlan.tests : missionTestPlan;
+    const nextMissionSources = [...new Set(nextMissionTests.map((row) => String(row?.source || "").trim()).filter(Boolean))];
+    const nextActiveSources = nextMissionSources.length ? nextMissionSources : activeTestSources;
+    const defaultSource = nextActiveSources[0] || "";
+    const sourceRows = nextMissionTests.filter((row) => String(row?.source || "").trim() === defaultSource);
+    const maxCount = sourceRows.reduce((mx, row) => Math.max(mx, Number(row?.number_of_tests || 1)), 1);
+    const defaultTestNumber = String(maxCount > 0 ? 1 : 1);
+
     setTaskMeta({
-      exam_type: "prelims",
+      exam_type: firstExam,
       subject: firstSubject,
       topic: firstTopic,
       exam_type_other: "",
       subject_other: "",
       topic_other: "",
+      work_type: "study",
       note: ""
     });
     setTaskTestMeta({
-      exam_type: "prelims",
+      exam_type: firstExam,
       exam_type_other: "",
-      source: TEST_SOURCE_OPTIONS[0],
+      source: defaultSource,
       source_other: "",
-      test_number: "",
+      test_number: defaultTestNumber,
       stage: "test_given",
       note: "",
     });
@@ -592,8 +680,11 @@ export default function HomePage() {
   const submitTaskModal = async () => {
     const isTestAction = taskModal.actionType === "test_completed";
     const isClassOrRevision = taskModal.actionType === "new_class" || taskModal.actionType === "revision";
+    const isNewClassAction = taskModal.actionType === "new_class";
     const isTicketAction = taskModal.actionType === "ticket_resolved";
     const effectiveExamType = taskMeta.exam_type === OTHER_VALUE ? taskMeta.exam_type_other.trim().toLowerCase() : taskMeta.exam_type;
+    const examLabelMap = Object.fromEntries(activeExamOptions.map((o) => [o.value, o.label]));
+    const effectiveExamLabel = examLabelMap[effectiveExamType] || effectiveExamType;
     const effectiveSubject = taskMeta.subject === OTHER_VALUE ? taskMeta.subject_other.trim() : taskMeta.subject;
     const effectiveTopic = taskMeta.topic === OTHER_VALUE ? taskMeta.topic_other.trim() : taskMeta.topic;
     const testType = isTestAction ? "Test Completed" : "";
@@ -601,16 +692,21 @@ export default function HomePage() {
     if (isClassOrRevision) {
       if (!effectiveExamType || !effectiveSubject || !effectiveTopic) return;
       const note = taskMeta.note.trim();
-      detail = `Exam: ${effectiveExamType} | Subject: ${effectiveSubject} | Topic: ${effectiveTopic}${note ? ` | Note: ${note}` : ""}`;
+      if (isNewClassAction) {
+        detail = `Exam: ${effectiveExamLabel} | Subject: ${effectiveSubject} | Topic: ${effectiveTopic} | Work: ${taskMeta.work_type || "study"}${note ? ` | Note: ${note}` : ""}`;
+      } else {
+        detail = `Exam: ${effectiveExamLabel} | Subject: ${effectiveSubject} | Topic: ${effectiveTopic}${note ? ` | Note: ${note}` : ""}`;
+      }
     }
     if (isTestAction) {
       const exam = taskTestMeta.exam_type === OTHER_VALUE ? taskTestMeta.exam_type_other.trim().toLowerCase() : taskTestMeta.exam_type;
+      const examLabel = examLabelMap[exam] || exam;
       const source = taskTestMeta.source === OTHER_VALUE ? taskTestMeta.source_other.trim().toLowerCase() : taskTestMeta.source;
       const testNumber = taskTestMeta.test_number.trim();
       const stage = taskTestMeta.stage;
       const note = taskTestMeta.note.trim();
-      if (!exam || !source || !testNumber || !stage || !note) return;
-      detail = `Exam: ${exam} | Source: ${source} | Test Number: ${testNumber} | Stage: ${stage} | Note: ${note}`;
+      if (!exam || !source || !testNumber || !stage) return;
+      detail = `Exam: ${examLabel} | Source: ${source} | Test Number: ${testNumber} | Stage: ${stage}${note ? ` | Note: ${note}` : ""}`;
     }
     if (isTicketAction) {
       const org = taskTicketMeta.org === OTHER_VALUE ? taskTicketMeta.org_other.trim().toLowerCase() : taskTicketMeta.org;
@@ -1235,11 +1331,9 @@ export default function HomePage() {
                       }));
                     }}
                   >
-                    <option value="prelims">Prelims</option>
-                    <option value="mains">Mains</option>
-                    <option value="csat">CSAT</option>
-                    <option value="sociology_1">Sociology 1</option>
-                    <option value="sociology_2">Sociology 2</option>
+                    {activeExamOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                     <option value={OTHER_VALUE}>Other</option>
                   </select>
                   {taskTestMeta.exam_type === OTHER_VALUE ? (
@@ -1255,11 +1349,17 @@ export default function HomePage() {
                     value={taskTestMeta.source}
                     onChange={(e) => {
                       const next = e.target.value;
-                      setTaskTestMeta((p) => ({ ...p, source: next, source_other: next === OTHER_VALUE ? p.source_other : "" }));
+                      const nextNumbers = getMissionTestNumberOptions(next);
+                      setTaskTestMeta((p) => ({
+                        ...p,
+                        source: next,
+                        source_other: next === OTHER_VALUE ? p.source_other : "",
+                        test_number: nextNumbers[0] || "1",
+                      }));
                     }}
                   >
-                    {TEST_SOURCE_OPTIONS.map((src) => (
-                      <option key={src} value={src}>{src.toUpperCase()}</option>
+                    {activeTestSources.map((src) => (
+                      <option key={src} value={src}>{toTitle(src)}</option>
                     ))}
                     <option value={OTHER_VALUE}>Other</option>
                   </select>
@@ -1271,14 +1371,15 @@ export default function HomePage() {
                       onChange={(e) => setTaskTestMeta((p) => ({ ...p, source_other: e.target.value }))}
                     />
                   ) : null}
-                  <input
+                  <select
                     className="task-select"
-                    type="number"
-                    min="1"
-                    placeholder="Test number"
                     value={taskTestMeta.test_number}
                     onChange={(e) => setTaskTestMeta((p) => ({ ...p, test_number: e.target.value }))}
-                  />
+                  >
+                    {getMissionTestNumberOptions(taskTestMeta.source).map((num) => (
+                      <option key={num} value={num}>{num}</option>
+                    ))}
+                  </select>
                   <select
                     className="task-select"
                     value={taskTestMeta.stage}
@@ -1298,6 +1399,15 @@ export default function HomePage() {
               </>
             ) : taskModal.actionType === "new_class" || taskModal.actionType === "revision" ? (
               <>
+                {missionSelectorLoading ? (
+                  <p className="day-state" style={{ marginTop: 0 }}>
+                    Loading mission options...
+                  </p>
+                ) : !hasMissionCatalog ? (
+                  <p className="api-state warn" style={{ marginTop: 0 }}>
+                    No mission course data found for this user. Please set mission first.
+                  </p>
+                ) : null}
                 <div className="session-form-grid">
                   <select
                     className="task-select"
@@ -1305,10 +1415,10 @@ export default function HomePage() {
                     onChange={(e) => {
                       const nextExam = e.target.value;
                       const nextExamForCatalog = nextExam === OTHER_VALUE ? "" : nextExam;
-                      const nextSubjects = nextExamForCatalog ? getSubjectsForExam(nextExamForCatalog) : [];
+                      const nextSubjects = nextExamForCatalog ? getSubjectsForExam(nextExamForCatalog, activeCatalog) : [];
                       const nextSubject = nextExam === OTHER_VALUE ? OTHER_VALUE : (nextSubjects[0] || OTHER_VALUE);
                       const nextTopics = nextExamForCatalog && nextSubject !== OTHER_VALUE
-                        ? getTopicsForSelection(nextExamForCatalog, nextSubject)
+                        ? getTopicsForSelection(nextExamForCatalog, nextSubject, activeCatalog)
                         : [];
                       setTaskMeta((p) => ({
                         ...p,
@@ -1321,11 +1431,11 @@ export default function HomePage() {
                       }));
                     }}
                   >
-                    <option value="prelims">Prelims</option>
-                    <option value="mains">Mains</option>
-                    <option value="csat">CSAT</option>
-                    <option value="sociology_1">Sociology 1</option>
-                    <option value="sociology_2">Sociology 2</option>
+                    {activeExamOptions.length === 0 ? (
+                      <option value="">No mission course</option>
+                    ) : activeExamOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                     <option value={OTHER_VALUE}>Other</option>
                   </select>
                   {taskMeta.exam_type === OTHER_VALUE ? (
@@ -1342,7 +1452,7 @@ export default function HomePage() {
                     onChange={(e) => {
                       const nextSubject = e.target.value;
                       const effectiveExamType = taskMeta.exam_type === OTHER_VALUE ? taskMeta.exam_type_other.trim().toLowerCase() : taskMeta.exam_type;
-                      const nextTopics = nextSubject === OTHER_VALUE ? [] : getTopicsForSelection(effectiveExamType, nextSubject);
+                      const nextTopics = nextSubject === OTHER_VALUE ? [] : getTopicsForSelection(effectiveExamType, nextSubject, activeCatalog);
                       setTaskMeta((p) => ({
                         ...p,
                         subject: nextSubject,
@@ -1352,9 +1462,12 @@ export default function HomePage() {
                       }));
                     }}
                   >
-                    {(taskMeta.exam_type === OTHER_VALUE ? [] : getSubjectsForExam(taskMeta.exam_type)).map((subj) => (
+                    {(taskMeta.exam_type === OTHER_VALUE ? [] : getSubjectsForExam(taskMeta.exam_type, activeCatalog)).map((subj) => (
                       <option key={subj} value={subj}>{subj}</option>
                     ))}
+                    {taskMeta.exam_type !== OTHER_VALUE && getSubjectsForExam(taskMeta.exam_type, activeCatalog).length === 0 ? (
+                      <option value="">No subject</option>
+                    ) : null}
                     <option value={OTHER_VALUE}>Other</option>
                   </select>
                   {taskMeta.subject === OTHER_VALUE ? (
@@ -1372,9 +1485,12 @@ export default function HomePage() {
                   >
                     {(taskMeta.exam_type === OTHER_VALUE || taskMeta.subject === OTHER_VALUE
                       ? []
-                      : getTopicsForSelection(taskMeta.exam_type, taskMeta.subject)).map((topic) => (
+                      : getTopicsForSelection(taskMeta.exam_type, taskMeta.subject, activeCatalog)).map((topic) => (
                       <option key={topic} value={topic}>{topic}</option>
                     ))}
+                    {taskMeta.exam_type !== OTHER_VALUE && taskMeta.subject !== OTHER_VALUE && getTopicsForSelection(taskMeta.exam_type, taskMeta.subject, activeCatalog).length === 0 ? (
+                      <option value="">No topic</option>
+                    ) : null}
                     <option value={OTHER_VALUE}>Other</option>
                   </select>
                   {taskMeta.topic === OTHER_VALUE ? (
@@ -1385,10 +1501,20 @@ export default function HomePage() {
                       onChange={(e) => setTaskMeta((p) => ({ ...p, topic_other: e.target.value }))}
                     />
                   ) : null}
+                  {taskModal.actionType === "new_class" ? (
+                    <select
+                      className="task-select"
+                      value={taskMeta.work_type}
+                      onChange={(e) => setTaskMeta((p) => ({ ...p, work_type: e.target.value }))}
+                    >
+                      <option value="study">Class Video Watched</option>
+                      <option value="notes">Notes Completed</option>
+                    </select>
+                  ) : null}
                 </div>
                 <textarea
                   className="task-textarea"
-                  placeholder="Add note (optional)"
+                  placeholder="Add comment (optional)"
                   value={taskMeta.note}
                   onChange={(e) => setTaskMeta((p) => ({ ...p, note: e.target.value }))}
                 />
@@ -1444,8 +1570,7 @@ export default function HomePage() {
                       (taskTestMeta.exam_type === OTHER_VALUE ? taskTestMeta.exam_type_other.trim() : taskTestMeta.exam_type) &&
                       (taskTestMeta.source === OTHER_VALUE ? taskTestMeta.source_other.trim() : taskTestMeta.source) &&
                       taskTestMeta.test_number.trim() &&
-                      taskTestMeta.stage &&
-                      taskTestMeta.note.trim()
+                      taskTestMeta.stage
                     )
                     : (taskModal.actionType === "new_class" || taskModal.actionType === "revision")
                       ? !(

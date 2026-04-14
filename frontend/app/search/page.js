@@ -15,13 +15,6 @@ const COURSE_OPTIONS = [
 ];
 
 export default function PdfSearchPage() {
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [file, setFile] = useState(null);
-  const [uploadCourse, setUploadCourse] = useState(COURSE_OPTIONS[0].value);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState("");
-  const [previewUrl, setPreviewUrl] = useState("");
-
   const [query, setQuery] = useState("");
   const [searchCourse, setSearchCourse] = useState("");
   const [searching, setSearching] = useState(false);
@@ -31,20 +24,6 @@ export default function PdfSearchPage() {
   const [viewerInstanceKey, setViewerInstanceKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const viewerWrapRef = useRef(null);
-
-  const canUpload = Boolean(API_BASE_URL && file && !uploading);
-
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl("");
-      return;
-    }
-    const nextUrl = URL.createObjectURL(file);
-    setPreviewUrl(nextUrl);
-    return () => {
-      URL.revokeObjectURL(nextUrl);
-    };
-  }, [file]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -57,66 +36,10 @@ export default function PdfSearchPage() {
   }, []);
 
   useEffect(() => {
-    if (!uploadMessage) return;
-    const id = setTimeout(() => setUploadMessage(""), NOTICE_TTL_MS);
-    return () => clearTimeout(id);
-  }, [uploadMessage]);
-
-  useEffect(() => {
     if (!searchError) return;
     const id = setTimeout(() => setSearchError(""), NOTICE_TTL_MS);
     return () => clearTimeout(id);
   }, [searchError]);
-
-  const handleUpload = async () => {
-    if (!API_BASE_URL || !file) return;
-    setUploading(true);
-    setUploadMessage("");
-    setSearchError("");
-    try {
-      const presignRes = await fetch(`${API_BASE_URL}/pdf-search/presign-upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          file_name: file.name,
-          content_type: file.type || "application/pdf",
-          course: uploadCourse,
-        }),
-      });
-      if (!presignRes.ok) {
-        const txt = await presignRes.text();
-        throw new Error(`Presign failed: ${presignRes.status} ${txt}`);
-      }
-      const presign = await presignRes.json();
-
-      const putRes = await fetch(presign.upload_url, {
-        method: "PUT",
-        headers: { "Content-Type": "application/pdf" },
-        body: file,
-      });
-      if (!putRes.ok) {
-        throw new Error(`PDF upload failed: ${putRes.status}`);
-      }
-
-      const indexRes = await fetch(`${API_BASE_URL}/pdf-search/index`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ doc_id: presign.doc_id }),
-      });
-      if (!indexRes.ok) {
-        const txt = await indexRes.text();
-        throw new Error(`Indexing failed: ${indexRes.status} ${txt}`);
-      }
-      const indexData = await indexRes.json();
-      setUploadMessage(`Uploaded and indexed: ${file.name} (${indexData.page_count || 0} pages)`);
-      setFile(null);
-      setShowUploadModal(false);
-    } catch (err) {
-      setUploadMessage(`Error: ${String(err.message || err)}`);
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const runSearch = async () => {
     if (!API_BASE_URL) return;
@@ -178,22 +101,16 @@ export default function PdfSearchPage() {
       <div className="bg-orb orb-2" />
 
       <header className="hero">
-        <div className="top-right-tools">
-          <button className="btn-day" onClick={() => setShowUploadModal(true)}>
-            Upload PDF
-          </button>
-        </div>
         <MainMenu active="search" />
         <ResourceInternalMenu active="search" />
         <h1>Knowledge Finder</h1>
-        <p className="subtext">Upload PDFs, search keywords like "pseudo force", and open directly on matched page.</p>
+        <p className="subtext">Search indexed PDFs and open directly on matched page.</p>
       </header>
 
       <section className="pdf-search-single">
         <article className="milestone-panel">
           <h2>Search PDFs</h2>
           {!API_BASE_URL ? <p className="api-state warn">Set NEXT_PUBLIC_API_BASE_URL first.</p> : null}
-          {uploadMessage ? <p className={uploadMessage.startsWith("Error") ? "api-state error" : "api-state ok"}>{uploadMessage}</p> : null}
           <div className="session-form-grid">
             <select
               className="task-select"
@@ -280,61 +197,6 @@ export default function PdfSearchPage() {
         </article>
       </section>
 
-      {showUploadModal ? (
-        <div className="task-modal-overlay">
-          <div className="task-modal">
-            <h3>Upload PDF</h3>
-            <p>Select course and PDF, preview it, then upload + index.</p>
-            <div className="session-form-grid">
-              <select
-                className="task-select"
-                value={uploadCourse}
-                onChange={(e) => setUploadCourse(e.target.value)}
-              >
-                {COURSE_OPTIONS.map((course) => (
-                  <option key={course.value} value={course.value}>{course.label}</option>
-                ))}
-              </select>
-              <input
-                className="task-select"
-                type="file"
-                accept="application/pdf"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
-            </div>
-
-            {file ? (
-              <p className="day-state">
-                Selected: {file.name} • {COURSE_OPTIONS.find((c) => c.value === uploadCourse)?.label}
-              </p>
-            ) : null}
-
-            {previewUrl ? (
-              <div className="search-viewer-wrap" style={{ marginTop: 10 }}>
-                <iframe title="Selected PDF Preview" className="search-viewer" src={previewUrl} />
-              </div>
-            ) : (
-              <p className="day-state">Preview appears here after selecting a PDF.</p>
-            )}
-
-            <div className="task-modal-actions">
-              <button
-                className="btn-cancel"
-                onClick={() => {
-                  setShowUploadModal(false);
-                  setFile(null);
-                }}
-                disabled={uploading}
-              >
-                Cancel
-              </button>
-              <button className="btn-save" disabled={!canUpload} onClick={handleUpload}>
-                {uploading ? "Uploading..." : "Upload & Index"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }
