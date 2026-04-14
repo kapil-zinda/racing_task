@@ -1820,7 +1820,11 @@ export default function RecorderPage() {
                     {canStart ? <button className="btn-day" onClick={startSession}>Start</button> : null}
                     {canPause ? <button className="btn-day secondary" onClick={pauseSession}>Pause</button> : null}
                     {canResume ? <button className="btn-day" onClick={resumeSession}>Resume</button> : null}
-                    {canStop ? <button className="btn-ticket" onClick={stopSession}>Stop</button> : null}
+                    {canStop ? (
+                      <button className="btn-ticket" onClick={stopSession}>
+                        {selectedRecorderType === "audio" ? "End" : "Stop"}
+                      </button>
+                    ) : null}
                   </div>
                 )}
                 {pendingFinalizeModes.length > 0 ? (

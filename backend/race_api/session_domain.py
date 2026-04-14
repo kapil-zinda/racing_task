@@ -128,7 +128,30 @@ def update_session_status_payload(session_id_value: str, payload) -> Dict[str, A
             }
         )
         if other_active:
-            raise ValueError("Only one active session is allowed per user. Stop the current active session first.")
+            if payload.status == "started":
+                now_iso = datetime.now(timezone.utc).isoformat()
+                other_elapsed = max(0, int(other_active.get("elapsed_seconds", 0) or 0))
+                collection.update_one(
+                    {"_id": other_active.get("_id")},
+                    {
+                        "$set": {
+                            "status": "stopped",
+                            "stopped_at": now_iso,
+                            "total_time_minutes": max(1, (other_elapsed + 59) // 60),
+                            "updated_at": now_iso,
+                        },
+                        "$push": {
+                            "events": {
+                                "status": "stopped",
+                                "elapsed_seconds": other_elapsed,
+                                "at": now_iso,
+                                "reason": "auto_stopped_by_new_session_start",
+                            }
+                        },
+                    },
+                )
+            else:
+                raise ValueError("Only one active session is allowed per user. Stop the current active session first.")
 
     elapsed_seconds = max(0, payload.elapsed_seconds)
     event = {
