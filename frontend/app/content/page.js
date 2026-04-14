@@ -110,6 +110,7 @@ export default function ContentPage() {
   const [newFolderName, setNewFolderName] = useState("");
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [contentScope, setContentScope] = useState("all");
 
   const [uploadTasks, setUploadTasks] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -161,11 +162,13 @@ export default function ContentPage() {
     router.replace(nextUrl, { scroll: false });
   };
 
-  const loadTree = async (parentId = "content_root") => {
+  const loadTree = async (parentId = "content_root", scope = contentScope) => {
     if (!API_BASE_URL) return;
     setTreeLoadingByParent((prev) => ({ ...prev, [parentId]: true }));
     try {
-      const res = await fetch(`${API_BASE_URL}/content/tree?parent_id=${encodeURIComponent(parentId)}`);
+      const res = await fetch(
+        `${API_BASE_URL}/content/tree?parent_id=${encodeURIComponent(parentId)}&view_mode=${encodeURIComponent(scope)}`,
+      );
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Tree API failed: ${res.status} ${txt}`);
@@ -177,7 +180,7 @@ export default function ContentPage() {
     }
   };
 
-  const loadList = async (targetFolderId = folderId) => {
+  const loadList = async (targetFolderId = folderId, scope = contentScope) => {
     if (!API_BASE_URL) return;
     setLoading(true);
     setError("");
@@ -186,6 +189,7 @@ export default function ContentPage() {
         folder_id: targetFolderId,
         sort_by: sortBy,
         sort_dir: sortDir,
+        view_mode: scope,
       });
       if (q.trim()) params.set("q", q.trim());
       const res = await fetch(`${API_BASE_URL}/content/list?${params.toString()}`);
@@ -213,15 +217,15 @@ export default function ContentPage() {
       const requestedFolderId = getUrlFolderId();
       try {
         await Promise.all([
-          loadTree("content_root"),
-          requestedFolderId !== "content_root" ? loadTree(requestedFolderId) : Promise.resolve(),
-          loadList(requestedFolderId),
+          loadTree("content_root", contentScope),
+          requestedFolderId !== "content_root" ? loadTree(requestedFolderId, contentScope) : Promise.resolve(),
+          loadList(requestedFolderId, contentScope),
         ]);
       } catch (err) {
         // Fallback to root if incoming URL folder is invalid/deleted.
         if (requestedFolderId !== "content_root") {
           try {
-            await Promise.all([loadTree("content_root"), loadList("content_root")]);
+            await Promise.all([loadTree("content_root", contentScope), loadList("content_root", contentScope)]);
             syncFolderInUrl("content_root");
           } catch (fallbackErr) {
             setError(String(fallbackErr.message || fallbackErr));
@@ -232,7 +236,7 @@ export default function ContentPage() {
       }
     };
     init();
-  }, [API_BASE_URL]);
+  }, [API_BASE_URL, contentScope]);
 
   useEffect(() => {
     if (!API_BASE_URL) return;
@@ -245,7 +249,7 @@ export default function ContentPage() {
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [API_BASE_URL, folderId]);
+  }, [API_BASE_URL, folderId, contentScope]);
 
   useEffect(() => {
     const close = () => {
@@ -269,14 +273,18 @@ export default function ContentPage() {
   }, [message]);
 
   const refresh = async () => {
-    await Promise.all([loadTree("content_root"), loadTree(folderId), loadList(folderId)]);
+    await Promise.all([
+      loadTree("content_root", contentScope),
+      loadTree(folderId, contentScope),
+      loadList(folderId, contentScope),
+    ]);
   };
 
   const openFolder = async (id) => {
     const target = (id || "content_root").trim() || "content_root";
     setFolderId(target);
     setExpandedFolders((prev) => ({ ...prev, [target]: true }));
-    await Promise.all([loadList(target), loadTree(target)]);
+    await Promise.all([loadList(target, contentScope), loadTree(target, contentScope)]);
     syncFolderInUrl(target);
   };
 
@@ -294,7 +302,9 @@ export default function ContentPage() {
     // Navigate by walking from root level on demand.
     let currentParent = "content_root";
     for (const part of targetParts) {
-      const treeRes = await fetch(`${API_BASE_URL}/content/tree?parent_id=${encodeURIComponent(currentParent)}`);
+      const treeRes = await fetch(
+        `${API_BASE_URL}/content/tree?parent_id=${encodeURIComponent(currentParent)}&view_mode=${encodeURIComponent(contentScope)}`,
+      );
       if (!treeRes.ok) return;
       const treeJson = await treeRes.json();
       const next = (treeJson.folders || []).find((f) => f.name === part);
@@ -440,6 +450,7 @@ export default function ContentPage() {
           id: item.id,
           item_type: item.type,
           recursive: item.type === "folder",
+          scope: contentScope,
         }),
       });
       if (!res.ok) {
@@ -470,6 +481,7 @@ export default function ContentPage() {
           id: item.id,
           item_type: item.type,
           destination_folder_id,
+          scope: contentScope,
         }),
       });
       if (!res.ok) {
@@ -746,7 +758,7 @@ export default function ContentPage() {
     setExpandedFolders((prev) => ({ ...prev, [nodeId]: true }));
     if (!Object.prototype.hasOwnProperty.call(treeChildrenByParent, nodeId)) {
       try {
-        await loadTree(nodeId);
+        await loadTree(nodeId, contentScope);
       } catch (err) {
         setError(String(err.message || err));
       }
@@ -853,6 +865,17 @@ export default function ContentPage() {
 
             <div className="content-actions">
               <button
+                className="btn-day secondary"
+                onClick={async () => {
+                  const next = contentScope === "all" ? "searchable" : "all";
+                  setContentScope(next);
+                  setTreeChildrenByParent({});
+                  setExpandedFolders({ content_root: true });
+                }}
+              >
+                {contentScope === "all" ? "Searchable" : "All Content"}
+              </button>
+              <button
                 className="btn-day"
                 onClick={() => {
                   setNewFolderName("");
@@ -935,7 +958,7 @@ export default function ContentPage() {
                 <button
                   className="btn-day"
                   onClick={async () => {
-                    await loadList(folderId);
+                    await loadList(folderId, contentScope);
                     setShowFilterMenu(false);
                   }}
                 >
@@ -1039,36 +1062,42 @@ export default function ContentPage() {
           >
             Open
           </button>
-          <button
-            className="context-item"
-            onClick={() => {
-              const it = contextMenu.item;
-              setContextMenu({ open: false, x: 0, y: 0, item: null });
-              renameItem(it);
-            }}
-          >
-            Rename
-          </button>
-          <button
-            className="context-item"
-            onClick={() => {
-              const it = contextMenu.item;
-              setContextMenu({ open: false, x: 0, y: 0, item: null });
-              openDestinationPicker(it, "copy");
-            }}
-          >
-            Copy
-          </button>
-          <button
-            className="context-item"
-            onClick={() => {
-              const it = contextMenu.item;
-              setContextMenu({ open: false, x: 0, y: 0, item: null });
-              openDestinationPicker(it, "move");
-            }}
-          >
-            Move
-          </button>
+          {contentScope === "all" ? (
+            <button
+              className="context-item"
+              onClick={() => {
+                const it = contextMenu.item;
+                setContextMenu({ open: false, x: 0, y: 0, item: null });
+                renameItem(it);
+              }}
+            >
+              Rename
+            </button>
+          ) : null}
+          {contentScope === "all" ? (
+            <button
+              className="context-item"
+              onClick={() => {
+                const it = contextMenu.item;
+                setContextMenu({ open: false, x: 0, y: 0, item: null });
+                openDestinationPicker(it, "copy");
+              }}
+            >
+              Copy
+            </button>
+          ) : null}
+          {contentScope === "all" ? (
+            <button
+              className="context-item"
+              onClick={() => {
+                const it = contextMenu.item;
+                setContextMenu({ open: false, x: 0, y: 0, item: null });
+                openDestinationPicker(it, "move");
+              }}
+            >
+              Move
+            </button>
+          ) : null}
           <button
             className="context-item"
             onClick={() => {
@@ -1079,16 +1108,18 @@ export default function ContentPage() {
           >
             Download
           </button>
-          <button
-            className="context-item"
-            onClick={() => {
-              const it = contextMenu.item;
-              setContextMenu({ open: false, x: 0, y: 0, item: null });
-              openMakeSearchableModal(it);
-            }}
-          >
-            Make Searchable
-          </button>
+          {contentScope === "all" ? (
+            <button
+              className="context-item"
+              onClick={() => {
+                const it = contextMenu.item;
+                setContextMenu({ open: false, x: 0, y: 0, item: null });
+                openMakeSearchableModal(it);
+              }}
+            >
+              Make Searchable
+            </button>
+          ) : null}
           <button
             className="context-item danger"
             onClick={() => {

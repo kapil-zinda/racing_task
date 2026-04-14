@@ -126,16 +126,20 @@ def create_app() -> FastAPI:
         q: str | None = Query(default=None),
         sort_by: str | None = Query(default="name"),
         sort_dir: str | None = Query(default="asc"),
+        view_mode: str | None = Query(default="all"),
     ):
         try:
-            return list_content(folder_id, q, sort_by, sort_dir)
+            return list_content(folder_id, q, sort_by, sort_dir, view_mode)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /content/list")
 
     @app.get("/content/tree")
-    def content_tree(parent_id: str | None = Query(default=None)):
+    def content_tree(
+        parent_id: str | None = Query(default=None),
+        view_mode: str | None = Query(default="all"),
+    ):
         try:
-            return list_folder_tree(parent_id)
+            return list_folder_tree(parent_id, view_mode)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /content/tree")
 
@@ -170,21 +174,21 @@ def create_app() -> FastAPI:
     @app.post("/content/delete")
     def content_delete(payload: ContentDeleteRequest):
         try:
-            return delete_item(payload.id, payload.item_type, payload.recursive)
+            return delete_item(payload.id, payload.item_type, payload.recursive, payload.scope)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/delete")
 
     @app.post("/content/copy")
     def content_copy(payload: ContentCopyRequest):
         try:
-            return copy_item(payload.id, payload.item_type, payload.destination_folder_id)
+            return copy_item(payload.id, payload.item_type, payload.destination_folder_id, payload.scope)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/copy")
 
     @app.post("/content/move")
     def content_move(payload: ContentMoveRequest):
         try:
-            return move_item(payload.id, payload.item_type, payload.destination_folder_id)
+            return move_item(payload.id, payload.item_type, payload.destination_folder_id, payload.scope)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/move")
 

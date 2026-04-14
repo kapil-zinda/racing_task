@@ -94,6 +94,7 @@ class ContentDeleteRequest(BaseModel):
     id: str
     item_type: str  # file | folder
     recursive: bool = False
+    scope: str = "all"  # all | searchable
 
 
 class ContentRenameRequest(BaseModel):
@@ -112,12 +113,14 @@ class ContentCopyRequest(BaseModel):
     id: str
     item_type: str  # file | folder
     destination_folder_id: str = "content_root"
+    scope: str = "all"  # all | searchable
 
 
 class ContentMoveRequest(BaseModel):
     id: str
     item_type: str  # file | folder
     destination_folder_id: str = "content_root"
+    scope: str = "all"  # all | searchable
 
 
 class ContentDownloadRequest(BaseModel):

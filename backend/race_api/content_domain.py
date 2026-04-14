@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 from types import SimpleNamespace
 from urllib.parse import quote, unquote
 
@@ -47,6 +47,13 @@ def _safe_key_part(name: str) -> str:
     return quote(_safe_name(name).replace(" ", "_"), safe="_-.()")
 
 
+def _pdf_bucket() -> str:
+    bucket = (settings().get("pdf_search_bucket") or "").strip()
+    if not bucket:
+        raise RuntimeError("PDF_SEARCH_BUCKET or RECORDING_BUCKET is not configured")
+    return bucket
+
+
 def _ensure_indexes() -> None:
     global _content_indexes_ensured
     if _content_indexes_ensured:
@@ -88,6 +95,91 @@ def _ensure_root_folder() -> None:
         },
         upsert=True,
     )
+
+
+def _searchable_scope_ids() -> tuple[Set[str], Set[str]]:
+    files = content_files_collection()
+    folders = content_folders_collection()
+    docs = pdf_docs_collection()
+
+    # Backfill: documents uploaded from Search page may not have content file links.
+    for row in docs.find({"key": {"$exists": True, "$ne": ""}}, {"doc_id": 1, "source_file_id": 1, "file_name": 1, "key": 1, "bucket": 1, "status": 1}):
+        status = str(row.get("status", "") or "").strip().lower()
+        if status in {"failed", "deleted"}:
+            continue
+        linked_id = str(row.get("source_file_id", "") or "").strip()
+        if linked_id and files.find_one({"_id": linked_id}):
+            continue
+        key = str(row.get("key", "") or "").strip()
+        if not key:
+            continue
+        existing = files.find_one({"s3_key": key})
+        if existing:
+            docs.update_one(
+                {"doc_id": row.get("doc_id", "")},
+                {"$set": {"source_file_id": existing.get("_id"), "source": "content_drive", "updated_at": _now()}},
+            )
+            continue
+        file_name = str(row.get("file_name", "") or "").strip() or "document.pdf"
+        safe_name = _unique_file_name(ROOT_FOLDER_ID, file_name)
+        new_id = _new_id("file")
+        now = _now()
+        file_bucket = str(row.get("bucket", "") or "").strip() or _pdf_bucket()
+        files.insert_one(
+            {
+                "_id": new_id,
+                "node_type": "file",
+                "parent_id": ROOT_FOLDER_ID,
+                "folder_id": ROOT_FOLDER_ID,
+                "name": safe_name,
+                "content_type": "application/pdf",
+                "size": 0,
+                "etag": "",
+                "s3_key": key,
+                "bucket": file_bucket,
+                "status": "ready",
+                "source": "pdf_search_upload",
+                "visibility_scope": "searchable_only",
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        docs.update_one(
+            {"doc_id": row.get("doc_id", "")},
+            {"$set": {"source_file_id": new_id, "source": "content_drive", "updated_at": now}},
+        )
+
+    raw_file_ids = {
+        str(row.get("source_file_id", "")).strip()
+        for row in docs.find({"source_file_id": {"$exists": True, "$ne": ""}}, {"source_file_id": 1})
+    }
+    raw_file_ids = {fid for fid in raw_file_ids if fid}
+    if not raw_file_ids:
+        return set(), {ROOT_FOLDER_ID}
+
+    file_docs = list(
+        files.find(
+            {"_id": {"$in": list(raw_file_ids)}, "status": {"$in": ["uploading", "ready"]}},
+            {"_id": 1, "parent_id": 1, "folder_id": 1},
+        )
+    )
+    searchable_file_ids = {str(doc.get("_id", "")) for doc in file_docs if doc.get("_id")}
+
+    parent_map: Dict[str, str | None] = {
+        str(row.get("_id")): row.get("parent_id")
+        for row in folders.find({}, {"_id": 1, "parent_id": 1})
+    }
+    searchable_folder_ids: Set[str] = {ROOT_FOLDER_ID}
+    for file_doc in file_docs:
+        parent_id = str(file_doc.get("parent_id") or file_doc.get("folder_id") or "").strip()
+        while parent_id:
+            searchable_folder_ids.add(parent_id)
+            parent_value = parent_map.get(parent_id)
+            if parent_value is None:
+                break
+            parent_id = str(parent_value).strip()
+
+    return searchable_file_ids, searchable_folder_ids
 
 
 def _get_folder_or_404(folder_id: str) -> Dict[str, Any]:
@@ -133,6 +225,7 @@ def _file_node(file_doc: Dict[str, Any]) -> Dict[str, Any]:
         "content_type": file_doc.get("content_type", ""),
         "size": int(file_doc.get("size", 0) or 0),
         "s3_key": file_doc.get("s3_key", ""),
+        "bucket": file_doc.get("bucket", ""),
         "status": file_doc.get("status", "ready"),
         "created_at": file_doc.get("created_at", ""),
         "updated_at": file_doc.get("updated_at", ""),
@@ -174,7 +267,13 @@ def _unique_file_name(parent_id: str, base_name: str, exclude_id: str | None = N
         idx += 1
 
 
-def list_content(folder_id: str | None, q: str | None, sort_by: str | None, sort_dir: str | None) -> Dict[str, Any]:
+def list_content(
+    folder_id: str | None,
+    q: str | None,
+    sort_by: str | None,
+    sort_dir: str | None,
+    view_mode: str | None = None,
+) -> Dict[str, Any]:
     _ensure_indexes()
     fid = (folder_id or ROOT_FOLDER_ID).strip()
     folder = _get_folder_or_404(fid)
@@ -192,6 +291,19 @@ def list_content(folder_id: str | None, q: str | None, sort_by: str | None, sort
     if q:
         file_query["name"] = {"$regex": q, "$options": "i"}
     file_docs = list(files.find(file_query))
+
+    mode = (view_mode or "all").strip().lower()
+    if mode == "searchable":
+        searchable_file_ids, searchable_folder_ids = _searchable_scope_ids()
+        subfolders = [row for row in subfolders if str(row.get("_id", "")) in searchable_folder_ids]
+        file_docs = [row for row in file_docs if str(row.get("_id", "")) in searchable_file_ids]
+    else:
+        file_docs = [
+            row
+            for row in file_docs
+            if str(row.get("visibility_scope", "")).strip().lower() != "searchable_only"
+            and str(row.get("source", "")).strip().lower() != "pdf_search_upload"
+        ]
 
     items = [_folder_node(f) for f in subfolders] + [_file_node(f) for f in file_docs]
     key = (sort_by or "name").strip()
@@ -213,15 +325,20 @@ def list_content(folder_id: str | None, q: str | None, sort_by: str | None, sort
         "q": q or "",
         "sort_by": key,
         "sort_dir": "desc" if reverse else "asc",
+        "view_mode": "searchable" if mode == "searchable" else "all",
     }
 
 
-def list_folder_tree(parent_id: str | None = None) -> Dict[str, Any]:
+def list_folder_tree(parent_id: str | None = None, view_mode: str | None = None) -> Dict[str, Any]:
     _ensure_indexes()
     query: Dict[str, Any] = {}
     if parent_id is not None:
         query["parent_id"] = parent_id
     rows = list(content_folders_collection().find(query, {"_id": 1, "name": 1, "parent_id": 1, "path": 1}))
+    mode = (view_mode or "all").strip().lower()
+    if mode == "searchable":
+        _, searchable_folder_ids = _searchable_scope_ids()
+        rows = [row for row in rows if str(row.get("_id", "")) in searchable_folder_ids]
     return {
         "folders": [
             {
@@ -335,6 +452,7 @@ def create_upload_url(folder_id: str, file_name: str, content_type: str, size: i
                 "content_type": ct,
                 "size": max(0, int(size or 0)),
                 "s3_key": s3_key,
+                "bucket": _bucket(),
                 "status": "uploading",
                 "updated_at": now,
             },
@@ -394,22 +512,26 @@ def _collect_descendant_folder_ids(folder_id: str) -> List[str]:
     return out
 
 
-def _copy_object(src_key: str, dst_key: str) -> None:
+def _copy_object(src_key: str, dst_key: str, src_bucket: str | None = None, dst_bucket: str | None = None) -> None:
     if not src_key or not dst_key:
         return
+    source_bucket = (src_bucket or "").strip() or _bucket()
+    target_bucket = (dst_bucket or "").strip() or _bucket()
     s3_client().copy_object(
-        Bucket=_bucket(),
-        CopySource={"Bucket": _bucket(), "Key": src_key},
+        Bucket=target_bucket,
+        CopySource={"Bucket": source_bucket, "Key": src_key},
         Key=dst_key,
     )
 
 
-def _move_object(src_key: str, dst_key: str) -> None:
+def _move_object(src_key: str, dst_key: str, src_bucket: str | None = None, dst_bucket: str | None = None) -> None:
     if not src_key or not dst_key:
         return
-    _copy_object(src_key, dst_key)
+    source_bucket = (src_bucket or "").strip() or _bucket()
+    target_bucket = (dst_bucket or "").strip() or _bucket()
+    _copy_object(src_key, dst_key, source_bucket, target_bucket)
     try:
-        s3_client().delete_object(Bucket=_bucket(), Key=src_key)
+        s3_client().delete_object(Bucket=source_bucket, Key=src_key)
     except Exception:  # noqa: BLE001
         pass
 
@@ -422,8 +544,11 @@ def _is_descendant_folder(parent_id: str, candidate_child_id: str) -> bool:
     return candidate_child_id in _collect_descendant_folder_ids(parent_id)
 
 
-def copy_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[str, Any]:
+def copy_item(item_id: str, item_type: str, destination_folder_id: str, scope: str | None = "all") -> Dict[str, Any]:
     _ensure_indexes()
+    mode = (scope or "all").strip().lower()
+    if mode == "searchable":
+        raise ValueError("Copy is disabled in searchable view")
     iid = (item_id or "").strip()
     kind = (item_type or "").strip().lower()
     dest_id = (destination_folder_id or ROOT_FOLDER_ID).strip() or ROOT_FOLDER_ID
@@ -443,8 +568,10 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[
         target_name = _unique_file_name(dest_folder["_id"], src.get("name", "file"))
         dst_key = _build_object_key(dest_folder, target_name)
         src_key = src.get("s3_key", "")
+        src_bucket = str(src.get("bucket", "") or "").strip() or _bucket()
+        dst_bucket = _bucket()
         if src_key:
-            _copy_object(src_key, dst_key)
+            _copy_object(src_key, dst_key, src_bucket, dst_bucket)
         new_id = _new_id("file")
         files.insert_one({
             "_id": new_id,
@@ -456,6 +583,7 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[
             "size": int(src.get("size", 0) or 0),
             "etag": src.get("etag", ""),
             "s3_key": dst_key,
+            "bucket": dst_bucket,
             "status": "ready",
             "created_at": now,
             "updated_at": now,
@@ -526,8 +654,10 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[
         if not new_parent_doc:
             continue
         dst_key = _build_object_key(new_parent_doc, target_name)
+        src_bucket = str(src.get("bucket", "") or "").strip() or _bucket()
+        dst_bucket = _bucket()
         if src.get("s3_key"):
-            _copy_object(src.get("s3_key"), dst_key)
+            _copy_object(src.get("s3_key"), dst_key, src_bucket, dst_bucket)
         files.insert_one({
             "_id": _new_id("file"),
             "node_type": "file",
@@ -538,6 +668,7 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[
             "size": int(src.get("size", 0) or 0),
             "etag": src.get("etag", ""),
             "s3_key": dst_key,
+            "bucket": dst_bucket,
             "status": "ready",
             "created_at": now,
             "updated_at": now,
@@ -552,8 +683,11 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[
     }
 
 
-def move_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[str, Any]:
+def move_item(item_id: str, item_type: str, destination_folder_id: str, scope: str | None = "all") -> Dict[str, Any]:
     _ensure_indexes()
+    mode = (scope or "all").strip().lower()
+    if mode == "searchable":
+        raise ValueError("Move is disabled in searchable view")
     iid = (item_id or "").strip()
     kind = (item_type or "").strip().lower()
     dest_id = (destination_folder_id or ROOT_FOLDER_ID).strip() or ROOT_FOLDER_ID
@@ -574,8 +708,10 @@ def move_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[
             return {"message": "File already in destination folder", "item": _file_node(doc)}
         target_name = _unique_file_name(dest_folder["_id"], doc.get("name", "file"), exclude_id=iid)
         dst_key = _build_object_key(dest_folder, target_name)
-        if doc.get("s3_key") and doc.get("s3_key") != dst_key:
-            _move_object(doc.get("s3_key"), dst_key)
+        src_bucket = str(doc.get("bucket", "") or "").strip() or _bucket()
+        dst_bucket = _bucket()
+        if doc.get("s3_key") and (doc.get("s3_key") != dst_key or src_bucket != dst_bucket):
+            _move_object(doc.get("s3_key"), dst_key, src_bucket, dst_bucket)
         files.update_one(
             {"_id": iid},
             {"$set": {
@@ -583,6 +719,7 @@ def move_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[
                 "folder_id": dest_folder["_id"],
                 "name": target_name,
                 "s3_key": dst_key,
+                "bucket": dst_bucket,
                 "updated_at": now,
             }},
         )
@@ -627,8 +764,10 @@ def move_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[
         target_name = _unique_file_name(parent_folder["_id"], fdoc.get("name", "file"), exclude_id=fdoc["_id"])
         dst_key = _build_object_key(parent_folder, target_name)
         src_key = fdoc.get("s3_key", "")
-        if src_key and src_key != dst_key:
-            _move_object(src_key, dst_key)
+        src_bucket = str(fdoc.get("bucket", "") or "").strip() or _bucket()
+        dst_bucket = _bucket()
+        if src_key and (src_key != dst_key or src_bucket != dst_bucket):
+            _move_object(src_key, dst_key, src_bucket, dst_bucket)
         files.update_one(
             {"_id": fdoc["_id"]},
             {"$set": {
@@ -636,6 +775,7 @@ def move_item(item_id: str, item_type: str, destination_folder_id: str) -> Dict[
                 "folder_id": parent_folder["_id"],
                 "name": target_name,
                 "s3_key": dst_key,
+                "bucket": dst_bucket,
                 "updated_at": now,
             }},
         )
@@ -663,7 +803,8 @@ def download_item(item_id: str, item_type: str, recursive: bool = True) -> Dict[
         key = doc.get("s3_key")
         if not key:
             raise ValueError("File key is missing")
-        url = s3.generate_presigned_url("get_object", Params={"Bucket": _bucket(), "Key": key}, ExpiresIn=expires)
+        file_bucket = str(doc.get("bucket", "") or "").strip() or _bucket()
+        url = s3.generate_presigned_url("get_object", Params={"Bucket": file_bucket, "Key": key}, ExpiresIn=expires)
         return {"type": "file", "file": _file_node(doc), "download_url": url, "expires_in": expires}
 
     folder = folders.find_one({"_id": iid})
@@ -696,7 +837,8 @@ def download_item(item_id: str, item_type: str, recursive: bool = True) -> Dict[
         rel_path = f"{rel_dir}/{fdoc.get('name', '')}".strip("/")
         if base_name:
             rel_path = f"{base_name}/{rel_path}".strip("/")
-        url = s3.generate_presigned_url("get_object", Params={"Bucket": _bucket(), "Key": key}, ExpiresIn=expires)
+        file_bucket = str(fdoc.get("bucket", "") or "").strip() or _bucket()
+        url = s3.generate_presigned_url("get_object", Params={"Bucket": file_bucket, "Key": key}, ExpiresIn=expires)
         downloads.append({
             "file_id": fdoc.get("_id"),
             "name": fdoc.get("name", ""),
@@ -716,32 +858,70 @@ def download_item(item_id: str, item_type: str, recursive: bool = True) -> Dict[
     }
 
 
-def delete_item(item_id: str, item_type: str, recursive: bool = False) -> Dict[str, Any]:
+def delete_item(item_id: str, item_type: str, recursive: bool = False, scope: str | None = "all") -> Dict[str, Any]:
     _ensure_indexes()
     iid = (item_id or "").strip()
     kind = (item_type or "").strip().lower()
+    mode = (scope or "all").strip().lower()
     if not iid:
         raise ValueError("id is required")
     if kind not in {"file", "folder"}:
         raise ValueError("item_type must be file or folder")
+    if mode not in {"all", "searchable"}:
+        raise ValueError("scope must be all or searchable")
 
     files = content_files_collection()
     folders = content_folders_collection()
     s3 = s3_client()
     bucket = _bucket()
 
+    def _hard_delete_file(file_doc: Dict[str, Any]) -> Dict[str, int]:
+        s3_key = file_doc.get("s3_key")
+        file_bucket = str(file_doc.get("bucket", "") or "").strip() or bucket
+        if s3_key:
+            try:
+                s3.delete_object(Bucket=file_bucket, Key=s3_key)
+            except Exception:  # noqa: BLE001
+                pass
+        index_deleted = _delete_search_index_by_file_id(str(file_doc.get("_id", "")))
+        files.delete_one({"_id": file_doc.get("_id")})
+        return index_deleted
+
+    def _unindex_file_only(file_doc: Dict[str, Any]) -> Dict[str, int]:
+        index_deleted = _delete_search_index_by_file_id(str(file_doc.get("_id", "")))
+        files.update_one(
+            {"_id": file_doc.get("_id")},
+            {"$set": {"searchable": False, "updated_at": _now()}, "$unset": {"searchable_course": ""}},
+        )
+        return index_deleted
+
     if kind == "file":
         file_doc = files.find_one({"_id": iid})
         if not file_doc:
             raise LookupError("File not found")
-        s3_key = file_doc.get("s3_key")
-        if s3_key:
-            try:
-                s3.delete_object(Bucket=bucket, Key=s3_key)
-            except Exception:  # noqa: BLE001
-                pass
-        files.delete_one({"_id": iid})
-        return {"message": "File deleted", "deleted": 1}
+        if mode == "searchable":
+            if _is_searchable_only_file(file_doc):
+                index_deleted = _hard_delete_file(file_doc)
+                return {
+                    "message": "Searchable file deleted (including storage + vector index)",
+                    "deleted_files": 1,
+                    "deleted_docs": index_deleted["deleted_docs"],
+                    "deleted_pages": index_deleted["deleted_pages"],
+                }
+            index_deleted = _unindex_file_only(file_doc)
+            return {
+                "message": "File removed from searchable index only",
+                "unindexed_files": 1,
+                "deleted_docs": index_deleted["deleted_docs"],
+                "deleted_pages": index_deleted["deleted_pages"],
+            }
+        index_deleted = _hard_delete_file(file_doc)
+        return {
+            "message": "File deleted",
+            "deleted_files": 1,
+            "deleted_docs": index_deleted["deleted_docs"],
+            "deleted_pages": index_deleted["deleted_pages"],
+        }
 
     if iid == ROOT_FOLDER_ID:
         raise ValueError("Root folder cannot be deleted")
@@ -750,22 +930,94 @@ def delete_item(item_id: str, item_type: str, recursive: bool = False) -> Dict[s
     if not folder_doc:
         raise LookupError("Folder not found")
 
-    child_exists = folders.find_one({"parent_id": iid}) or files.find_one({"folder_id": iid})
+    child_exists = folders.find_one({"parent_id": iid}) or files.find_one({"$or": [{"parent_id": iid}, {"folder_id": iid}]})
     if child_exists and not recursive:
         raise ValueError("Folder is not empty. Use recursive delete.")
 
     folder_ids = _collect_descendant_folder_ids(iid)
-    file_docs = list(files.find({"folder_id": {"$in": folder_ids}}))
-    keys = [d.get("s3_key") for d in file_docs if d.get("s3_key")]
-    for start in range(0, len(keys), 1000):
-        chunk = keys[start:start + 1000]
-        try:
-            s3.delete_objects(Bucket=bucket, Delete={"Objects": [{"Key": k} for k in chunk], "Quiet": True})
-        except Exception:  # noqa: BLE001
-            pass
-    files.delete_many({"folder_id": {"$in": folder_ids}})
+    file_docs = list(
+        files.find(
+            {
+                "$or": [
+                    {"parent_id": {"$in": folder_ids}},
+                    {"folder_id": {"$in": folder_ids}},
+                ]
+            }
+        )
+    )
+
+    if mode == "searchable":
+        deleted_files = 0
+        unindexed_files = 0
+        deleted_docs = 0
+        deleted_pages = 0
+        for fdoc in file_docs:
+            has_index = pdf_docs_collection().find_one({"source_file_id": str(fdoc.get("_id", ""))}, {"_id": 1})
+            if not has_index and not _is_searchable_only_file(fdoc):
+                continue
+            if _is_searchable_only_file(fdoc):
+                idx = _hard_delete_file(fdoc)
+                deleted_files += 1
+            else:
+                idx = _unindex_file_only(fdoc)
+                unindexed_files += 1
+            deleted_docs += idx["deleted_docs"]
+            deleted_pages += idx["deleted_pages"]
+
+        # Remove now-empty searchable-only folders from this subtree.
+        folder_docs = list(folders.find({"_id": {"$in": folder_ids}}))
+        folder_docs.sort(key=lambda row: len(str(row.get("path", "") or "").split("/")), reverse=True)
+        removed_folders = 0
+        for frow in folder_docs:
+            fid = str(frow.get("_id", "") or "")
+            if not fid or fid == ROOT_FOLDER_ID:
+                continue
+            has_child_folders = folders.find_one({"parent_id": fid}, {"_id": 1})
+            has_child_files = files.find_one({"$or": [{"parent_id": fid}, {"folder_id": fid}]}, {"_id": 1})
+            if not has_child_folders and not has_child_files:
+                folders.delete_one({"_id": fid})
+                removed_folders += 1
+
+        return {
+            "message": "Searchable delete completed",
+            "deleted_files": deleted_files,
+            "unindexed_files": unindexed_files,
+            "deleted_docs": deleted_docs,
+            "deleted_pages": deleted_pages,
+            "deleted_folders": removed_folders,
+        }
+
+    keys_by_bucket: Dict[str, List[str]] = {}
+    for fdoc in file_docs:
+        s3_key = fdoc.get("s3_key")
+        if not s3_key:
+            continue
+        file_bucket = str(fdoc.get("bucket", "") or "").strip() or bucket
+        keys_by_bucket.setdefault(file_bucket, []).append(s3_key)
+    for bucket_name, keys in keys_by_bucket.items():
+        for start in range(0, len(keys), 1000):
+            chunk = keys[start:start + 1000]
+            try:
+                s3.delete_objects(Bucket=bucket_name, Delete={"Objects": [{"Key": k} for k in chunk], "Quiet": True})
+            except Exception:  # noqa: BLE001
+                pass
+
+    deleted_docs = 0
+    deleted_pages = 0
+    for fdoc in file_docs:
+        idx = _delete_search_index_by_file_id(str(fdoc.get("_id", "")))
+        deleted_docs += idx["deleted_docs"]
+        deleted_pages += idx["deleted_pages"]
+
+    files.delete_many({"$or": [{"parent_id": {"$in": folder_ids}}, {"folder_id": {"$in": folder_ids}}]})
     folders.delete_many({"_id": {"$in": [fid for fid in folder_ids if fid != ROOT_FOLDER_ID]}})
-    return {"message": "Folder deleted", "deleted_folders": len(folder_ids), "deleted_files": len(file_docs)}
+    return {
+        "message": "Folder deleted",
+        "deleted_folders": len(folder_ids),
+        "deleted_files": len(file_docs),
+        "deleted_docs": deleted_docs,
+        "deleted_pages": deleted_pages,
+    }
 
 
 def preview_by_id(file_id: str) -> Dict[str, Any]:
@@ -782,9 +1034,10 @@ def preview_by_id(file_id: str) -> Dict[str, Any]:
     key = doc.get("s3_key")
     if not key:
         raise ValueError("File storage key missing")
+    file_bucket = str(doc.get("bucket", "") or "").strip() or _bucket()
     url = s3_client().generate_presigned_url(
         "get_object",
-        Params={"Bucket": _bucket(), "Key": key},
+        Params={"Bucket": file_bucket, "Key": key},
         ExpiresIn=3600,
     )
     return {
@@ -824,6 +1077,29 @@ def _files_for_item(item_id: str, item_type: str) -> List[Dict[str, Any]]:
     raise ValueError("item_type must be file or folder")
 
 
+def _is_searchable_only_file(file_doc: Dict[str, Any]) -> bool:
+    return (
+        str(file_doc.get("visibility_scope", "")).strip().lower() == "searchable_only"
+        or str(file_doc.get("source", "")).strip().lower() == "pdf_search_upload"
+    )
+
+
+def _delete_search_index_by_file_id(file_id: str) -> Dict[str, int]:
+    docs = pdf_docs_collection()
+    pages = settings()["mongodb_pdf_pages_collection"]
+    pages_coll = docs.database[pages]
+    doc_rows = list(docs.find({"source_file_id": file_id}, {"doc_id": 1}))
+    doc_ids = [str(row.get("doc_id", "")).strip() for row in doc_rows if row.get("doc_id")]
+    if not doc_ids:
+        return {"deleted_docs": 0, "deleted_pages": 0}
+    delete_pages_result = pages_coll.delete_many({"doc_id": {"$in": doc_ids}})
+    delete_docs_result = docs.delete_many({"doc_id": {"$in": doc_ids}})
+    return {
+        "deleted_docs": int(delete_docs_result.deleted_count or 0),
+        "deleted_pages": int(delete_pages_result.deleted_count or 0),
+    }
+
+
 def make_item_searchable(item_id: str, item_type: str, course: str) -> Dict[str, Any]:
     _ensure_indexes()
     iid = (item_id or "").strip()
@@ -842,6 +1118,7 @@ def make_item_searchable(item_id: str, item_type: str, course: str) -> Dict[str,
         raise ValueError("No files found for this item")
 
     docs = pdf_docs_collection()
+    files = content_files_collection()
     now = _now()
     indexed: List[Dict[str, Any]] = []
     failed: List[Dict[str, Any]] = []
@@ -871,7 +1148,7 @@ def make_item_searchable(item_id: str, item_type: str, course: str) -> Dict[str,
                 "$set": {
                     "doc_id": doc_id,
                     "file_name": file_name or "document.pdf",
-                    "bucket": _bucket(),
+                    "bucket": str(file_doc.get("bucket", "") or "").strip() or _bucket(),
                     "key": key,
                     "course": normalized_course,
                     "course_label": COURSE_OPTIONS[normalized_course],
@@ -883,6 +1160,10 @@ def make_item_searchable(item_id: str, item_type: str, course: str) -> Dict[str,
                 "$setOnInsert": {"created_at": now},
             },
             upsert=True,
+        )
+        files.update_one(
+            {"_id": file_id},
+            {"$set": {"searchable": True, "searchable_course": normalized_course, "updated_at": now}},
         )
         try:
             result = index_pdf_document(SimpleNamespace(doc_id=doc_id))
