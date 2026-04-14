@@ -18,313 +18,38 @@ const RECORDER_TYPES = [
   { value: "pdf_explainer", label: "PDF Explainer" },
   { value: "uploader", label: "Uploader" }
 ];
-const TEST_STAGE_OPTIONS = [
-  { value: "test_given", label: "Test Given" },
-  { value: "analysis_done", label: "Analysis Done" },
-  { value: "revision", label: "Revision" },
-  { value: "second_revision", label: "Second Revision" },
-];
 const OTHER_VALUE = "__other__";
-const EXAM_CATALOG = {
-  prelims: [
-    "Latest Current Affairs",
-    "Static GK",
-    "History of India and Indian National Movement",
-    "Indian and World Geography",
-    "Physical Geography",
-    "Social Geography",
-    "Economic Geography",
-    "Indian Polity and Governance",
-    "Constitution",
-    "Public Policy Rights",
-    "Political System",
-    "Rights Issues",
-    "Panchayati Raj",
-    "Economic and Social Development",
-    "Sustainable Development",
-    "Poverty",
-    "Inclusion",
-    "Demographics",
-    "Social Sector Initiatives",
-    "Environment and Ecology",
-    "Biodiversity",
-    "Climate Change",
-    "Science and Technology"
-  ].map((subject) => ({ subject, topics: ["General"] })),
-  mains: [
-    "History",
-    "Modern",
-    "World History",
-    "Art & Culture",
-    "Indian Heritage and Culture",
-    "Geography",
-    "Human Geography",
-    "World Physical Geography",
-    "Society",
-    "Salient Features of Indian Society",
-    "Polity",
-    "Indian Constitution & its features, amendments, provisions and bodies",
-    "Governance",
-    "Social Justice",
-    "International Relations",
-    "Technology",
-    "Economic Development",
-    "Biodiversity",
-    "Environment",
-    "Security",
-    "Disaster Management",
-    "Ethics",
-    "Integrity",
-    "Aptitude"
-  ].map((subject) => ({ subject, topics: ["General"] })),
-  csat: [
-    "Comprehension",
-    "Interpersonal Skills Including Communication Skills",
-    "Logical Reasoning and Analytical Ability",
-    "Decision Making and Problem Solving",
-    "General Mental Ability",
-    "Basic Numeracy",
-    "Data Interpretation",
-    "English Language Comprehension Skills"
-  ].map((subject) => ({ subject, topics: ["General"] })),
-  sociology_1: [
-    {
-      subject: "Sociology - The Discipline",
-      topics: [
-        "Modernity and social changes in Europe and emergence of Sociology",
-        "Scope of the subject and comparison with other social sciences",
-        "Sociology and common sense"
-      ]
-    },
-    {
-      subject: "Sociology as Science",
-      topics: [
-        "Science, scientific method, and critique",
-        "Major theoretical strands of research methodology",
-        "Positivism and its critique",
-        "Fact value and objectivity",
-        "Non-positivist methodologies"
-      ]
-    },
-    {
-      subject: "Research Methods and Analysis",
-      topics: [
-        "Qualitative and quantitative methods",
-        "Techniques of data collection",
-        "Variables, sampling, hypothesis, reliability, and validity"
-      ]
-    },
-    {
-      subject: "Sociological Thinkers",
-      topics: [
-        "Karl Marx - historical materialism, mode of production, alienation, class struggle",
-        "Emile Durkheim - division of labour, social fact, suicide, religion and society",
-        "Max Weber - social action, ideal types, authority, bureaucracy, protestant ethics",
-        "Talcott Parsons - social system, pattern variables",
-        "Robert K. Merton - latent/manifest functions, deviance, reference groups",
-        "Mead - self and identity"
-      ]
-    },
-    {
-      subject: "Stratification and Mobility",
-      topics: [
-        "Equality, inequality, hierarchy, exclusion, poverty, deprivation",
-        "Structural functionalist, Marxist and Weberian theories",
-        "Class, status groups, gender, ethnicity, race",
-        "Open/closed systems and types/sources/causes of mobility"
-      ]
-    },
-    {
-      subject: "Works and Economic Life",
-      topics: [
-        "Work in slave, feudal and industrial capitalist societies",
-        "Formal and informal organisation of work",
-        "Labour and society"
-      ]
-    },
-    {
-      subject: "Politics and Society",
-      topics: [
-        "Sociological theories of power",
-        "Power elite, bureaucracy, pressure groups, political parties",
-        "Nation, state, citizenship, democracy, civil society, ideology",
-        "Protest, agitation, social movements, collective action, revolution"
-      ]
-    },
-    {
-      subject: "Religion and Society",
-      topics: [
-        "Sociological theories of religion",
-        "Animism, monism, pluralism, sects, cults",
-        "Religion and science, secularisation, revivalism, fundamentalism"
-      ]
-    },
-    {
-      subject: "Systems of Kinship",
-      topics: [
-        "Family, household, marriage",
-        "Types and forms of family",
-        "Lineage and descent",
-        "Patriarchy and sexual division of labour",
-        "Contemporary trends"
-      ]
-    },
-    {
-      subject: "Social Change in Modern Society",
-      topics: [
-        "Sociological theories of social change",
-        "Development and dependency",
-        "Agents of social change",
-        "Education and social change",
-        "Science, technology, and social change"
-      ]
-    }
-  ],
-  sociology_2: [
-    {
-      subject: "Perspectives on the Study of Indian Society",
-      topics: [
-        "Indology (G.S. Ghure)",
-        "Structural functionalism (M. N. Srinivas)",
-        "Marxist sociology (A. R. Desai)"
-      ]
-    },
-    {
-      subject: "Impact of Colonial Rule on Indian Society",
-      topics: [
-        "Social background of Indian nationalism",
-        "Modernization of Indian tradition",
-        "Protests and movements during colonial period",
-        "Social reforms"
-      ]
-    },
-    {
-      subject: "Rural and Agrarian Social Structure",
-      topics: [
-        "Idea of Indian village and village studies",
-        "Evolution of land tenure system and land reforms"
-      ]
-    },
-    {
-      subject: "Caste System",
-      topics: [
-        "Perspectives - Ghurye, Srinivas, Dumont, Beteille",
-        "Features of caste system",
-        "Untouchability - forms and perspectives"
-      ]
-    },
-    {
-      subject: "Tribal Communities in India",
-      topics: [
-        "Definitional problems",
-        "Geographical spread",
-        "Colonial policies and tribes",
-        "Integration and autonomy issues"
-      ]
-    },
-    {
-      subject: "Social Classes in India",
-      topics: [
-        "Agrarian class structure",
-        "Industrial class structure",
-        "Middle classes in India"
-      ]
-    },
-    {
-      subject: "Systems of Kinship in India",
-      topics: [
-        "Lineage and descent in India",
-        "Types of kinship systems",
-        "Family and marriage in India",
-        "Household dimensions",
-        "Patriarchy, entitlements, sexual division of labour"
-      ]
-    },
-    {
-      subject: "Religion and Society",
-      topics: [
-        "Religious communities in India",
-        "Problems of religious minorities"
-      ]
-    },
-    {
-      subject: "Visions of Social Change in India",
-      topics: [
-        "Development planning and mixed economy",
-        "Constitution, law and social change",
-        "Education and social change"
-      ]
-    },
-    {
-      subject: "Rural and Agrarian Transformation in India",
-      topics: [
-        "Rural development programmes and cooperatives",
-        "Green revolution and social change",
-        "Changing agricultural production modes",
-        "Rural labour, bondage, migration"
-      ]
-    },
-    {
-      subject: "Industrialization and Urbanisation in India",
-      topics: [
-        "Evolution of modern industry",
-        "Growth of urban settlements",
-        "Working class structure and mobilisation",
-        "Informal sector and child labour",
-        "Slums and urban deprivation"
-      ]
-    },
-    {
-      subject: "Politics and Society",
-      topics: [
-        "Nation, democracy, citizenship",
-        "Political parties, pressure groups, elite",
-        "Regionalism and decentralisation",
-        "Secularization"
-      ]
-    },
-    {
-      subject: "Social Movements in Modern India",
-      topics: [
-        "Peasants and farmers movements",
-        "Womens movement",
-        "Backward classes and Dalit movements",
-        "Environmental movements",
-        "Ethnicity and identity movements"
-      ]
-    },
-    {
-      subject: "Population Dynamics",
-      topics: [
-        "Population size, growth, composition, distribution",
-        "Birth, death, migration",
-        "Population policy and family planning",
-        "Ageing, sex ratios, infant mortality, reproductive health"
-      ]
-    },
-    {
-      subject: "Challenges of Social Transformation",
-      topics: [
-        "Crisis of development, displacement, sustainability",
-        "Poverty, deprivation, inequalities",
-        "Violence against women",
-        "Caste conflicts",
-        "Ethnic conflicts, communalism, revivalism",
-        "Illiteracy and educational disparities"
-      ]
-    }
-  ]
-};
+const getSubjectsForExam = (examType, catalog = {}) => (catalog[examType] || []).map((entry) => entry.subject);
 
-const getSubjectsForExam = (examType, catalog = EXAM_CATALOG) => (catalog[examType] || []).map((entry) => entry.subject);
-
-const getTopicsForSelection = (examType, subject, catalog = EXAM_CATALOG) => {
+const getTopicsForSelection = (examType, subject, catalog = {}) => {
   const found = (catalog[examType] || []).find((entry) => entry.subject === subject);
   return found?.topics || [];
 };
-const getExamOptionsFromCatalog = (catalog = EXAM_CATALOG) =>
+const getExamOptionsFromCatalog = (catalog = {}) =>
   Object.keys(catalog || {}).map((key) => ({ value: key, label: key.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 const MULTIPART_MIN_PART_BYTES = 5 * 1024 * 1024;
+
+function buildTestsCatalogFromPlan(testPlanRows) {
+  const bySource = new Map();
+  (Array.isArray(testPlanRows) ? testPlanRows : []).forEach((row) => {
+    const source = String(row?.source || "").trim();
+    if (!source) return;
+    const testName = String(row?.test_name || "").trim() || "Test";
+    const count = Math.max(1, Number(row?.number_of_tests || 1));
+    if (!bySource.has(source)) bySource.set(source, []);
+    const list = bySource.get(source);
+    for (let i = 1; i <= count; i += 1) {
+      list.push(`${testName} ${i}`);
+    }
+  });
+  const out = [];
+  [...bySource.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([source, topics]) => {
+      out.push({ subject: source, topics: [...new Set(topics)] });
+    });
+  return out;
+}
 
 function formatTime(value) {
   if (!value) return "";
@@ -387,42 +112,37 @@ function createEmptyMultipartState() {
 }
 
 export default function RecorderPage() {
-  const defaultSubject = getSubjectsForExam("prelims")[0] || "";
-  const defaultTopic = getTopicsForSelection("prelims", defaultSubject)[0] || "";
+  const defaultSubject = "";
+  const defaultTopic = "";
   const [missionSelector, setMissionSelector] = useState({ exam_options: [], catalog: {}, plan: {} });
-  const activeCatalog = useMemo(
-    () => (Object.keys(missionSelector.catalog || {}).length ? missionSelector.catalog : EXAM_CATALOG),
-    [missionSelector.catalog],
-  );
-  const activeExamOptions = useMemo(
-    () => (
-      (missionSelector.exam_options || []).length
-        ? missionSelector.exam_options
-        : getExamOptionsFromCatalog(activeCatalog)
-    ),
-    [missionSelector.exam_options, activeCatalog],
-  );
+  const [missionSelectorLoading, setMissionSelectorLoading] = useState(Boolean(API_BASE_URL));
   const missionTestPlan = useMemo(
     () => (Array.isArray(missionSelector?.plan?.tests) ? missionSelector.plan.tests : []),
     [missionSelector?.plan?.tests],
   );
-  const missionTestSources = useMemo(
-    () => [...new Set(missionTestPlan.map((row) => String(row?.source || "").trim()).filter(Boolean))],
-    [missionTestPlan],
+  const activeCatalog = useMemo(() => {
+    const base = Object.keys(missionSelector.catalog || {}).length ? missionSelector.catalog : {};
+    const testsCatalog = buildTestsCatalogFromPlan(missionTestPlan);
+    if (!testsCatalog.length) return base;
+    return { ...base, tests: testsCatalog };
+  }, [missionSelector.catalog, missionTestPlan]);
+  const activeExamOptions = useMemo(
+    () => (
+      (() => {
+        const fromMission = Array.isArray(missionSelector.exam_options) ? [...missionSelector.exam_options] : [];
+        const hasTests = fromMission.some((opt) => String(opt?.value || "") === "tests");
+        const testsAvailable = Array.isArray(activeCatalog.tests) && activeCatalog.tests.length > 0;
+        if (fromMission.length) {
+          if (testsAvailable && !hasTests) {
+            fromMission.push({ value: "tests", label: "Tests" });
+          }
+          return fromMission;
+        }
+        return getExamOptionsFromCatalog(activeCatalog);
+      })()
+    ),
+    [missionSelector.exam_options, activeCatalog],
   );
-  const activeTestSources = missionTestSources.length ? missionTestSources : ["sfg1", "sfg2", "pmp", "cava"];
-  const getMissionTestRowsBySource = (sourceValue) =>
-    missionTestPlan.filter((row) => String(row?.source || "").trim() === String(sourceValue || "").trim());
-  const getMissionTestNamesBySource = (sourceValue) =>
-    [...new Set(getMissionTestRowsBySource(sourceValue).map((row) => String(row?.test_name || "").trim()).filter(Boolean))];
-  const getMissionTestNumberOptions = (sourceValue) => {
-    const rows = getMissionTestRowsBySource(sourceValue);
-    const maxCount = rows.reduce((mx, row) => Math.max(mx, Number(row?.number_of_tests || 1)), 1);
-    return Array.from({ length: maxCount }, (_, idx) => String(idx + 1));
-  };
-  const defaultTestSource = activeTestSources[0] || "";
-  const defaultTestName = getMissionTestNamesBySource(defaultTestSource)[0] || "";
-  const defaultTestNumber = getMissionTestNumberOptions(defaultTestSource)[0] || "1";
   const [sessionForm, setSessionForm] = useState({
     user_id: "kapil",
     exam_type: "prelims",
@@ -434,16 +154,6 @@ export default function RecorderPage() {
     session_type: "study",
     recorder_type: "call",
     notes: "",
-  });
-  const [trackTestProgress, setTrackTestProgress] = useState(false);
-  const [sessionTestMeta, setSessionTestMeta] = useState({
-    source: defaultTestSource,
-    source_other: "",
-    test_name: defaultTestName,
-    test_name_other: "",
-    test_number: defaultTestNumber,
-    stage: "test_given",
-    note: "",
   });
   const [sessionList, setSessionList] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -501,6 +211,7 @@ export default function RecorderPage() {
     const user = nextUser === "divya" ? "divya" : "kapil";
     setSessionForm((p) => ({ ...p, user_id: user }));
     if (API_BASE_URL) {
+      setMissionSelectorLoading(true);
       try {
         const optionsRes = await fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(user)}`);
         if (optionsRes.ok) {
@@ -511,7 +222,12 @@ export default function RecorderPage() {
         }
       } catch (_) {
         setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
+      } finally {
+        setMissionSelectorLoading(false);
       }
+    } else {
+      setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
+      setMissionSelectorLoading(false);
     }
     await fetchSessions(user);
   };
@@ -555,30 +271,6 @@ export default function RecorderPage() {
       return { ...prev, exam_type: nextExam, subject: nextSubject, topic: nextTopic };
     });
   }, [activeExamOptions, activeCatalog]);
-
-  useEffect(() => {
-    const firstSource = activeTestSources[0] || "";
-    setSessionTestMeta((prev) => {
-      const nextSource = activeTestSources.includes(prev.source) ? prev.source : firstSource;
-      const nextNames = getMissionTestNamesBySource(nextSource);
-      const nextNumbers = getMissionTestNumberOptions(nextSource);
-      const nextTestName = (prev.test_name && nextNames.includes(prev.test_name)) ? prev.test_name : (nextNames[0] || "");
-      const nextTestNumber = (prev.test_number && nextNumbers.includes(prev.test_number)) ? prev.test_number : (nextNumbers[0] || "1");
-      if (
-        nextSource === prev.source
-        && nextTestName === prev.test_name
-        && nextTestNumber === prev.test_number
-      ) {
-        return prev;
-      }
-      return {
-        ...prev,
-        source: nextSource,
-        test_name: nextTestName,
-        test_number: nextTestNumber,
-      };
-    });
-  }, [activeTestSources, missionTestPlan]);
 
   useEffect(() => {
     const hasPending = pendingFinalizeModes.length > 0;
@@ -722,37 +414,26 @@ export default function RecorderPage() {
     render();
   };
 
-  const humanize = (value) =>
-    String(value || "")
-      .replaceAll("_", " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
+  const buildSessionSubjectTopic = () => {
+    const subject = (selectedSubjectValue || "").trim();
+    const topic = (selectedTopicValue || "").trim();
+    return { subject, topic };
+  };
 
-  const logTestProgressFromRecorder = async () => {
-    if (!API_BASE_URL || !trackTestProgress) return;
-    const examLabelMap = Object.fromEntries(activeExamOptions.map((o) => [o.value, o.label]));
-    const effectiveExam = sessionForm.exam_type === OTHER_VALUE ? sessionForm.exam_type_other.trim().toLowerCase() : sessionForm.exam_type;
-    const examLabel = examLabelMap[effectiveExam] || effectiveExam || "General";
-    const source = sessionTestMeta.source === OTHER_VALUE ? sessionTestMeta.source_other.trim().toLowerCase() : sessionTestMeta.source;
-    const testName = sessionTestMeta.test_name === OTHER_VALUE ? sessionTestMeta.test_name_other.trim() : sessionTestMeta.test_name;
-    const testNumber = (sessionTestMeta.test_number || "").trim();
-    const stage = sessionTestMeta.stage;
-    const note = (sessionTestMeta.note || "").trim();
-    if (!source || !testNumber || !stage || !note) return;
-    const detail = `Exam: ${examLabel} | Source: ${source}${testName ? ` | Test: ${testName}` : ""} | Test Number: ${testNumber} | Stage: ${stage} | Note: ${note}`;
-    const res = await fetch(`${API_BASE_URL}/points`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        player_id: sessionForm.user_id,
-        action_type: "test_completed",
-        test_type: "Test Completed",
-        detail,
-      }),
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`Test sync failed: ${res.status} ${txt}`);
-    }
+  const buildSessionTestRef = () => {
+    if (effectiveExamType !== "tests") return { test_source: "", test_name: "", test_number: "" };
+    const source = (selectedSubjectValue || "").trim();
+    const topic = (selectedTopicValue || "").trim();
+    if (!source || !topic) return { test_source: "", test_name: "", test_number: "" };
+
+    const match = topic.match(/^(.*?)(?:\s+(\d+))?$/);
+    const maybeName = (match?.[1] || topic).trim();
+    const maybeNumber = (match?.[2] || "").trim();
+    return {
+      test_source: source,
+      test_name: maybeName || topic,
+      test_number: maybeNumber,
+    };
   };
 
   const fetchSessions = async (userValue = sessionForm.user_id) => {
@@ -785,27 +466,14 @@ export default function RecorderPage() {
       return;
     }
     setSessionError("");
-    const subject = (selectedSubjectValue || "").trim();
-    const topic = (selectedTopicValue || "").trim();
+    const { subject, topic } = buildSessionSubjectTopic();
     const notes = sessionForm.notes.trim();
-    if (!subject || !topic || !notes) {
-      setSessionError("Subject, topic, and notes are required.");
+    if (!subject || !topic) {
+      setSessionError("Subject and topic are required.");
       return;
     }
-    if (trackTestProgress) {
-      const source = sessionTestMeta.source === OTHER_VALUE ? sessionTestMeta.source_other.trim() : sessionTestMeta.source;
-      const testNumber = (sessionTestMeta.test_number || "").trim();
-      const note = (sessionTestMeta.note || "").trim();
-      if (!source || !testNumber || !sessionTestMeta.stage || !note) {
-        setSessionError("For test sync, source, test number, stage, and note are required.");
-        return;
-      }
-      if (sessionTestMeta.test_name === OTHER_VALUE && !sessionTestMeta.test_name_other.trim()) {
-        setSessionError("For test sync, test name is required when Other is selected.");
-        return;
-      }
-    }
     try {
+      const testRef = buildSessionTestRef();
       const payload = {
         user_id: sessionForm.user_id,
         subject,
@@ -813,6 +481,7 @@ export default function RecorderPage() {
         session_type: sessionForm.session_type,
         recorder_type: sessionForm.recorder_type,
         notes,
+        ...testRef,
       };
       const res = await fetch(`${API_BASE_URL}/sessions`, {
         method: "POST",
@@ -824,7 +493,6 @@ export default function RecorderPage() {
         throw new Error(`Create session failed: ${res.status} ${txt}`);
       }
       const data = await res.json();
-      await logTestProgressFromRecorder();
       setSelectedSession(data.session);
       setPendingFinalizeModes([]);
       setTimerState({ running: false, startedAt: 0, baseElapsed: data.session?.elapsed_seconds || 0 });
@@ -1311,8 +979,8 @@ export default function RecorderPage() {
   const startSession = async () => {
     if (!selectedSession || selectedSession.status === "stopped") return;
     setSessionError("");
-    if (!selectedSession.subject?.trim() || !selectedSession.topic?.trim() || !selectedSession.notes?.trim()) {
-      setSessionError("Subject, topic, and notes are required to start a session.");
+    if (!selectedSession.subject?.trim() || !selectedSession.topic?.trim()) {
+      setSessionError("Subject and topic are required to start a session.");
       return;
     }
     try {
@@ -1578,25 +1246,11 @@ export default function RecorderPage() {
 
   const createExplainerSessionWithUploads = async () => {
     if (!API_BASE_URL) return;
-    const subject = (selectedSubjectValue || "").trim();
-    const topic = (selectedTopicValue || "").trim();
+    const { subject, topic } = buildSessionSubjectTopic();
     const notes = sessionForm.notes.trim();
-    if (!subject || !topic || !notes) {
-      setSessionError("Subject, topic, and notes are required.");
+    if (!subject || !topic) {
+      setSessionError("Subject and topic are required.");
       return;
-    }
-    if (trackTestProgress) {
-      const source = sessionTestMeta.source === OTHER_VALUE ? sessionTestMeta.source_other.trim() : sessionTestMeta.source;
-      const testNumber = (sessionTestMeta.test_number || "").trim();
-      const note = (sessionTestMeta.note || "").trim();
-      if (!source || !testNumber || !sessionTestMeta.stage || !note) {
-        setSessionError("For test sync, source, test number, stage, and note are required.");
-        return;
-      }
-      if (sessionTestMeta.test_name === OTHER_VALUE && !sessionTestMeta.test_name_other.trim()) {
-        setSessionError("For test sync, test name is required when Other is selected.");
-        return;
-      }
     }
     if (!uploadFiles.explainerAttachment) {
       setSessionError("Please select PDF/image for explainer.");
@@ -1611,6 +1265,7 @@ export default function RecorderPage() {
     try {
       setExplainerDoneLoading(true);
       setSessionError("");
+      const testRef = buildSessionTestRef();
       const payload = {
         user_id: sessionForm.user_id,
         subject,
@@ -1618,6 +1273,7 @@ export default function RecorderPage() {
         session_type: sessionForm.session_type,
         recorder_type: "pdf_explainer",
         notes,
+        ...testRef,
       };
       const createRes = await fetch(`${API_BASE_URL}/sessions`, {
         method: "POST",
@@ -1631,8 +1287,6 @@ export default function RecorderPage() {
       const createData = await createRes.json();
       const sessionId = createData.session?._id;
       if (!sessionId) throw new Error("Session id missing in create response");
-      await logTestProgressFromRecorder();
-
       await uploadMediaForSession(sessionId, "attachment", uploadFiles.explainerAttachment, uploadFiles.explainerAttachment.name);
       if (hasUploadAudio) {
         await uploadMediaForSession(sessionId, "audio", uploadFiles.explainerAudio, uploadFiles.explainerAudio.name);
@@ -1727,6 +1381,12 @@ export default function RecorderPage() {
           <p className="api-state warn">Backend URL needed for session recorder APIs.</p>
         ) : (
           <>
+            {missionSelectorLoading ? (
+              <p className="day-state">Loading mission options...</p>
+            ) : activeExamOptions.length === 0 ? (
+              <p className="api-state warn">Mission options not available for this user yet.</p>
+            ) : (
+              <>
             <div className="session-form-grid">
               <select
                 className="task-select"
@@ -1826,106 +1486,13 @@ export default function RecorderPage() {
               <select className="task-select" value={sessionForm.session_type} onChange={(e) => setSessionForm((p) => ({ ...p, session_type: e.target.value }))}>
                 <option value="study">Study</option>
                 <option value="revision">Revision</option>
+                <option value="analysis">Analysis</option>
               </select>
               <select className="task-select" value={sessionForm.recorder_type} onChange={(e) => setSessionForm((p) => ({ ...p, recorder_type: e.target.value }))}>
                 {RECORDER_TYPES.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
-            </div>
-            <div className="mission-sync-box">
-              <label className="task-check" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={trackTestProgress}
-                  onChange={(e) => setTrackTestProgress(e.target.checked)}
-                />
-                Sync this session to Tests (Points + Syllabus)
-              </label>
-              {trackTestProgress ? (
-                <div className="session-form-grid" style={{ marginTop: 10 }}>
-                  <select
-                    className="task-select"
-                    value={sessionTestMeta.source}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      const nextNames = getMissionTestNamesBySource(next);
-                      const nextNumbers = getMissionTestNumberOptions(next);
-                      setSessionTestMeta((p) => ({
-                        ...p,
-                        source: next,
-                        source_other: next === OTHER_VALUE ? p.source_other : "",
-                        test_name: nextNames[0] || "",
-                        test_name_other: "",
-                        test_number: nextNumbers[0] || "1",
-                      }));
-                    }}
-                  >
-                    {activeTestSources.map((src) => (
-                      <option key={src} value={src}>{humanize(src)}</option>
-                    ))}
-                    <option value={OTHER_VALUE}>Other</option>
-                  </select>
-                  {sessionTestMeta.source === OTHER_VALUE ? (
-                    <input
-                      className="task-select"
-                      placeholder="Type custom source"
-                      value={sessionTestMeta.source_other}
-                      onChange={(e) => setSessionTestMeta((p) => ({ ...p, source_other: e.target.value }))}
-                    />
-                  ) : null}
-                  <select
-                    className="task-select"
-                    value={sessionTestMeta.test_name}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setSessionTestMeta((p) => ({
-                        ...p,
-                        test_name: next,
-                        test_name_other: next === OTHER_VALUE ? p.test_name_other : "",
-                      }));
-                    }}
-                  >
-                    {getMissionTestNamesBySource(sessionTestMeta.source).map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                    <option value="">General</option>
-                    <option value={OTHER_VALUE}>Other</option>
-                  </select>
-                  {sessionTestMeta.test_name === OTHER_VALUE ? (
-                    <input
-                      className="task-select"
-                      placeholder="Type test name"
-                      value={sessionTestMeta.test_name_other}
-                      onChange={(e) => setSessionTestMeta((p) => ({ ...p, test_name_other: e.target.value }))}
-                    />
-                  ) : null}
-                  <select
-                    className="task-select"
-                    value={sessionTestMeta.test_number}
-                    onChange={(e) => setSessionTestMeta((p) => ({ ...p, test_number: e.target.value }))}
-                  >
-                    {getMissionTestNumberOptions(sessionTestMeta.source).map((num) => (
-                      <option key={num} value={num}>{num}</option>
-                    ))}
-                  </select>
-                  <select
-                    className="task-select"
-                    value={sessionTestMeta.stage}
-                    onChange={(e) => setSessionTestMeta((p) => ({ ...p, stage: e.target.value }))}
-                  >
-                    {TEST_STAGE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    className="task-select"
-                    placeholder="Test note (required for sync)"
-                    value={sessionTestMeta.note}
-                    onChange={(e) => setSessionTestMeta((p) => ({ ...p, note: e.target.value }))}
-                  />
-                </div>
-              ) : null}
             </div>
             {sessionForm.recorder_type === "pdf_explainer" ? (
               <div className="explainer-setup-card">
@@ -2047,6 +1614,8 @@ export default function RecorderPage() {
               )}
               <button className="btn-day secondary" onClick={() => fetchSessions(sessionForm.user_id)}>Load Sessions</button>
             </div>
+              </>
+            )}
             {sessionError ? <p className="api-state error">{sessionError}</p> : null}
             {sessionLoading ? <p className="day-state">Loading sessions...</p> : null}
 

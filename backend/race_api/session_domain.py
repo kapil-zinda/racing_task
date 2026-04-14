@@ -13,8 +13,6 @@ from .context import (
     sessions_collection,
     settings,
 )
-from .ledger_domain import log_activity
-from .mission_domain import get_active_mission_id
 
 
 def _normalize_modes(recorder_type: str, modes: List[str]) -> tuple[str, List[str]]:
@@ -39,8 +37,8 @@ def _normalize_modes(recorder_type: str, modes: List[str]) -> tuple[str, List[st
 def create_session_payload(payload) -> Dict[str, Any]:
     if payload.user_id not in PLAYERS:
         raise ValueError("Invalid user_id")
-    if payload.session_type not in {"study", "revision"}:
-        raise ValueError("session_type must be study or revision")
+    if payload.session_type not in {"study", "revision", "analysis", "test"}:
+        raise ValueError("session_type must be study, revision or analysis")
 
     subject = payload.subject.strip()
     topic = payload.topic.strip()
@@ -53,6 +51,10 @@ def create_session_payload(payload) -> Dict[str, Any]:
         raise ValueError("notes are required")
 
     recorder_type, modes = _normalize_modes(payload.recorder_type, payload.modes)
+    test_source = (getattr(payload, "test_source", "") or "").strip()
+    test_name = (getattr(payload, "test_name", "") or "").strip()
+    test_number = str(getattr(payload, "test_number", "") or "").strip()
+
     date_str = current_date_str()
     doc = {
         "_id": session_id(),
@@ -77,6 +79,12 @@ def create_session_payload(payload) -> Dict[str, Any]:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if test_source or test_name or test_number:
+        doc["test_ref"] = {
+            "source": test_source,
+            "test_name": test_name,
+            "test_number": test_number,
+        }
 
     sessions_collection().insert_one(doc)
     return {"message": "Session created", "session": doc}
@@ -153,25 +161,6 @@ def update_session_status_payload(session_id_value: str, payload) -> Dict[str, A
 
     collection.update_one({"_id": session_id_value}, {"$set": update_fields, "$push": {"events": event}})
     updated = collection.find_one({"_id": session_id_value})
-    if payload.status == "stopped" and updated:
-        uid = str(updated.get("user_id", "") or "").strip().lower()
-        if uid in PLAYERS:
-            mission_id = get_active_mission_id(uid)
-            log_activity(
-                uid,
-                "session_stopped",
-                count=1,
-                duration_minutes=max(1, (elapsed_seconds + 59) // 60),
-                mission_id=mission_id,
-                meta={
-                    "session_id": str(updated.get("_id", "")),
-                    "session_type": str(updated.get("session_type", "") or ""),
-                    "subject": str(updated.get("subject", "") or ""),
-                    "topic": str(updated.get("topic", "") or ""),
-                    "recorder_type": str(updated.get("recorder_type", "") or ""),
-                    "modes": updated.get("modes", []) if isinstance(updated.get("modes"), list) else [],
-                },
-            )
     return {"message": "Session status updated", "session": updated}
 
 

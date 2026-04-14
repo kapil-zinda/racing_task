@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
@@ -32,14 +32,112 @@ function subjectRecordings(subject) {
   );
 }
 
+function norm(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 export default function SyllabusPage() {
   const [userId, setUserId] = useState("kapil");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState({ exams: [] });
-  const [missionPlanTests, setMissionPlanTests] = useState([]);
   const [playbackByKey, setPlaybackByKey] = useState({});
   const [playbackLoadingKey, setPlaybackLoadingKey] = useState("");
+
+  const globalTestsBySource = useMemo(() => {
+    const exams = Array.isArray(data?.exams) ? data.exams : [];
+    const bySource = new Map();
+    const recordingIndex = new Map();
+
+    exams.forEach((exam) => {
+      const examName = exam?.exam || "General";
+      (exam?.subjects || []).forEach((subject) => {
+        const subjectName = subject?.subject || "General";
+        (subject?.topics || []).forEach((topic) => {
+          const topicName = topic?.topic || "General";
+          const recordings = (topic?.recordings || [])
+            .filter((rec) => rec?.session_id && rec?.default_media_type)
+            .map((rec, idx) => ({
+              key: `test-rec-${norm(examName)}-${norm(subjectName)}-${norm(topicName)}-${idx}-${rec.session_id}`,
+              note: rec.note || topicName,
+              date: rec.date || "",
+              session_id: rec.session_id,
+              default_media_type: rec.default_media_type,
+            }));
+          if (recordings.length > 0) {
+            recordingIndex.set(`${norm(examName)}||${norm(subjectName)}||${norm(topicName)}`, recordings);
+          }
+        });
+      });
+    });
+
+    exams.forEach((exam) => {
+      const examName = exam?.exam || "General";
+      (exam?.tests || []).forEach((sourceBlock) => {
+        const sourceName = sourceBlock?.source || "General";
+        if (!bySource.has(sourceName)) bySource.set(sourceName, []);
+
+        (sourceBlock?.tests || []).forEach((test) => {
+          const testNumber = String(test?.test_number || "").trim();
+          const testName = String(test?.test_name || "").trim();
+          const dedupeKey = `${norm(examName)}||${norm(sourceName)}||${norm(testNumber)}||${norm(testName)}`;
+          const list = bySource.get(sourceName);
+          if (list.some((row) => row._dedupeKey === dedupeKey)) return;
+
+          const directRecordings = Array.isArray(test?.recordings)
+            ? test.recordings
+                .filter((rec) => rec?.session_id && rec?.default_media_type)
+                .map((rec, idx) => ({
+                  key: `test-row-rec-${norm(examName)}-${norm(sourceName)}-${norm(testNumber)}-${idx}-${rec.session_id}`,
+                  note: rec.note || testName || `Test ${testNumber}`,
+                  date: rec.date || "",
+                  session_id: rec.session_id,
+                  default_media_type: rec.default_media_type,
+                }))
+            : [];
+
+          let linkedRecordings = directRecordings;
+          if (linkedRecordings.length === 0) {
+            const candidates = [testName, `Test ${testNumber}`, testNumber].filter((v) => v && v.trim());
+            for (const candidate of candidates) {
+              const hit = recordingIndex.get(`${norm(examName)}||${norm(sourceName)}||${norm(candidate)}`);
+              if (hit?.length) {
+                linkedRecordings = hit;
+                break;
+              }
+            }
+          }
+
+          list.push({
+            _dedupeKey: dedupeKey,
+            exam: examName,
+            test_name: testName,
+            test_number: testNumber,
+            note: test?.note || "",
+            test_given_date: test?.test_given_date || "",
+            analysis_done_date: test?.analysis_done_date || "",
+            revision_date: test?.revision_date || "",
+            second_revision_date: test?.second_revision_date || "",
+            recordings: linkedRecordings,
+          });
+        });
+      });
+    });
+
+    return Array.from(bySource.entries())
+      .map(([source, tests]) => ({
+        source,
+        tests: tests
+          .slice()
+          .sort((a, b) => {
+            const aNum = Number(a.test_number);
+            const bNum = Number(b.test_number);
+            if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
+            return String(a.test_number).localeCompare(String(b.test_number));
+          }),
+      }))
+      .sort((a, b) => a.source.localeCompare(b.source));
+  }, [data]);
 
   const loadSyllabus = async (nextUser = userId) => {
     if (!API_BASE_URL) return;
@@ -53,18 +151,6 @@ export default function SyllabusPage() {
       }
       const json = await res.json();
       setData(json || { exams: [] });
-      try {
-        const optRes = await fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(nextUser)}`);
-        if (optRes.ok) {
-          const optJson = await optRes.json();
-          const planTests = Array.isArray(optJson?.plan?.tests) ? optJson.plan.tests : [];
-          setMissionPlanTests(planTests);
-        } else {
-          setMissionPlanTests([]);
-        }
-      } catch (_) {
-        setMissionPlanTests([]);
-      }
       setPlaybackByKey({});
     } catch (err) {
       setError(String(err.message || err));
@@ -243,83 +329,6 @@ export default function SyllabusPage() {
                       })}
                     </div>
 
-                    {userId === "divya" ? (
-                      <details className="syllabus-tests">
-                        <summary>Tests</summary>
-                        {missionPlanTests.length > 0 ? (
-                          <div className="syllabus-table-wrap">
-                            <table className="syllabus-table">
-                              <thead>
-                                <tr>
-                                  <th>Test</th>
-                                  <th>Source</th>
-                                  <th>Number of Tests</th>
-                                  <th>Given</th>
-                                  <th>Analysis</th>
-                                  <th>Revisions</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {missionPlanTests.map((row, idx) => (
-                                  <tr key={`mission-test-${idx}`}>
-                                    <td>{row.test_name || "-"}</td>
-                                    <td>{row.source || "-"}</td>
-                                    <td>{row.number_of_tests ?? 0}</td>
-                                    <td>{row.test_given ?? 0}</td>
-                                    <td>{row.analysis_done ?? 0}</td>
-                                    <td>{row.revisions ?? 0}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : null}
-                        {(exam.tests || []).length === 0 ? (
-                          <p className="day-state">No tests logged for this exam yet.</p>
-                        ) : (
-                          (exam.tests || []).map((source) => (
-                            <details key={`${exam.exam}-src-${source.source}`} className="syllabus-source">
-                              <summary>Source: {source.source}</summary>
-                              <div className="syllabus-table-wrap">
-                                <table className="syllabus-table">
-                                  <thead>
-                                    <tr>
-                                      <th>Test</th>
-                                      <th>Test Number</th>
-                                      <th>Note</th>
-                                      <th>Test Given Date</th>
-                                      <th>Analysis</th>
-                                      <th>Revision</th>
-                                      <th>Second Revision</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {(source.tests || []).length === 0 ? (
-                                      <tr>
-                                        <td colSpan={7}>No tests</td>
-                                      </tr>
-                                    ) : (
-                                      (source.tests || []).map((test) => (
-                                        <tr key={`${source.source}-${test.test_number}`}>
-                                          <td>{test.test_name || "-"}</td>
-                                          <td>{test.test_number || "-"}</td>
-                                          <td>{test.note || "-"}</td>
-                                          <td>{labelDate(test.test_given_date)}</td>
-                                          <td>{labelDate(test.analysis_done_date)}</td>
-                                          <td>{labelDate(test.revision_date)}</td>
-                                          <td>{labelDate(test.second_revision_date)}</td>
-                                        </tr>
-                                      ))
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </details>
-                          ))
-                        )}
-                      </details>
-                    ) : null}
-
                     {userId === "kapil" ? (
                       <details className="syllabus-tests">
                         <summary>Tickets</summary>
@@ -362,6 +371,104 @@ export default function SyllabusPage() {
                 ))
               )}
             </div>
+
+            {userId === "divya" ? (
+              <details className="syllabus-tests" open>
+                <summary>Tests</summary>
+                {globalTestsBySource.length === 0 ? (
+                  <p className="day-state">No tests logged yet.</p>
+                ) : (
+                  globalTestsBySource.map((source) => (
+                    <details key={`global-tests-${source.source}`} className="syllabus-source">
+                      <summary>Source: {source.source}</summary>
+                      <div className="syllabus-table-wrap">
+                        <table className="syllabus-table">
+                          <thead>
+                            <tr>
+                              <th>Exam</th>
+                              <th>Test Number</th>
+                              <th>Test Given Date</th>
+                              <th>Analysis</th>
+                              <th>Revision</th>
+                              <th>Second Revision</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(source.tests || []).length === 0 ? (
+                              <tr>
+                                <td colSpan={6}>No tests</td>
+                              </tr>
+                            ) : (
+                              (source.tests || []).map((test) => (
+                                <tr key={test._dedupeKey}>
+                                  <td>{test.exam || "-"}</td>
+                                  <td>{test.test_number || "-"}</td>
+                                  <td>{labelDate(test.test_given_date)}</td>
+                                  <td>{labelDate(test.analysis_done_date)}</td>
+                                  <td>{labelDate(test.revision_date)}</td>
+                                  <td>{labelDate(test.second_revision_date)}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="syllabus-table-wrap">
+                        <table className="syllabus-table">
+                          <thead>
+                            <tr>
+                              <th>Recording Note</th>
+                              <th>Date</th>
+                              <th>Play</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(() => {
+                              const allRecordings = (source.tests || [])
+                                .flatMap((test) => (test.recordings || []).map((rec) => ({
+                                  ...rec,
+                                  note: rec.note || `${test.test_name || "Test"} ${test.test_number || ""}`.trim(),
+                                })))
+                                .filter((rec) => rec?.session_id && rec?.default_media_type);
+                              if (allRecordings.length === 0) {
+                                return (
+                                  <tr>
+                                    <td colSpan={3}>No recording</td>
+                                  </tr>
+                                );
+                              }
+                              return allRecordings.map((rec) => (
+                                <tr key={rec.key}>
+                                  <td>{rec.note}</td>
+                                  <td>{labelDate(rec.date)}</td>
+                                  <td>
+                                    <button
+                                      className="btn-day secondary"
+                                      disabled={!rec.session_id || !rec.default_media_type || playbackLoadingKey === rec.key}
+                                      onClick={() => playRecording(rec)}
+                                    >
+                                      {playbackLoadingKey === rec.key ? "Loading..." : "Play"}
+                                    </button>
+                                    {playbackByKey[rec.key]?.url ? (
+                                      playbackByKey[rec.key].mediaType === "audio" ? (
+                                        <audio className="session-player" controls preload="metadata" src={playbackByKey[rec.key].url} />
+                                      ) : (
+                                        <video className="session-player" controls preload="metadata" playsInline src={playbackByKey[rec.key].url} />
+                                      )
+                                    ) : null}
+                                  </td>
+                                </tr>
+                              ));
+                            })()}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  ))
+                )}
+              </details>
+            ) : null}
           </>
         )}
       </section>

@@ -7,41 +7,6 @@ import ActivityInternalMenu from "../components/ActivityInternalMenu";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
 const GLOBAL_USER_STORAGE_KEY = "global_user_id";
-const FULL_TEST_TARGET = 17;
-const FORUM_TARGET = 34;
-const CAVA_TARGET = 25;
-const AXES = [
-  "Polity",
-  "History",
-  "Geography",
-  "Economy",
-  "Environment",
-  "Science & Tech",
-  "Current Affairs",
-  "CSAT",
-  "Essay",
-  "Ethics",
-  "Answer Writing",
-  "Revision",
-  "Mock Tests",
-];
-
-const AXIS_KEYWORDS = {
-  Polity: ["polity", "constitution", "governance", "rights", "panchayati"],
-  History: ["history", "modern", "art", "culture", "heritage", "world history", "medieval"],
-  Geography: ["geography", "physical", "human", "world physical"],
-  Economy: ["economy", "economic", "poverty", "inclusion", "development", "demographics"],
-  Environment: ["environment", "ecology", "biodiversity", "climate"],
-  "Science & Tech": ["science", "technology", "tech"],
-  "Current Affairs": ["current affairs", "ca-va", "news"],
-  CSAT: ["csat", "numeracy", "comprehension", "logical", "reasoning", "data interpretation"],
-  Essay: ["essay"],
-  Ethics: ["ethics", "integrity", "aptitude"],
-  "Answer Writing": ["answer", "writing", "mains"],
-  Revision: ["revision"],
-  "Mock Tests": ["test", "mock", "sfg", "pmp", "cava"],
-};
-
 function sanitizeMissionTestRows(rows) {
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => ({
@@ -68,6 +33,8 @@ function revisionCountFromTopic(topicNode) {
 }
 
 function hasVideoForTopic(topicNode) {
+  // Product rule: class read/study entry in points means class video watched.
+  if (topicNode?.class_study_first_date) return true;
   const recordings = Array.isArray(topicNode?.recordings) ? topicNode.recordings : [];
   return recordings.some((rec) => {
     const media = Array.isArray(rec?.media_types) ? rec.media_types : [];
@@ -157,6 +124,8 @@ function buildMissionExecution(plan, syllabus) {
 
     randomDone: 0,
     randomTotal: 0,
+    randomReadDone: 0,
+    randomReadTotal: 0,
     randomNotesDone: 0,
     randomNotesTotal: 0,
     randomRevisionsDone: 0,
@@ -170,7 +139,50 @@ function buildMissionExecution(plan, syllabus) {
     testsAnalysisTotal: 0,
     testRevisionsDone: 0,
     testRevisionsTotal: 0,
+    testsCompleteDone: 0,
+    testsCompleteTotal: 0,
+    dimensions: [],
+    courseItems: [],
+    subjectItems: [],
+    classItems: [],
     classVideoItems: [],
+    classNotesItems: [],
+    classRevisionItems: [],
+    bookItems: [],
+    chapterItems: [],
+    chapterNotesItems: [],
+    chapterRevisionItems: [],
+    randomItems: [],
+    randomNotesItems: [],
+    randomRevisionItems: [],
+    testRowItems: [],
+    testGivenItems: [],
+    testAnalysisItems: [],
+    testRevisionItems: [],
+    missionTopics: [],
+    missionTestSlots: [],
+  };
+
+  const missionTopicMap = new Map();
+  const upsertMissionTopic = (examName, subjectName, topicName, topicNode, axisName) => {
+    const key = `${norm(examName)}||${norm(subjectName)}||${norm(topicName)}`;
+    if (missionTopicMap.has(key)) return;
+    const revisionDates = Array.isArray(topicNode?.revision_dates)
+      ? topicNode.revision_dates.filter(Boolean)
+      : [topicNode?.first_revision_date, topicNode?.second_revision_date, topicNode?.third_revision_date, topicNode?.fourth_revision_date, topicNode?.fifth_revision_date].filter(Boolean);
+    missionTopicMap.set(key, {
+      key,
+      exam: String(examName || ""),
+      subject: String(subjectName || ""),
+      topic: String(topicName || ""),
+      axis: String(axisName || "Randoms"),
+      classDate: topicNode?.class_study_first_date || "",
+      firstRev: topicNode?.first_revision_date || "",
+      secondRev: topicNode?.second_revision_date || "",
+      revisionDates,
+      lastTouch: topicNode?.second_revision_date || topicNode?.first_revision_date || topicNode?.class_study_first_date || "",
+      recordings: Array.isArray(topicNode?.recordings) ? topicNode.recordings : [],
+    });
   };
 
   const courseGroups = new Map();
@@ -184,14 +196,25 @@ function buildMissionExecution(plan, syllabus) {
 
   out.coursesTotal = courseGroups.size;
   courseGroups.forEach((group) => {
+    let courseClassesTotal = 0;
+    let courseClassVideosDone = 0;
+    let courseClassNotesDone = 0;
+    let courseClassRevisionsTotal = 0;
+    let courseClassRevisionsDone = 0;
+    let courseClassesDone = 0;
     let courseDone = group.rows.length > 0;
     group.rows.forEach((row) => {
+      const subjectLabel = String(row?.subject_name || "");
       out.subjectsTotal += 1;
       const classCount = Math.max(1, Number(row?.class_count || 1));
       const requiredRevisions = Math.max(0, Number(row?.revision_count || 0));
       let subjectDone = true;
       for (let i = 1; i <= classCount; i += 1) {
-        const topicNode = getTopicNode(group.courseName, row?.subject_name, `Class ${i}`);
+        const examName = group.courseName;
+        const subjectName = subjectLabel;
+        const topicName = `Class ${i}`;
+        const topicNode = getTopicNode(examName, subjectName, topicName);
+        upsertMissionTopic(examName, subjectName, topicName, topicNode, "Courses");
         const hasClass = Boolean(topicNode?.class_study_first_date);
         const hasVideo = hasVideoForTopic(topicNode);
         const hasNotes = hasNotesForTopic(topicNode);
@@ -201,38 +224,95 @@ function buildMissionExecution(plan, syllabus) {
         out.classVideosTotal += 1;
         out.classNotesTotal += 1;
         out.classRevisionsTotal += requiredRevisions;
+        courseClassesTotal += 1;
+        courseClassRevisionsTotal += requiredRevisions;
 
-        if (hasVideo) out.classVideosDone += 1;
-        if (hasNotes) out.classNotesDone += 1;
-        out.classRevisionsDone += Math.min(revDone, requiredRevisions);
+        if (hasVideo) {
+          out.classVideosDone += 1;
+          courseClassVideosDone += 1;
+        }
+        if (hasNotes) {
+          out.classNotesDone += 1;
+          courseClassNotesDone += 1;
+        }
+        const cappedRev = Math.min(revDone, requiredRevisions);
+        out.classRevisionsDone += cappedRev;
+        courseClassRevisionsDone += cappedRev;
         out.classVideoItems.push({
           course: group.courseName,
-          subject: String(row?.subject_name || ""),
+          subject: subjectLabel,
           classNo: i,
           done: hasVideo,
+        });
+        out.classNotesItems.push({
+          course: group.courseName,
+          subject: subjectLabel,
+          classNo: i,
+          done: hasNotes,
+        });
+        out.classRevisionItems.push({
+          course: group.courseName,
+          subject: subjectLabel,
+          classNo: i,
+          done: revDone >= requiredRevisions,
+          doneCount: Math.min(revDone, requiredRevisions),
+          totalCount: requiredRevisions,
+        });
+        out.classItems.push({
+          course: group.courseName,
+          subject: subjectLabel,
+          classNo: i,
+          done: hasClass && hasVideo && hasNotes && revDone >= requiredRevisions,
         });
 
         if (hasClass && hasVideo && hasNotes && revDone >= requiredRevisions) {
           out.classesDone += 1;
+          courseClassesDone += 1;
         } else {
           subjectDone = false;
         }
       }
       if (subjectDone) out.subjectsDone += 1;
       else courseDone = false;
+      out.subjectItems.push({
+        course: group.courseName,
+        subject: subjectLabel,
+        done: subjectDone,
+      });
     });
     if (courseDone) out.coursesDone += 1;
+    out.courseItems.push({
+      course: group.courseName,
+      done: courseDone,
+    });
+    out.dimensions.push({
+      key: `course:${norm(group.courseName) || Math.random().toString(36).slice(2)}`,
+      label: group.courseName || "Unnamed Course",
+      kind: "course",
+      coverageDone: courseClassVideosDone + courseClassNotesDone,
+      coverageTotal: 2 * courseClassesTotal,
+      retentionDone: courseClassRevisionsDone,
+      retentionTotal: courseClassRevisionsTotal,
+      performanceDone: courseClassesDone,
+      performanceTotal: courseClassesTotal,
+    });
   });
 
   books.forEach((row) => {
+    const bookName = String(row?.book_name || "").trim();
     out.booksTotal += 1;
     const chapterCount = Math.max(1, Number(row?.chapter_count || 1));
     const requiredRevisions = Math.max(0, Number(row?.revision_count || 0));
-    const examName = `Book: ${String(row?.book_name || "").trim()}`;
-    const subjectName = String(row?.book_name || "").trim();
+    const examName = `Book: ${bookName}`;
+    const subjectName = bookName;
     let bookDone = true;
+    let chaptersDoneForBook = 0;
+    let chapterNotesDoneForBook = 0;
+    let chapterRevisionsDoneForBook = 0;
     for (let i = 1; i <= chapterCount; i += 1) {
-      const topicNode = getTopicNode(examName, subjectName, `Chapter ${i}`);
+      const topicName = `Chapter ${i}`;
+      const topicNode = getTopicNode(examName, subjectName, topicName);
+      upsertMissionTopic(examName, subjectName, topicName, topicNode, "Books");
       const hasRead = Boolean(topicNode?.class_study_first_date);
       const hasNotes = hasNotesForTopic(topicNode);
       const revDone = revisionCountFromTopic(topicNode);
@@ -240,12 +320,52 @@ function buildMissionExecution(plan, syllabus) {
       out.chaptersTotal += 1;
       out.chapterNotesTotal += 1;
       out.chapterRevisionsTotal += requiredRevisions;
-      if (hasNotes) out.chapterNotesDone += 1;
-      out.chapterRevisionsDone += Math.min(revDone, requiredRevisions);
-      if (hasRead) out.chaptersDone += 1;
+      if (hasNotes) {
+        out.chapterNotesDone += 1;
+        chapterNotesDoneForBook += 1;
+      }
+      const cappedRev = Math.min(revDone, requiredRevisions);
+      out.chapterRevisionsDone += cappedRev;
+      chapterRevisionsDoneForBook += cappedRev;
+      if (hasRead) {
+        out.chaptersDone += 1;
+        chaptersDoneForBook += 1;
+      }
+      out.chapterItems.push({
+        book: bookName,
+        chapterNo: i,
+        done: hasRead,
+      });
+      out.chapterNotesItems.push({
+        book: bookName,
+        chapterNo: i,
+        done: hasNotes,
+      });
+      out.chapterRevisionItems.push({
+        book: bookName,
+        chapterNo: i,
+        done: revDone >= requiredRevisions,
+        doneCount: Math.min(revDone, requiredRevisions),
+        totalCount: requiredRevisions,
+      });
       if (!(hasRead && hasNotes && revDone >= requiredRevisions)) bookDone = false;
     }
     if (bookDone) out.booksDone += 1;
+    out.bookItems.push({
+      book: bookName,
+      done: bookDone,
+    });
+    out.dimensions.push({
+      key: `book:${norm(bookName) || Math.random().toString(36).slice(2)}`,
+      label: bookName || "Unnamed Book",
+      kind: "book",
+      coverageDone: chaptersDoneForBook + chapterNotesDoneForBook,
+      coverageTotal: 2 * chapterCount,
+      retentionDone: chapterRevisionsDoneForBook,
+      retentionTotal: chapterCount * requiredRevisions,
+      performanceDone: bookDone ? 1 : 0,
+      performanceTotal: 1,
+    });
   });
 
   randomRows.forEach((row) => {
@@ -256,17 +376,51 @@ function buildMissionExecution(plan, syllabus) {
     const subjectName = String(row?.source || "").trim();
     const topicName = String(row?.topic_name || "").trim();
     const topicNode = getTopicNode(examName, subjectName, topicName);
+    upsertMissionTopic(examName, subjectName, topicName, topicNode, "Randoms");
     const hasRead = Boolean(topicNode?.class_study_first_date);
     const hasNotes = hasNotesForTopic(topicNode);
     const revDone = revisionCountFromTopic(topicNode);
+
+    out.randomReadTotal += 1;
+    if (hasRead) out.randomReadDone += 1;
 
     if (needsNotes) {
       out.randomNotesTotal += 1;
       if (hasNotes) out.randomNotesDone += 1;
     }
     out.randomRevisionsTotal += requiredRevisions;
-    out.randomRevisionsDone += Math.min(revDone, requiredRevisions);
-    if (hasRead && (!needsNotes || hasNotes) && revDone >= requiredRevisions) out.randomDone += 1;
+    const cappedRev = Math.min(revDone, requiredRevisions);
+    out.randomRevisionsDone += cappedRev;
+    const randomComplete = hasRead && (!needsNotes || hasNotes) && revDone >= requiredRevisions;
+    if (randomComplete) out.randomDone += 1;
+    out.randomItems.push({
+      source: subjectName,
+      topic: topicName,
+      done: randomComplete,
+    });
+    out.randomNotesItems.push({
+      source: subjectName,
+      topic: topicName,
+      done: !needsNotes || hasNotes,
+    });
+    out.randomRevisionItems.push({
+      source: subjectName,
+      topic: topicName,
+      done: revDone >= requiredRevisions,
+      doneCount: cappedRev,
+      totalCount: requiredRevisions,
+    });
+    out.dimensions.push({
+      key: `random:${norm(subjectName)}:${norm(topicName) || Math.random().toString(36).slice(2)}`,
+      label: `${subjectName || "Random"} - ${topicName || "Topic"}`,
+      kind: "random",
+      coverageDone: (hasRead ? 1 : 0) + ((needsNotes && hasNotes) || (!needsNotes) ? 1 : 0),
+      coverageTotal: 2,
+      retentionDone: cappedRev,
+      retentionTotal: requiredRevisions,
+      performanceDone: randomComplete ? 1 : 0,
+      performanceTotal: 1,
+    });
   });
 
   tests.forEach((row) => {
@@ -278,19 +432,82 @@ function buildMissionExecution(plan, syllabus) {
     out.testRevisionsTotal += totalTests * requiredRevisions;
 
     let rowDone = true;
+    let rowGivenDone = 0;
+    let rowAnalysisDone = 0;
+    let rowRevisionsDone = 0;
+    let rowCompleteDone = 0;
     for (let i = 1; i <= totalTests; i += 1) {
       const slot = findTestSlot(row?.source, i, row?.test_name);
       const given = Boolean(slot?.test_given_date);
       const analysis = Boolean(slot?.analysis_done_date);
       const revOne = Boolean(slot?.revision_date);
       const revTwo = Boolean(slot?.second_revision_date);
+      out.missionTestSlots.push({
+        source: String(row?.source || ""),
+        testName: String(row?.test_name || ""),
+        testNumber: i,
+        testGivenDate: slot?.test_given_date || "",
+        analysisDoneDate: slot?.analysis_done_date || "",
+        revisionDate: slot?.revision_date || "",
+        secondRevisionDate: slot?.second_revision_date || "",
+      });
       const revDone = (revOne ? 1 : 0) + (revTwo ? 1 : 0);
-      if (given) out.testsGivenDone += 1;
-      if (analysis) out.testsAnalysisDone += 1;
-      out.testRevisionsDone += Math.min(revDone, requiredRevisions);
+      const slotComplete = given && analysis && revDone >= requiredRevisions;
+      if (given) {
+        out.testsGivenDone += 1;
+        rowGivenDone += 1;
+      }
+      if (analysis) {
+        out.testsAnalysisDone += 1;
+        rowAnalysisDone += 1;
+      }
+      const cappedRev = Math.min(revDone, requiredRevisions);
+      out.testRevisionsDone += cappedRev;
+      rowRevisionsDone += cappedRev;
+      out.testsCompleteTotal += 1;
+      if (slotComplete) {
+        out.testsCompleteDone += 1;
+        rowCompleteDone += 1;
+      }
+      out.testGivenItems.push({
+        source: String(row?.source || ""),
+        testName: String(row?.test_name || ""),
+        testNumber: i,
+        done: given,
+      });
+      out.testAnalysisItems.push({
+        source: String(row?.source || ""),
+        testName: String(row?.test_name || ""),
+        testNumber: i,
+        done: analysis,
+      });
+      out.testRevisionItems.push({
+        source: String(row?.source || ""),
+        testName: String(row?.test_name || ""),
+        testNumber: i,
+        done: revDone >= requiredRevisions,
+        doneCount: Math.min(revDone, requiredRevisions),
+        totalCount: requiredRevisions,
+      });
       if (!(given && analysis && revDone >= requiredRevisions)) rowDone = false;
     }
     if (rowDone) out.testRowsDone += 1;
+    out.testRowItems.push({
+      source: String(row?.source || ""),
+      testName: String(row?.test_name || ""),
+      done: rowDone,
+    });
+    out.dimensions.push({
+      key: `test:${norm(row?.source)}:${norm(row?.test_name)}:${totalTests}`,
+      label: `${String(row?.source || "Test")} - ${String(row?.test_name || "Set")}`,
+      kind: "test",
+      coverageDone: rowGivenDone + rowAnalysisDone,
+      coverageTotal: 2 * totalTests,
+      retentionDone: rowRevisionsDone,
+      retentionTotal: totalTests * requiredRevisions,
+      performanceDone: rowCompleteDone,
+      performanceTotal: totalTests,
+    });
   });
 
   const ratios = [
@@ -313,6 +530,7 @@ function buildMissionExecution(plan, syllabus) {
     out.testRevisionsTotal ? out.testRevisionsDone / out.testRevisionsTotal : 1,
   ];
   out.progressPercent = Math.round((ratios.reduce((acc, v) => acc + v, 0) / ratios.length) * 100);
+  out.missionTopics = Array.from(missionTopicMap.values());
   return out;
 }
 
@@ -328,15 +546,6 @@ function daysSince(value) {
   const now = new Date();
   const diff = now.getTime() - d.getTime();
   return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
-}
-
-function classifyAxis(exam, subject, topic) {
-  const text = `${exam || ""} ${subject || ""} ${topic || ""}`.toLowerCase();
-  for (const axis of AXES) {
-    const keys = AXIS_KEYWORDS[axis] || [];
-    if (keys.some((k) => text.includes(k))) return axis;
-  }
-  return "Revision";
 }
 
 function toIsoDate(d) {
@@ -390,74 +599,28 @@ function radarPoints(values, radius, cx, cy) {
     .join(" ");
 }
 
-function emptyAxisStats() {
-  return AXES.reduce((acc, axis) => {
-    acc[axis] = { total: 0, covered: 0, retentionSum: 0, perfSum: 0, readiness: 0, coverage: 0, retention: 0, performance: 0 };
-    return acc;
-  }, {});
-}
-
-function buildMissionModel(syllabus, activityByDate, userId) {
-  const exams = syllabus?.exams || [];
-  const topics = [];
-  const tests = [];
-
-  exams.forEach((examNode) => {
-    (examNode.subjects || []).forEach((subjectNode) => {
-      (subjectNode.topics || []).forEach((topicNode) => {
-        const classDate = topicNode.class_study_first_date || "";
-        const firstRev = topicNode.first_revision_date || "";
-        const secondRev = topicNode.second_revision_date || "";
-        const lastTouch = secondRev || firstRev || classDate || "";
-        const axis = classifyAxis(examNode.exam, subjectNode.subject, topicNode.topic);
-        topics.push({
-          exam: examNode.exam,
-          subject: subjectNode.subject,
-          topic: topicNode.topic,
-          classDate,
-          firstRev,
-          secondRev,
-          lastTouch,
-          axis,
-          recordings: topicNode.recordings || [],
-        });
-      });
-    });
-
-    (examNode.tests || []).forEach((sourceNode) => {
-      (sourceNode.tests || []).forEach((t) => {
-        tests.push({
-          exam: examNode.exam,
-          source: sourceNode.source,
-          testNumber: t.test_number,
-          testGivenDate: t.test_given_date,
-          revisionDate: t.revision_date,
-          secondRevisionDate: t.second_revision_date,
-          note: t.note || "",
-        });
-      });
-    });
+function buildMissionModel(planExecution, userId) {
+  const topics = Array.isArray(planExecution?.missionTopics) ? planExecution.missionTopics : [];
+  const tests = Array.isArray(planExecution?.missionTestSlots) ? planExecution.missionTestSlots : [];
+  const activityByDate = {};
+  const bump = (dateStr, key) => {
+    if (!dateStr) return;
+    const d = String(dateStr).slice(0, 10);
+    if (!d) return;
+    if (!activityByDate[d]) activityByDate[d] = { study: 0, revision: 0, practice: 0 };
+    activityByDate[d][key] += 1;
+  };
+  topics.forEach((t) => {
+    bump(t.classDate, "study");
+    (Array.isArray(t.revisionDates) ? t.revisionDates : []).forEach((d) => bump(d, "revision"));
   });
-
+  tests.forEach((t) => {
+    bump(t.testGivenDate, "practice");
+  });
+  const missionTotalTests = tests.length;
   const totalTopics = topics.length;
   const coveredTopics = topics.filter((t) => Boolean(t.classDate)).length;
   const firstRevisedTopics = topics.filter((t) => Boolean(t.firstRev)).length;
-
-  const coverageScore = totalTopics ? Math.round((coveredTopics / totalTopics) * 100) : 0;
-  const retentionTopicScores = topics.map((t) => {
-    if (!t.classDate) return 0;
-    let score = 35;
-    if (t.firstRev) score += 35;
-    if (t.secondRev) score += 20;
-    const staleDays = daysSince(t.lastTouch);
-    if (staleDays <= 5) score += 10;
-    else if (staleDays <= 12) score += 5;
-    return Math.min(100, score);
-  });
-  const retentionScore = retentionTopicScores.length
-    ? Math.round(retentionTopicScores.reduce((a, b) => a + b, 0) / retentionTopicScores.length)
-    : 0;
-
   const testsAttempted = tests.filter((t) => Boolean(t.testGivenDate)).length;
   const testsReviewed = tests.filter((t) => Boolean(t.revisionDate || t.secondRevisionDate)).length;
   const reviewRate = testsAttempted ? Math.round((testsReviewed / testsAttempted) * 100) : 0;
@@ -470,9 +633,22 @@ function buildMissionModel(syllabus, activityByDate, userId) {
   const momentum = scoreMomentum(recentTotal, previousTotal);
 
   const practiceConsistency = Math.round((recentDates.filter((d) => ((activityByDate[d] || {}).practice || 0) > 0).length / recentDates.length) * 100);
-  const performanceScore = Math.round((reviewRate * 0.55) + (practiceConsistency * 0.25) + (Math.min(100, (testsAttempted / FULL_TEST_TARGET) * 100) * 0.2));
+  const ratioPct = (done, total) => {
+    if (!total || total <= 0) return null;
+    return Math.round((Math.max(0, done) / total) * 100);
+  };
 
-  const readiness = Math.round((coverageScore * 0.45) + (retentionScore * 0.35) + (performanceScore * 0.2));
+  const avg = (values) => {
+    const usable = values.filter((v) => typeof v === "number");
+    if (usable.length === 0) return 0;
+    return Math.round(usable.reduce((a, b) => a + b, 0) / usable.length);
+  };
+
+  const dimensionRows = Array.isArray(planExecution?.dimensions) ? planExecution.dimensions : [];
+  const coverageScore = avg(dimensionRows.map((row) => ratioPct(row.coverageDone, row.coverageTotal)));
+  const retentionScore = avg(dimensionRows.map((row) => ratioPct(row.retentionDone, row.retentionTotal)));
+  const performanceScore = avg(dimensionRows.map((row) => ratioPct(row.performanceDone, row.performanceTotal)));
+  const readiness = Math.round((coverageScore + retentionScore + performanceScore) / 3);
 
   const leaks = [];
   topics.forEach((t) => {
@@ -496,7 +672,7 @@ function buildMissionModel(syllabus, activityByDate, userId) {
       leaks.push({ severity: d > 10 ? "high" : "medium", title: `${subject}`, detail: `Not touched for ${d} days.` });
     });
 
-  if (testsAttempted === 0) {
+  if (missionTotalTests > 0 && testsAttempted === 0) {
     leaks.push({ severity: "high", title: "Mock Frequency", detail: "No tests attempted yet. Start recall pressure now." });
   }
   if (practiceConsistency < 35) {
@@ -506,37 +682,29 @@ function buildMissionModel(syllabus, activityByDate, userId) {
   const riskValue = Math.min(100, (leaks.filter((l) => l.severity === "high").length * 18) + (leaks.filter((l) => l.severity === "medium").length * 9) + Math.max(0, 50 - retentionScore));
   const risk = riskBand(riskValue);
 
-  const axisStats = emptyAxisStats();
-  topics.forEach((t) => {
-    const s = axisStats[t.axis];
-    s.total += 1;
-    if (t.classDate) s.covered += 1;
-    let topicRetention = 0;
-    if (t.classDate) topicRetention += 35;
-    if (t.firstRev) topicRetention += 35;
-    if (t.secondRev) topicRetention += 20;
-    if (daysSince(t.lastTouch) <= 7) topicRetention += 10;
-    s.retentionSum += Math.min(100, topicRetention);
-
-    let perf = 20;
-    if (t.firstRev) perf += 25;
-    if (t.secondRev) perf += 30;
-    if ((t.recordings || []).length > 0) perf += 15;
-    if (daysSince(t.lastTouch) <= 7) perf += 10;
-    s.perfSum += Math.min(100, perf);
-  });
-
-  AXES.forEach((axis) => {
-    const s = axisStats[axis];
-    if (s.total === 0) return;
-    s.coverage = Math.round((s.covered / s.total) * 100);
-    s.retention = Math.round(s.retentionSum / s.total);
-    s.performance = Math.round(s.perfSum / s.total);
-    s.readiness = Math.round((s.coverage + s.retention + s.performance) / 3);
+  const axisStats = {};
+  const axes = dimensionRows.map((row, idx) => {
+    const coverage = ratioPct(row.coverageDone, row.coverageTotal) || 0;
+    const retention = ratioPct(row.retentionDone, row.retentionTotal) || 0;
+    const performance = ratioPct(row.performanceDone, row.performanceTotal) || 0;
+    const readinessRow = Math.round((coverage + retention + performance) / 3);
+    const axisKey = String(row.label || `Dimension ${idx + 1}`);
+    axisStats[axisKey] = {
+      total: row.performanceTotal || 0,
+      covered: row.coverageDone || 0,
+      retentionSum: row.retentionDone || 0,
+      perfSum: row.performanceDone || 0,
+      coverage,
+      retention,
+      performance,
+      readiness: readinessRow,
+      kind: String(row.kind || ""),
+    };
+    return axisKey;
   });
 
   const battleTasks = [];
-  const weakestAxis = AXES
+  const weakestAxis = axes
     .map((axis) => ({ axis, score: axisStats[axis].readiness }))
     .sort((a, b) => a.score - b.score)[0];
   battleTasks.push({ type: "Study", text: `Finish 2 focused blocks in ${weakestAxis?.axis || "core weak area"}.` });
@@ -559,11 +727,13 @@ function buildMissionModel(syllabus, activityByDate, userId) {
     .sort((a, b) => b.days - a.days)
     .slice(0, 80);
 
-  const forumDone = tests.filter((t) => (t.source || "").toLowerCase().includes("sfg")).length;
-  const cavaDone = topics.filter((t) => `${t.subject} ${t.topic}`.toLowerCase().includes("current affairs")).length;
-  const fullTestsLeft = Math.max(0, FULL_TEST_TARGET - testsAttempted);
-  const forumLeft = Math.max(0, FORUM_TARGET - forumDone);
-  const cavaLeft = Math.max(0, CAVA_TARGET - cavaDone);
+  const forumTotal = tests.filter((t) => (t.source || "").toLowerCase().includes("sfg")).length;
+  const forumDone = tests.filter((t) => Boolean(t.testGivenDate) && (t.source || "").toLowerCase().includes("sfg")).length;
+  const cavaTotal = topics.filter((t) => `${t.exam} ${t.subject} ${t.topic}`.toLowerCase().includes("current affairs")).length;
+  const cavaDone = topics.filter((t) => Boolean(t.classDate) && `${t.exam} ${t.subject} ${t.topic}`.toLowerCase().includes("current affairs")).length;
+  const fullTestsLeft = Math.max(0, missionTotalTests - testsAttempted);
+  const forumLeft = Math.max(0, forumTotal - forumDone);
+  const cavaLeft = Math.max(0, cavaTotal - cavaDone);
   const revisionDebt = Math.max(0, coveredTopics - firstRevisedTopics);
 
   const recentStudy = sumWindow(recentDates, "study");
@@ -582,8 +752,11 @@ function buildMissionModel(syllabus, activityByDate, userId) {
   const trajectoryScore = (readiness * 0.5) + (momentum.cls === "rising" ? 30 : momentum.cls === "stable" ? 15 : 0) - (riskValue * 0.25);
   const trajectory = trajectoryScore >= 65 ? "Closer to goal" : trajectoryScore >= 45 ? "Stable" : trajectoryScore >= 30 ? "Drifting" : "Falling behind";
 
-  const csatAxis = axisStats.CSAT;
-  const csatSafety = csatAxis.readiness >= 65 ? "Safe" : csatAxis.readiness >= 45 ? "Borderline" : "Unsafe";
+  const testAxes = axes.filter((axis) => axisStats[axis]?.kind === "test");
+  const testsAxisReadiness = testAxes.length
+    ? Math.round(testAxes.reduce((acc, axis) => acc + (axisStats[axis]?.readiness || 0), 0) / testAxes.length)
+    : performanceScore;
+  const csatSafety = testsAxisReadiness >= 65 ? "Safe" : testsAxisReadiness >= 45 ? "Borderline" : "Unsafe";
 
   const identityDelta = readiness >= 65 && momentum.cls !== "falling"
     ? "Your behavior is matching a serious ranker pattern."
@@ -593,6 +766,7 @@ function buildMissionModel(syllabus, activityByDate, userId) {
 
   return {
     readiness,
+    axes,
     momentum,
     risk,
     riskText: leaks.slice(0, 2).map((l) => l.detail).join(" ") || "No major leakage detected.",
@@ -633,8 +807,20 @@ export default function MissionControlPage() {
   const [missionConfig, setMissionConfig] = useState(null);
   const [missionModalOpen, setMissionModalOpen] = useState(false);
   const [courseActionOpen, setCourseActionOpen] = useState("");
+  const [editableRows, setEditableRows] = useState({
+    course: {},
+    book: {},
+    random: {},
+    test: {},
+  });
   const [missionSaving, setMissionSaving] = useState(false);
-  const [classVideosModalOpen, setClassVideosModalOpen] = useState(false);
+  const [metricModal, setMetricModal] = useState({
+    open: false,
+    title: "",
+    subtitle: "",
+    columns: [],
+    rows: [],
+  });
   const [missionDraft, setMissionDraft] = useState({
     title: "",
     target_date: "",
@@ -695,8 +881,6 @@ export default function MissionControlPage() {
     return () => clearTimeout(id);
   }, [error]);
 
-  const mission = useMemo(() => buildMissionModel(syllabus, activityByDate, userId), [syllabus, activityByDate, userId]);
-
   useEffect(() => {
     if (!missionConfig) return;
     const rawCourses = Array.isArray(missionConfig?.plan?.courses) ? missionConfig.plan.courses : [];
@@ -726,7 +910,20 @@ export default function MissionControlPage() {
         tests: sanitizeMissionTestRows(missionConfig?.plan?.tests),
       },
     });
+    setEditableRows({ course: {}, book: {}, random: {}, test: {} });
   }, [missionConfig]);
+
+  const setRowEditable = (kind, idx, editable) => {
+    setEditableRows((prev) => ({
+      ...prev,
+      [kind]: {
+        ...(prev[kind] || {}),
+        [idx]: Boolean(editable),
+      },
+    }));
+  };
+
+  const isRowEditable = (kind, idx) => Boolean(editableRows?.[kind]?.[idx]);
 
   const saveMission = async () => {
     if (!API_BASE_URL) return;
@@ -763,13 +960,15 @@ export default function MissionControlPage() {
 
   const battleProgress = Math.round((battleDone.filter(Boolean).length / 3) * 100);
 
-  const radarValuesCoverage = AXES.map((axis) => mission.axisStats[axis]?.coverage || 0);
-  const radarValuesRetention = AXES.map((axis) => mission.axisStats[axis]?.retention || 0);
-  const radarValuesPerformance = AXES.map((axis) => mission.axisStats[axis]?.performance || 0);
   const planExecution = useMemo(
     () => buildMissionExecution(missionConfig?.plan, syllabus),
     [missionConfig?.plan, syllabus],
   );
+  const mission = useMemo(() => buildMissionModel(planExecution, userId), [planExecution, userId]);
+  const wheelAxes = mission.axes?.length ? mission.axes : ["No Mission Dimension"];
+  const radarValuesCoverage = wheelAxes.map((axis) => mission.axisStats[axis]?.coverage || 0);
+  const radarValuesRetention = wheelAxes.map((axis) => mission.axisStats[axis]?.retention || 0);
+  const radarValuesPerformance = wheelAxes.map((axis) => mission.axisStats[axis]?.performance || 0);
   const classVideoItems = useMemo(
     () =>
       [...(planExecution.classVideoItems || [])].sort((a, b) => {
@@ -781,6 +980,104 @@ export default function MissionControlPage() {
       }),
     [planExecution.classVideoItems],
   );
+  const openMetricModal = (config) => {
+    setMetricModal({
+      open: true,
+      title: config.title,
+      subtitle: config.subtitle || "Done/Pending status list",
+      columns: Array.isArray(config.columns) ? config.columns : [],
+      rows: Array.isArray(config.rows) ? config.rows : [],
+    });
+  };
+  const closeMetricModal = () => setMetricModal((prev) => ({ ...prev, open: false }));
+
+  const metricCardConfigs = {
+    courses: {
+      title: "Course Status",
+      columns: ["Course", "Status"],
+      rows: (planExecution.courseItems || []).map((x) => [x.course, x.done ? "✔" : "✖"]),
+    },
+    subjects: {
+      title: "Subject Status",
+      columns: ["Course", "Subject", "Status"],
+      rows: (planExecution.subjectItems || []).map((x) => [x.course, x.subject, x.done ? "✔" : "✖"]),
+    },
+    classes: {
+      title: "Class Completion Status",
+      columns: ["Course", "Subject", "Class", "Status"],
+      rows: (planExecution.classItems || []).map((x) => [x.course, x.subject, `Class ${x.classNo}`, x.done ? "✔" : "✖"]),
+    },
+    classVideos: {
+      title: "Class Video Status",
+      columns: ["Course", "Subject", "Class", "Status"],
+      rows: classVideoItems.map((x) => [x.course, x.subject, `Class ${x.classNo}`, x.done ? "✔" : "✖"]),
+    },
+    classNotes: {
+      title: "Class Notes Status",
+      columns: ["Course", "Subject", "Class", "Status"],
+      rows: (planExecution.classNotesItems || []).map((x) => [x.course, x.subject, `Class ${x.classNo}`, x.done ? "✔" : "✖"]),
+    },
+    classRevisions: {
+      title: "Class Revision Status",
+      columns: ["Course", "Subject", "Class", "Progress", "Status"],
+      rows: (planExecution.classRevisionItems || []).map((x) => [x.course, x.subject, `Class ${x.classNo}`, `${x.doneCount}/${x.totalCount}`, x.done ? "✔" : "✖"]),
+    },
+    books: {
+      title: "Book Completion Status",
+      columns: ["Book", "Status"],
+      rows: (planExecution.bookItems || []).map((x) => [x.book, x.done ? "✔" : "✖"]),
+    },
+    chapters: {
+      title: "Chapter Read Status",
+      columns: ["Book", "Chapter", "Status"],
+      rows: (planExecution.chapterItems || []).map((x) => [x.book, `Chapter ${x.chapterNo}`, x.done ? "✔" : "✖"]),
+    },
+    chapterNotes: {
+      title: "Chapter Notes Status",
+      columns: ["Book", "Chapter", "Status"],
+      rows: (planExecution.chapterNotesItems || []).map((x) => [x.book, `Chapter ${x.chapterNo}`, x.done ? "✔" : "✖"]),
+    },
+    chapterRevisions: {
+      title: "Chapter Revision Status",
+      columns: ["Book", "Chapter", "Progress", "Status"],
+      rows: (planExecution.chapterRevisionItems || []).map((x) => [x.book, `Chapter ${x.chapterNo}`, `${x.doneCount}/${x.totalCount}`, x.done ? "✔" : "✖"]),
+    },
+    randomTopics: {
+      title: "Random Topic Completion Status",
+      columns: ["Source", "Topic", "Status"],
+      rows: (planExecution.randomItems || []).map((x) => [x.source, x.topic, x.done ? "✔" : "✖"]),
+    },
+    randomNotes: {
+      title: "Random Notes Status",
+      columns: ["Source", "Topic", "Status"],
+      rows: (planExecution.randomNotesItems || []).map((x) => [x.source, x.topic, x.done ? "✔" : "✖"]),
+    },
+    randomRevisions: {
+      title: "Random Revision Status",
+      columns: ["Source", "Topic", "Progress", "Status"],
+      rows: (planExecution.randomRevisionItems || []).map((x) => [x.source, x.topic, `${x.doneCount}/${x.totalCount}`, x.done ? "✔" : "✖"]),
+    },
+    testRows: {
+      title: "Test Row Completion Status",
+      columns: ["Source", "Test", "Status"],
+      rows: (planExecution.testRowItems || []).map((x) => [x.source, x.testName, x.done ? "✔" : "✖"]),
+    },
+    testsGiven: {
+      title: "Tests Given Status",
+      columns: ["Source", "Test", "No.", "Status"],
+      rows: (planExecution.testGivenItems || []).map((x) => [x.source, x.testName, String(x.testNumber), x.done ? "✔" : "✖"]),
+    },
+    testsAnalysis: {
+      title: "Tests Analysis Status",
+      columns: ["Source", "Test", "No.", "Status"],
+      rows: (planExecution.testAnalysisItems || []).map((x) => [x.source, x.testName, String(x.testNumber), x.done ? "✔" : "✖"]),
+    },
+    testRevisions: {
+      title: "Test Revision Status",
+      columns: ["Source", "Test", "No.", "Progress", "Status"],
+      rows: (planExecution.testRevisionItems || []).map((x) => [x.source, x.testName, String(x.testNumber), `${x.doneCount}/${x.totalCount}`, x.done ? "✔" : "✖"]),
+    },
+  };
 
   const recent45 = buildRecentDates(45);
 
@@ -788,13 +1085,13 @@ export default function MissionControlPage() {
     mission.momentum.cls === "falling" ? "Irregular momentum" : "Momentum improving",
     mission.reviewRate < 50 ? "Weak test review loop" : "Tests are being reviewed",
     mission.revisionDebt > 20 ? "Revision debt growing" : "Revision debt controlled",
-    mission.csatSafety === "Unsafe" ? "CSAT risk is high" : "CSAT trend is manageable",
+    mission.csatSafety === "Unsafe" ? "Test execution risk is high" : "Test execution trend is manageable",
   ];
   const identityTarget = [
     "Revises cyclically",
     "Attempts weekly tests",
     "Tracks and closes mistakes",
-    "Protects CSAT safety buffer",
+    "Protects test completion safety buffer",
   ];
   const courseRows = Array.isArray(missionDraft?.plan?.courses) ? missionDraft.plan.courses : [];
   const courseGroups = (() => {
@@ -835,7 +1132,7 @@ export default function MissionControlPage() {
             {loading ? "Refreshing..." : "Refresh Mission"}
           </button>
           <button className="btn-day secondary" onClick={() => setMissionModalOpen(true)} disabled={loading}>
-            Set Mission
+            Edit Mission
           </button>
         </div>
 
@@ -845,37 +1142,26 @@ export default function MissionControlPage() {
             <article className="mission-kpi"><h3>Target Date</h3><p>{missionConfig.target_date || "-"}</p></article>
             <article className="mission-kpi"><h3>Status</h3><p>{missionConfig.status || "active"}</p></article>
             <article className="mission-kpi"><h3>Mission Progress</h3><p>{planExecution.progressPercent}%</p></article>
-            <article className="mission-kpi"><h3>Courses</h3><p>{ratioLabel(planExecution.coursesDone, planExecution.coursesTotal)}</p></article>
-            <article className="mission-kpi"><h3>Subjects</h3><p>{ratioLabel(planExecution.subjectsDone, planExecution.subjectsTotal)}</p></article>
-            <article className="mission-kpi"><h3>Classes</h3><p>{ratioLabel(planExecution.classesDone, planExecution.classesTotal)}</p></article>
-            <article className="mission-kpi">
-              <h3>Class Videos</h3>
-              <p>{ratioLabel(planExecution.classVideosDone, planExecution.classVideosTotal)}</p>
-              <button
-                type="button"
-                className="btn-day secondary"
-                style={{ marginTop: 8 }}
-                onClick={() => setClassVideosModalOpen(true)}
-              >
-                View List
-              </button>
-            </article>
-            <article className="mission-kpi"><h3>Class Notes</h3><p>{ratioLabel(planExecution.classNotesDone, planExecution.classNotesTotal)}</p></article>
-            <article className="mission-kpi"><h3>Class Revisions</h3><p>{ratioLabel(planExecution.classRevisionsDone, planExecution.classRevisionsTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.courses)}><h3>Courses</h3><p>{ratioLabel(planExecution.coursesDone, planExecution.coursesTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.subjects)}><h3>Subjects</h3><p>{ratioLabel(planExecution.subjectsDone, planExecution.subjectsTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.classes)}><h3>Classes</h3><p>{ratioLabel(planExecution.classesDone, planExecution.classesTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.classVideos)}><h3>Class Videos</h3><p>{ratioLabel(planExecution.classVideosDone, planExecution.classVideosTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.classNotes)}><h3>Class Notes</h3><p>{ratioLabel(planExecution.classNotesDone, planExecution.classNotesTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.classRevisions)}><h3>Class Revisions</h3><p>{ratioLabel(planExecution.classRevisionsDone, planExecution.classRevisionsTotal)}</p></article>
 
-            <article className="mission-kpi"><h3>Books</h3><p>{ratioLabel(planExecution.booksDone, planExecution.booksTotal)}</p></article>
-            <article className="mission-kpi"><h3>Chapters</h3><p>{ratioLabel(planExecution.chaptersDone, planExecution.chaptersTotal)}</p></article>
-            <article className="mission-kpi"><h3>Chapter Notes</h3><p>{ratioLabel(planExecution.chapterNotesDone, planExecution.chapterNotesTotal)}</p></article>
-            <article className="mission-kpi"><h3>Chapter Revisions</h3><p>{ratioLabel(planExecution.chapterRevisionsDone, planExecution.chapterRevisionsTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.books)}><h3>Books</h3><p>{ratioLabel(planExecution.booksDone, planExecution.booksTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.chapters)}><h3>Chapters</h3><p>{ratioLabel(planExecution.chaptersDone, planExecution.chaptersTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.chapterNotes)}><h3>Chapter Notes</h3><p>{ratioLabel(planExecution.chapterNotesDone, planExecution.chapterNotesTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.chapterRevisions)}><h3>Chapter Revisions</h3><p>{ratioLabel(planExecution.chapterRevisionsDone, planExecution.chapterRevisionsTotal)}</p></article>
 
-            <article className="mission-kpi"><h3>Random Topics</h3><p>{ratioLabel(planExecution.randomDone, planExecution.randomTotal)}</p></article>
-            <article className="mission-kpi"><h3>Random Notes</h3><p>{ratioLabel(planExecution.randomNotesDone, planExecution.randomNotesTotal)}</p></article>
-            <article className="mission-kpi"><h3>Random Revisions</h3><p>{ratioLabel(planExecution.randomRevisionsDone, planExecution.randomRevisionsTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.randomTopics)}><h3>Random Topics</h3><p>{ratioLabel(planExecution.randomDone, planExecution.randomTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.randomNotes)}><h3>Random Notes</h3><p>{ratioLabel(planExecution.randomNotesDone, planExecution.randomNotesTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.randomRevisions)}><h3>Random Revisions</h3><p>{ratioLabel(planExecution.randomRevisionsDone, planExecution.randomRevisionsTotal)}</p></article>
 
-            <article className="mission-kpi"><h3>Test Rows</h3><p>{ratioLabel(planExecution.testRowsDone, planExecution.testRowsTotal)}</p></article>
-            <article className="mission-kpi"><h3>Tests Given</h3><p>{ratioLabel(planExecution.testsGivenDone, planExecution.testsGivenTotal)}</p></article>
-            <article className="mission-kpi"><h3>Tests Analysis</h3><p>{ratioLabel(planExecution.testsAnalysisDone, planExecution.testsAnalysisTotal)}</p></article>
-            <article className="mission-kpi"><h3>Test Revisions</h3><p>{ratioLabel(planExecution.testRevisionsDone, planExecution.testRevisionsTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.testRows)}><h3>Test Rows</h3><p>{ratioLabel(planExecution.testRowsDone, planExecution.testRowsTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.testsGiven)}><h3>Tests Given</h3><p>{ratioLabel(planExecution.testsGivenDone, planExecution.testsGivenTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.testsAnalysis)}><h3>Tests Analysis</h3><p>{ratioLabel(planExecution.testsAnalysisDone, planExecution.testsAnalysisTotal)}</p></article>
+            <article className="mission-kpi clickable" role="button" tabIndex={0} onClick={() => openMetricModal(metricCardConfigs.testRevisions)}><h3>Test Revisions</h3><p>{ratioLabel(planExecution.testRevisionsDone, planExecution.testRevisionsTotal)}</p></article>
           </div>
         ) : null}
       </section>
@@ -923,7 +1209,7 @@ export default function MissionControlPage() {
             <span><i className="dot radar-dot-performance" />Performance</span>
           </div>
           <div className="axis-mini-grid">
-            {AXES.map((axis) => (
+            {wheelAxes.map((axis) => (
               <div key={axis} className="axis-mini-card">
                 <strong>{axis}</strong>
                 <div className="axis-bars">
@@ -991,7 +1277,7 @@ export default function MissionControlPage() {
             <div className="story-kpi"><span>Tests attempted</span><strong>{mission.testsAttempted}</strong></div>
             <div className="story-kpi"><span>Review completion</span><strong>{mission.reviewRate}%</strong></div>
             <div className="story-kpi"><span>Performance index</span><strong>{mission.performanceScore}</strong></div>
-            <div className="story-kpi"><span>CSAT safety</span><strong>{mission.csatSafety}</strong></div>
+            <div className="story-kpi"><span>Tests safety</span><strong>{mission.csatSafety}</strong></div>
           </div>
           <div className="river-chart">
             <div className="river-flow green" style={{ width: `${Math.max(8, mission.performanceScore)}%` }} />
@@ -1089,9 +1375,9 @@ export default function MissionControlPage() {
       {missionModalOpen ? (
         <div className="task-modal-overlay" onClick={() => setMissionModalOpen(false)}>
           <div className="task-modal" onClick={(e) => { e.stopPropagation(); setCourseActionOpen(""); }}>
-            <h3>Set Mission</h3>
+            <h3>Edit Mission</h3>
             <p className="day-state" style={{ marginTop: 0 }}>
-              Saved values are loaded for edit.
+              Saved values are loaded as read-only. Use item Action -&gt; Edit to modify.
             </p>
             <div className="session-form-grid" style={{ gridTemplateColumns: "1fr" }}>
               <label>
@@ -1142,12 +1428,17 @@ export default function MissionControlPage() {
                     const row = courseRows[rowIdx] || {};
                     const isFirstRow = idxInGroup === 0;
                     return (
-                      <div key={`course-${rowIdx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr auto" }}>
+                      <div
+                        key={`course-${rowIdx}`}
+                        className={`session-form-grid mission-plan-row ${isRowEditable("course", rowIdx) ? "is-editing" : "is-locked"}`}
+                        style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr auto" }}
+                      >
                         {isFirstRow ? (
                           <input
                             className="task-select"
                             placeholder="Course"
                             value={group.course_name || ""}
+                            disabled={!isRowEditable("course", rowIdx)}
                             onChange={(e) =>
                               setMissionDraft((prev) => {
                                 const list = [...(prev.plan.courses || [])];
@@ -1165,6 +1456,7 @@ export default function MissionControlPage() {
                           className="task-select"
                           placeholder="Subject"
                           value={row.subject_name || ""}
+                          disabled={!isRowEditable("course", rowIdx)}
                           onChange={(e) =>
                             setMissionDraft((prev) => {
                               const list = [...(prev.plan.courses || [])];
@@ -1179,6 +1471,7 @@ export default function MissionControlPage() {
                           min={1}
                           placeholder="Classes"
                           value={row.class_count ?? 1}
+                          disabled={!isRowEditable("course", rowIdx)}
                           onChange={(e) =>
                             setMissionDraft((prev) => {
                               const list = [...(prev.plan.courses || [])];
@@ -1194,6 +1487,7 @@ export default function MissionControlPage() {
                           max={5}
                           placeholder="Revisions"
                           value={row.revision_count ?? 1}
+                          disabled={!isRowEditable("course", rowIdx)}
                           onChange={(e) =>
                             setMissionDraft((prev) => {
                               const list = [...(prev.plan.courses || [])];
@@ -1203,6 +1497,9 @@ export default function MissionControlPage() {
                           }
                         />
                         <div style={{ position: "relative" }}>
+                          <span className={`mission-row-state ${isRowEditable("course", rowIdx) ? "editing" : "locked"}`}>
+                            {isRowEditable("course", rowIdx) ? "Editing" : "Locked"}
+                          </span>
                           <button
                             className="btn-day secondary"
                             onClick={(e) => {
@@ -1230,6 +1527,49 @@ export default function MissionControlPage() {
                               }}
                               onClick={(e) => e.stopPropagation()}
                             >
+                              {!isRowEditable("course", rowIdx) ? (
+                                <button
+                                  className="content-row-action"
+                                  style={{
+                                    width: "100%",
+                                    textAlign: "left",
+                                    border: "none",
+                                    background: "transparent",
+                                    color: "#c7d2fe",
+                                    fontWeight: 700,
+                                    padding: "8px 10px",
+                                    borderRadius: 8,
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={() => {
+                                    setRowEditable("course", rowIdx, true);
+                                    setCourseActionOpen("");
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                              ) : (
+                                <button
+                                  className="content-row-action"
+                                  style={{
+                                    width: "100%",
+                                    textAlign: "left",
+                                    border: "none",
+                                    background: "transparent",
+                                    color: "#86efac",
+                                    fontWeight: 700,
+                                    padding: "8px 10px",
+                                    borderRadius: 8,
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={() => {
+                                    setRowEditable("course", rowIdx, false);
+                                    setCourseActionOpen("");
+                                  }}
+                                >
+                                  Done
+                                </button>
+                              )}
                               <button
                                 className="content-row-action danger"
                                 style={{
@@ -1249,6 +1589,7 @@ export default function MissionControlPage() {
                                     list.splice(rowIdx, 1);
                                     return { ...prev, plan: { ...prev.plan, courses: list } };
                                   });
+                                  setEditableRows((prev) => ({ ...prev, course: {} }));
                                   setCourseActionOpen("");
                                 }}
                               >
@@ -1268,6 +1609,7 @@ export default function MissionControlPage() {
                       setMissionDraft((prev) => {
                         const list = [...(prev.plan.courses || [])];
                         const sample = list[group.rowIndexes[0]] || {};
+                        const newIndex = list.length;
                         list.push({
                           course_name: sample.course_name || "",
                           subject_name: "",
@@ -1275,6 +1617,7 @@ export default function MissionControlPage() {
                           revision_count: Math.min(5, Number(sample.revision_count || 1)),
                           __group_id: sample.__group_id || nextCourseGroupId(),
                         });
+                        setTimeout(() => setRowEditable("course", newIndex, true), 0);
                         return { ...prev, plan: { ...prev.plan, courses: list } };
                       })
                     }
@@ -1286,7 +1629,8 @@ export default function MissionControlPage() {
               <button
                 className="btn-day secondary"
                 style={{ width: "100%" }}
-                onClick={() =>
+                onClick={() => {
+                  const nextIndex = (missionDraft.plan.courses || []).length;
                   setMissionDraft((prev) => ({
                     ...prev,
                     plan: {
@@ -1296,8 +1640,9 @@ export default function MissionControlPage() {
                         { course_name: "", subject_name: "", class_count: 1, revision_count: 1, __group_id: nextCourseGroupId() },
                       ],
                     },
-                  }))
-                }
+                  }));
+                  setTimeout(() => setRowEditable("course", nextIndex, true), 0);
+                }}
               >
                 + Add Course
               </button>
@@ -1311,11 +1656,16 @@ export default function MissionControlPage() {
                 <small>Action</small>
               </div>
               {(missionDraft.plan.books || []).map((row, idx) => (
-                <div key={`book-${idx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 1fr 1fr auto" }}>
+                <div
+                  key={`book-${idx}`}
+                  className={`session-form-grid mission-plan-row ${isRowEditable("book", idx) ? "is-editing" : "is-locked"}`}
+                  style={{ gridTemplateColumns: "2fr 1fr 1fr auto" }}
+                >
                   <input
                     className="task-select"
                     placeholder="Book name"
                     value={row.book_name || ""}
+                    disabled={!isRowEditable("book", idx)}
                     onChange={(e) =>
                       setMissionDraft((prev) => {
                         const list = [...(prev.plan.books || [])];
@@ -1330,6 +1680,7 @@ export default function MissionControlPage() {
                     min={1}
                     placeholder="Chapters"
                     value={row.chapter_count ?? 1}
+                    disabled={!isRowEditable("book", idx)}
                     onChange={(e) =>
                       setMissionDraft((prev) => {
                         const list = [...(prev.plan.books || [])];
@@ -1345,6 +1696,7 @@ export default function MissionControlPage() {
                           max={5}
                           placeholder="Revisions"
                           value={row.revision_count ?? 1}
+                          disabled={!isRowEditable("book", idx)}
                           onChange={(e) =>
                             setMissionDraft((prev) => {
                               const list = [...(prev.plan.books || [])];
@@ -1353,31 +1705,120 @@ export default function MissionControlPage() {
                             })
                           }
                         />
-                  <button
-                    className="btn-day secondary"
-                    onClick={() =>
-                      setMissionDraft((prev) => {
-                        const list = [...(prev.plan.books || [])];
-                        list.splice(idx, 1);
-                        return { ...prev, plan: { ...prev.plan, books: list } };
-                      })
-                    }
-                  >
-                    Remove
-                  </button>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      className="btn-day secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const key = `book:${idx}`;
+                        setCourseActionOpen((prev) => (prev === key ? "" : key));
+                      }}
+                    >
+                      ...
+                    </button>
+                    {courseActionOpen === `book:${idx}` ? (
+                      <div
+                        className="content-row-actions-menu"
+                        style={{
+                          position: "absolute",
+                          right: 0,
+                          top: "calc(100% + 4px)",
+                          zIndex: 40,
+                          minWidth: 170,
+                          padding: 6,
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.16)",
+                          background: "rgba(15, 22, 40, 0.98)",
+                          boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {!isRowEditable("book", idx) ? (
+                          <button
+                            className="content-row-action"
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              border: "none",
+                              background: "transparent",
+                              color: "#c7d2fe",
+                              fontWeight: 700,
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => {
+                              setRowEditable("book", idx, true);
+                              setCourseActionOpen("");
+                            }}
+                          >
+                            Edit
+                          </button>
+                        ) : (
+                          <button
+                            className="content-row-action"
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              border: "none",
+                              background: "transparent",
+                              color: "#86efac",
+                              fontWeight: 700,
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => {
+                              setRowEditable("book", idx, false);
+                              setCourseActionOpen("");
+                            }}
+                          >
+                            Done
+                          </button>
+                        )}
+                        <button
+                          className="content-row-action danger"
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            border: "none",
+                            background: "transparent",
+                            color: "#fda4af",
+                            fontWeight: 700,
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            setMissionDraft((prev) => {
+                              const list = [...(prev.plan.books || [])];
+                              list.splice(idx, 1);
+                              return { ...prev, plan: { ...prev.plan, books: list } };
+                            });
+                            setEditableRows((prev) => ({ ...prev, book: {} }));
+                            setCourseActionOpen("");
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ))}
               <button
                 className="btn-day secondary"
-                onClick={() =>
+                onClick={() => {
+                  const nextIndex = (missionDraft.plan.books || []).length;
                   setMissionDraft((prev) => ({
                     ...prev,
                     plan: {
                       ...prev.plan,
                       books: [...(prev.plan.books || []), { book_name: "", chapter_count: 1, revision_count: 1 }],
                     },
-                  }))
-                }
+                  }));
+                  setTimeout(() => setRowEditable("book", nextIndex, true), 0);
+                }}
               >
                 + Add Book
               </button>
@@ -1391,11 +1832,16 @@ export default function MissionControlPage() {
                 <small>Action</small>
               </div>
               {(missionDraft.plan.random || []).map((row, idx) => (
-                <div key={`random-${idx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr auto" }}>
+                <div
+                  key={`random-${idx}`}
+                  className={`session-form-grid mission-plan-row ${isRowEditable("random", idx) ? "is-editing" : "is-locked"}`}
+                  style={{ gridTemplateColumns: "2fr 2fr 1fr auto" }}
+                >
                   <input
                     className="task-select"
                     placeholder="Source"
                     value={row.source || ""}
+                    disabled={!isRowEditable("random", idx)}
                     onChange={(e) =>
                       setMissionDraft((prev) => {
                         const list = [...(prev.plan.random || [])];
@@ -1408,6 +1854,7 @@ export default function MissionControlPage() {
                     className="task-select"
                     placeholder="Topic name"
                     value={row.topic_name || ""}
+                    disabled={!isRowEditable("random", idx)}
                     onChange={(e) =>
                       setMissionDraft((prev) => {
                         const list = [...(prev.plan.random || [])];
@@ -1423,6 +1870,7 @@ export default function MissionControlPage() {
                           max={5}
                           placeholder="Revisions"
                           value={row.revision_count ?? 1}
+                          disabled={!isRowEditable("random", idx)}
                           onChange={(e) =>
                             setMissionDraft((prev) => {
                               const list = [...(prev.plan.random || [])];
@@ -1431,31 +1879,120 @@ export default function MissionControlPage() {
                             })
                           }
                         />
-                  <button
-                    className="btn-day secondary"
-                    onClick={() =>
-                      setMissionDraft((prev) => {
-                        const list = [...(prev.plan.random || [])];
-                        list.splice(idx, 1);
-                        return { ...prev, plan: { ...prev.plan, random: list } };
-                      })
-                    }
-                  >
-                    Remove
-                  </button>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      className="btn-day secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const key = `random:${idx}`;
+                        setCourseActionOpen((prev) => (prev === key ? "" : key));
+                      }}
+                    >
+                      ...
+                    </button>
+                    {courseActionOpen === `random:${idx}` ? (
+                      <div
+                        className="content-row-actions-menu"
+                        style={{
+                          position: "absolute",
+                          right: 0,
+                          top: "calc(100% + 4px)",
+                          zIndex: 40,
+                          minWidth: 170,
+                          padding: 6,
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.16)",
+                          background: "rgba(15, 22, 40, 0.98)",
+                          boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {!isRowEditable("random", idx) ? (
+                          <button
+                            className="content-row-action"
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              border: "none",
+                              background: "transparent",
+                              color: "#c7d2fe",
+                              fontWeight: 700,
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => {
+                              setRowEditable("random", idx, true);
+                              setCourseActionOpen("");
+                            }}
+                          >
+                            Edit
+                          </button>
+                        ) : (
+                          <button
+                            className="content-row-action"
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              border: "none",
+                              background: "transparent",
+                              color: "#86efac",
+                              fontWeight: 700,
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => {
+                              setRowEditable("random", idx, false);
+                              setCourseActionOpen("");
+                            }}
+                          >
+                            Done
+                          </button>
+                        )}
+                        <button
+                          className="content-row-action danger"
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            border: "none",
+                            background: "transparent",
+                            color: "#fda4af",
+                            fontWeight: 700,
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            setMissionDraft((prev) => {
+                              const list = [...(prev.plan.random || [])];
+                              list.splice(idx, 1);
+                              return { ...prev, plan: { ...prev.plan, random: list } };
+                            });
+                            setEditableRows((prev) => ({ ...prev, random: {} }));
+                            setCourseActionOpen("");
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ))}
               <button
                 className="btn-day secondary"
-                onClick={() =>
+                onClick={() => {
+                  const nextIndex = (missionDraft.plan.random || []).length;
                   setMissionDraft((prev) => ({
                     ...prev,
                     plan: {
                       ...prev.plan,
                       random: [...(prev.plan.random || []), { source: "", topic_name: "", revision_count: 1 }],
                     },
-                  }))
-                }
+                  }));
+                  setTimeout(() => setRowEditable("random", nextIndex, true), 0);
+                }}
               >
                 + Add Random Topic
               </button>
@@ -1473,11 +2010,16 @@ export default function MissionControlPage() {
                 <small>Action</small>
               </div>
               {(missionDraft.plan.tests || []).map((row, idx) => (
-                <div key={`test-${idx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr auto" }}>
+                <div
+                  key={`test-${idx}`}
+                  className={`session-form-grid mission-plan-row ${isRowEditable("test", idx) ? "is-editing" : "is-locked"}`}
+                  style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr auto" }}
+                >
                   <input
                     className="task-select"
                     placeholder="Test"
                     value={row.test_name || ""}
+                    disabled={!isRowEditable("test", idx)}
                     onChange={(e) =>
                       setMissionDraft((prev) => {
                         const list = [...(prev.plan.tests || [])];
@@ -1490,6 +2032,7 @@ export default function MissionControlPage() {
                     className="task-select"
                     placeholder="Source"
                     value={row.source || ""}
+                    disabled={!isRowEditable("test", idx)}
                     onChange={(e) =>
                       setMissionDraft((prev) => {
                         const list = [...(prev.plan.tests || [])];
@@ -1504,6 +2047,7 @@ export default function MissionControlPage() {
                     min={1}
                     placeholder="No. Tests"
                     value={row.number_of_tests ?? 1}
+                    disabled={!isRowEditable("test", idx)}
                     onChange={(e) =>
                       setMissionDraft((prev) => {
                         const list = [...(prev.plan.tests || [])];
@@ -1519,6 +2063,7 @@ export default function MissionControlPage() {
                     max={5}
                     placeholder="Revisions"
                     value={row.revisions ?? 0}
+                    disabled={!isRowEditable("test", idx)}
                     onChange={(e) =>
                       setMissionDraft((prev) => {
                         const list = [...(prev.plan.tests || [])];
@@ -1527,23 +2072,111 @@ export default function MissionControlPage() {
                       })
                     }
                   />
-                  <button
-                    className="btn-day secondary"
-                    onClick={() =>
-                      setMissionDraft((prev) => {
-                        const list = [...(prev.plan.tests || [])];
-                        list.splice(idx, 1);
-                        return { ...prev, plan: { ...prev.plan, tests: list } };
-                      })
-                    }
-                  >
-                    Remove
-                  </button>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      className="btn-day secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const key = `test:${idx}`;
+                        setCourseActionOpen((prev) => (prev === key ? "" : key));
+                      }}
+                    >
+                      ...
+                    </button>
+                    {courseActionOpen === `test:${idx}` ? (
+                      <div
+                        className="content-row-actions-menu"
+                        style={{
+                          position: "absolute",
+                          right: 0,
+                          top: "calc(100% + 4px)",
+                          zIndex: 40,
+                          minWidth: 170,
+                          padding: 6,
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.16)",
+                          background: "rgba(15, 22, 40, 0.98)",
+                          boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {!isRowEditable("test", idx) ? (
+                          <button
+                            className="content-row-action"
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              border: "none",
+                              background: "transparent",
+                              color: "#c7d2fe",
+                              fontWeight: 700,
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => {
+                              setRowEditable("test", idx, true);
+                              setCourseActionOpen("");
+                            }}
+                          >
+                            Edit
+                          </button>
+                        ) : (
+                          <button
+                            className="content-row-action"
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              border: "none",
+                              background: "transparent",
+                              color: "#86efac",
+                              fontWeight: 700,
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              cursor: "pointer",
+                            }}
+                            onClick={() => {
+                              setRowEditable("test", idx, false);
+                              setCourseActionOpen("");
+                            }}
+                          >
+                            Done
+                          </button>
+                        )}
+                        <button
+                          className="content-row-action danger"
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            border: "none",
+                            background: "transparent",
+                            color: "#fda4af",
+                            fontWeight: 700,
+                            padding: "8px 10px",
+                            borderRadius: 8,
+                            cursor: "pointer",
+                          }}
+                          onClick={() => {
+                            setMissionDraft((prev) => {
+                              const list = [...(prev.plan.tests || [])];
+                              list.splice(idx, 1);
+                              return { ...prev, plan: { ...prev.plan, tests: list } };
+                            });
+                            setEditableRows((prev) => ({ ...prev, test: {} }));
+                            setCourseActionOpen("");
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ))}
               <button
                 className="btn-day secondary"
-                onClick={() =>
+                onClick={() => {
+                  const nextIndex = (missionDraft.plan.tests || []).length;
                   setMissionDraft((prev) => ({
                     ...prev,
                     plan: {
@@ -1558,8 +2191,9 @@ export default function MissionControlPage() {
                         },
                       ],
                     },
-                  }))
-                }
+                  }));
+                  setTimeout(() => setRowEditable("test", nextIndex, true), 0);
+                }}
               >
                 + Add Test Plan
               </button>
@@ -1575,35 +2209,36 @@ export default function MissionControlPage() {
           </div>
         </div>
       ) : null}
-      {classVideosModalOpen ? (
-        <div className="task-modal-overlay" onClick={() => setClassVideosModalOpen(false)}>
+      {metricModal.open ? (
+        <div className="task-modal-overlay" onClick={closeMetricModal}>
           <div className="task-modal" style={{ maxHeight: "80vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
-            <h3>Class Video Status</h3>
+            <h3>{metricModal.title}</h3>
             <p className="day-state" style={{ marginTop: 0 }}>
-              Course - Subject - Class No - Status
+              {metricModal.subtitle}
             </p>
-            <div className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 80px", opacity: 0.8 }}>
-              <small>Course</small>
-              <small>Subject</small>
-              <small>Class</small>
-              <small>Status</small>
+            <div
+              className="session-form-grid"
+              style={{ gridTemplateColumns: `repeat(${Math.max(1, metricModal.columns.length)}, minmax(0, 1fr))`, opacity: 0.8 }}
+            >
+              {metricModal.columns.map((col) => <small key={col}>{col}</small>)}
             </div>
             <div style={{ display: "grid", gap: 8 }}>
-              {classVideoItems.length === 0 ? (
-                <p className="day-state">No planned classes found in mission.</p>
+              {!metricModal.rows.length ? (
+                <p className="day-state">No planned items found for this metric.</p>
               ) : (
-                classVideoItems.map((item, idx) => (
-                  <div key={`${item.course}-${item.subject}-${item.classNo}-${idx}`} className="session-form-grid" style={{ gridTemplateColumns: "2fr 2fr 1fr 80px" }}>
-                    <span>{item.course}</span>
-                    <span>{item.subject}</span>
-                    <span>{`Class ${item.classNo}`}</span>
-                    <strong>{item.done ? "✔" : "✖"}</strong>
+                metricModal.rows.map((row, idx) => (
+                  <div
+                    key={`${metricModal.title}-${idx}`}
+                    className="session-form-grid"
+                    style={{ gridTemplateColumns: `repeat(${Math.max(1, metricModal.columns.length)}, minmax(0, 1fr))` }}
+                  >
+                    {row.map((cell, cIdx) => <span key={`${idx}-${cIdx}`}>{cell}</span>)}
                   </div>
                 ))
               )}
             </div>
             <div className="task-modal-actions">
-              <button className="btn-day secondary" onClick={() => setClassVideosModalOpen(false)}>
+              <button className="btn-day secondary" onClick={closeMetricModal}>
                 Close
               </button>
             </div>

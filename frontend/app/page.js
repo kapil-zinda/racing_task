@@ -42,7 +42,6 @@ const TEST_STAGE_OPTIONS = [
   { value: "test_given", label: "Test Given" },
   { value: "analysis_done", label: "Analysis Done" },
   { value: "revision", label: "Revision" },
-  { value: "second_revision", label: "Second Revision" },
 ];
 const TICKET_ORG_OPTIONS = ["uchhal", "elucidata", "divya"];
 const OTHER_VALUE = "__other__";
@@ -139,12 +138,12 @@ const EXAM_CATALOG = {
   ]
 };
 
-const getSubjectsForExam = (examType, catalog = EXAM_CATALOG) => (catalog[examType] || []).map((entry) => entry.subject);
-const getTopicsForSelection = (examType, subject, catalog = EXAM_CATALOG) => {
+const getSubjectsForExam = (examType, catalog = {}) => (catalog[examType] || []).map((entry) => entry.subject);
+const getTopicsForSelection = (examType, subject, catalog = {}) => {
   const found = (catalog[examType] || []).find((entry) => entry.subject === subject);
   return found?.topics || [];
 };
-const getExamOptionsFromCatalog = (catalog = EXAM_CATALOG) =>
+const getExamOptionsFromCatalog = (catalog = {}) =>
   Object.keys(catalog || {}).map((key) => ({ value: key, label: key.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 const SESSION_MEDIA_TYPES = ["audio", "video", "screen"];
 
@@ -216,18 +215,17 @@ function toTitle(text) {
 
 export default function HomePage() {
   const [missionSelector, setMissionSelector] = useState({ exam_options: [], catalog: {} });
+  const [missionSelectorLoading, setMissionSelectorLoading] = useState(Boolean(API_BASE_URL));
   const hasMissionCatalog = Object.keys(missionSelector.catalog || {}).length > 0;
   const activeCatalog = hasMissionCatalog ? missionSelector.catalog : {};
   const activeExamOptions = hasMissionCatalog ? (missionSelector.exam_options || []) : [];
   const missionTestPlan = Array.isArray(missionSelector?.plan?.tests) ? missionSelector.plan.tests : [];
   const missionTestSources = [...new Set(missionTestPlan.map((row) => String(row?.source || "").trim()).filter(Boolean))];
-  const activeTestSources = missionTestSources.length ? missionTestSources : ["sfg1", "sfg2", "pmp", "cava"];
+  const activeTestSources = missionTestSources;
   const defaultExam = activeExamOptions[0]?.value || "";
   const defaultSubject = getSubjectsForExam(defaultExam, activeCatalog)[0] || "";
   const defaultTopic = getTopicsForSelection(defaultExam, defaultSubject, activeCatalog)[0] || "";
   const defaultTestSource = activeTestSources[0] || "";
-  const defaultTestRows = missionTestPlan.filter((row) => String(row?.source || "").trim() === defaultTestSource);
-  const defaultTestName = defaultTestRows[0]?.test_name || "";
   const [players, setPlayers] = useState(INITIAL_PLAYERS);
   const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState("");
@@ -248,8 +246,6 @@ export default function HomePage() {
     exam_type_other: "",
     source: defaultTestSource,
     source_other: "",
-    test_name: defaultTestName,
-    test_name_other: "",
     test_number: "1",
     stage: "test_given",
     note: "",
@@ -304,8 +300,6 @@ export default function HomePage() {
 
   const getMissionTestRowsBySource = (sourceValue) =>
     missionTestPlan.filter((row) => String(row?.source || "").trim() === String(sourceValue || "").trim());
-  const getMissionTestNamesBySource = (sourceValue) =>
-    [...new Set(getMissionTestRowsBySource(sourceValue).map((row) => String(row?.test_name || "").trim()).filter(Boolean))];
   const getMissionTestNumberOptions = (sourceValue) => {
     const rows = getMissionTestRowsBySource(sourceValue);
     const maxCount = rows.reduce((mx, row) => Math.max(mx, Number(row?.number_of_tests || 1)), 1);
@@ -395,10 +389,12 @@ export default function HomePage() {
       setSelectedUserId(nextUser);
       setSessionForm((prev) => ({ ...prev, user_id: nextUser }));
       if (API_BASE_URL) {
+        setMissionSelectorLoading(true);
         fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(nextUser)}`)
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Mission options failed"))))
           .then((data) => setMissionSelector({ exam_options: data.exam_options || [], catalog: data.catalog || {}, plan: data.plan || {} }))
-          .catch(() => setMissionSelector({ exam_options: [], catalog: {}, plan: {} }));
+          .catch(() => setMissionSelector({ exam_options: [], catalog: {}, plan: {} }))
+          .finally(() => setMissionSelectorLoading(false));
       }
     };
     window.addEventListener("global-user-change", onGlobalUser);
@@ -407,10 +403,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!API_BASE_URL || !selectedUserId) return;
+    setMissionSelectorLoading(true);
     fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(selectedUserId)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Mission options failed"))))
       .then((data) => setMissionSelector({ exam_options: data.exam_options || [], catalog: data.catalog || {}, plan: data.plan || {} }))
-      .catch(() => setMissionSelector({ exam_options: [], catalog: {}, plan: {} }));
+      .catch(() => setMissionSelector({ exam_options: [], catalog: {}, plan: {} }))
+      .finally(() => setMissionSelectorLoading(false));
   }, [API_BASE_URL, selectedUserId]);
 
   useEffect(() => {
@@ -645,7 +643,6 @@ export default function HomePage() {
     const nextActiveSources = nextMissionSources.length ? nextMissionSources : activeTestSources;
     const defaultSource = nextActiveSources[0] || "";
     const sourceRows = nextMissionTests.filter((row) => String(row?.source || "").trim() === defaultSource);
-    const defaultTestName = sourceRows[0]?.test_name || "";
     const maxCount = sourceRows.reduce((mx, row) => Math.max(mx, Number(row?.number_of_tests || 1)), 1);
     const defaultTestNumber = String(maxCount > 0 ? 1 : 1);
 
@@ -664,8 +661,6 @@ export default function HomePage() {
       exam_type_other: "",
       source: defaultSource,
       source_other: "",
-      test_name: defaultTestName,
-      test_name_other: "",
       test_number: defaultTestNumber,
       stage: "test_given",
       note: "",
@@ -707,12 +702,11 @@ export default function HomePage() {
       const exam = taskTestMeta.exam_type === OTHER_VALUE ? taskTestMeta.exam_type_other.trim().toLowerCase() : taskTestMeta.exam_type;
       const examLabel = examLabelMap[exam] || exam;
       const source = taskTestMeta.source === OTHER_VALUE ? taskTestMeta.source_other.trim().toLowerCase() : taskTestMeta.source;
-      const testName = taskTestMeta.test_name === OTHER_VALUE ? taskTestMeta.test_name_other.trim() : taskTestMeta.test_name;
       const testNumber = taskTestMeta.test_number.trim();
       const stage = taskTestMeta.stage;
       const note = taskTestMeta.note.trim();
-      if (!exam || !source || !testNumber || !stage || !note) return;
-      detail = `Exam: ${examLabel} | Source: ${source}${testName ? ` | Test: ${testName}` : ""} | Test Number: ${testNumber} | Stage: ${stage} | Note: ${note}`;
+      if (!exam || !source || !testNumber || !stage) return;
+      detail = `Exam: ${examLabel} | Source: ${source} | Test Number: ${testNumber} | Stage: ${stage}${note ? ` | Note: ${note}` : ""}`;
     }
     if (isTicketAction) {
       const org = taskTicketMeta.org === OTHER_VALUE ? taskTicketMeta.org_other.trim().toLowerCase() : taskTicketMeta.org;
@@ -1355,14 +1349,11 @@ export default function HomePage() {
                     value={taskTestMeta.source}
                     onChange={(e) => {
                       const next = e.target.value;
-                      const nextNames = getMissionTestNamesBySource(next);
                       const nextNumbers = getMissionTestNumberOptions(next);
                       setTaskTestMeta((p) => ({
                         ...p,
                         source: next,
                         source_other: next === OTHER_VALUE ? p.source_other : "",
-                        test_name: nextNames[0] || "",
-                        test_name_other: "",
                         test_number: nextNumbers[0] || "1",
                       }));
                     }}
@@ -1378,32 +1369,6 @@ export default function HomePage() {
                       placeholder="Type custom source"
                       value={taskTestMeta.source_other}
                       onChange={(e) => setTaskTestMeta((p) => ({ ...p, source_other: e.target.value }))}
-                    />
-                  ) : null}
-                  <select
-                    className="task-select"
-                    value={taskTestMeta.test_name}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setTaskTestMeta((p) => ({
-                        ...p,
-                        test_name: next,
-                        test_name_other: next === OTHER_VALUE ? p.test_name_other : "",
-                      }));
-                    }}
-                  >
-                    {getMissionTestNamesBySource(taskTestMeta.source).map((name) => (
-                      <option key={name} value={name}>{name}</option>
-                    ))}
-                    <option value="">General</option>
-                    <option value={OTHER_VALUE}>Other</option>
-                  </select>
-                  {taskTestMeta.test_name === OTHER_VALUE ? (
-                    <input
-                      className="task-select"
-                      placeholder="Type test name"
-                      value={taskTestMeta.test_name_other}
-                      onChange={(e) => setTaskTestMeta((p) => ({ ...p, test_name_other: e.target.value }))}
                     />
                   ) : null}
                   <select
@@ -1434,7 +1399,11 @@ export default function HomePage() {
               </>
             ) : taskModal.actionType === "new_class" || taskModal.actionType === "revision" ? (
               <>
-                {!hasMissionCatalog ? (
+                {missionSelectorLoading ? (
+                  <p className="day-state" style={{ marginTop: 0 }}>
+                    Loading mission options...
+                  </p>
+                ) : !hasMissionCatalog ? (
                   <p className="api-state warn" style={{ marginTop: 0 }}>
                     No mission course data found for this user. Please set mission first.
                   </p>
@@ -1538,7 +1507,7 @@ export default function HomePage() {
                       value={taskMeta.work_type}
                       onChange={(e) => setTaskMeta((p) => ({ ...p, work_type: e.target.value }))}
                     >
-                      <option value="study">Study/Read</option>
+                      <option value="study">Class Video Watched</option>
                       <option value="notes">Notes Completed</option>
                     </select>
                   ) : null}
@@ -1600,10 +1569,8 @@ export default function HomePage() {
                     ? !(
                       (taskTestMeta.exam_type === OTHER_VALUE ? taskTestMeta.exam_type_other.trim() : taskTestMeta.exam_type) &&
                       (taskTestMeta.source === OTHER_VALUE ? taskTestMeta.source_other.trim() : taskTestMeta.source) &&
-                      (taskTestMeta.test_name === OTHER_VALUE ? taskTestMeta.test_name_other.trim() : true) &&
                       taskTestMeta.test_number.trim() &&
-                      taskTestMeta.stage &&
-                      taskTestMeta.note.trim()
+                      taskTestMeta.stage
                     )
                     : (taskModal.actionType === "new_class" || taskModal.actionType === "revision")
                       ? !(

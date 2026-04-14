@@ -376,6 +376,8 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
     ensure_indexes()
     tree: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
     revision_limits = _build_revision_limits(user_id)
+    test_recordings_by_source_number: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+    test_recordings_by_source_name: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
 
     event_cursor = events_collection().find({"player_id": user_id}).sort("created_at", ASCENDING)
     for event in event_cursor:
@@ -442,7 +444,10 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
             elif stage_raw == "analysis_done":
                 entry["analysis_done_date"] = entry["analysis_done_date"] or created_date
             elif stage_raw == "revision":
-                entry["revision_date"] = entry["revision_date"] or created_date
+                if not entry.get("revision_date"):
+                    entry["revision_date"] = created_date
+                elif not entry.get("second_revision_date"):
+                    entry["second_revision_date"] = created_date
             else:
                 entry["second_revision_date"] = entry["second_revision_date"] or created_date
             continue
@@ -457,11 +462,6 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
 
     sessions = sessions_collection().find({"doc_type": "study_session", "user_id": user_id})
     for session in sessions:
-        subject = (session.get("subject") or "General").strip() or "General"
-        topic = (session.get("topic") or "General").strip() or "General"
-        exam = find_exam_for_subject_topic(tree, subject, topic)
-        topic_node = ensure_topic_node(ensure_exam_node(tree, exam), subject, topic)
-
         uploads = session.get("uploads", {}) or {}
         has_recording = any(
             isinstance(info, dict) and (info.get("key") or info.get("object_url"))
@@ -470,6 +470,8 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
         if not has_recording:
             continue
 
+        subject = (session.get("subject") or "General").strip() or "General"
+        topic = (session.get("topic") or "General").strip() or "General"
         rec_date = (
             date_only(session.get("stopped_at", ""))
             or date_only(session.get("updated_at", ""))
@@ -491,6 +493,20 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
         recording_entry["default_media_type"] = (
             recording_entry["media_types"][0] if recording_entry["media_types"] else ""
         )
+
+        test_ref = session.get("test_ref") if isinstance(session.get("test_ref"), dict) else {}
+        test_source = (test_ref.get("source") or "").strip()
+        test_name = (test_ref.get("test_name") or "").strip()
+        test_number = str(test_ref.get("test_number") or "").strip()
+        if test_source:
+            if test_number:
+                test_recordings_by_source_number.setdefault(test_source, {}).setdefault(test_number, []).append(recording_entry)
+            if test_name:
+                test_recordings_by_source_name.setdefault(test_source, {}).setdefault(test_name.lower(), []).append(recording_entry)
+            continue
+
+        exam = find_exam_for_subject_topic(tree, subject, topic)
+        topic_node = ensure_topic_node(ensure_exam_node(tree, exam), subject, topic)
         key = f"{recording_entry['note']}::{recording_entry['date']}::{recording_entry['session_id']}"
         seen = {
             f"{(r.get('note') or '').strip()}::{r.get('date', '')}::{r.get('session_id', '')}"
@@ -538,6 +554,11 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
         for source, tests_map in exam_node["tests"].items():
             test_items: List[Dict[str, Any]] = []
             for test_number, test_node in tests_map.items():
+                source_recordings_by_number = test_recordings_by_source_number.get(source, {})
+                source_recordings_by_name = test_recordings_by_source_name.get(source, {})
+                linked_recordings = source_recordings_by_number.get(str(test_number), [])
+                if not linked_recordings:
+                    linked_recordings = source_recordings_by_name.get((test_node.get("test_name") or "").strip().lower(), [])
                 test_items.append(
                     {
                         "test_name": test_node.get("test_name", ""),
@@ -547,6 +568,7 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
                         "analysis_done_date": test_node.get("analysis_done_date", ""),
                         "revision_date": test_node.get("revision_date", ""),
                         "second_revision_date": test_node.get("second_revision_date", ""),
+                        "recordings": linked_recordings,
                     }
                 )
             tests_out.append(

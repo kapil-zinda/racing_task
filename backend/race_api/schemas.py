@@ -14,10 +14,13 @@ class CreateSessionRequest(BaseModel):
     user_id: str
     subject: str
     topic: str
-    session_type: str  # study | revision
+    session_type: str  # study | revision | analysis
     recorder_type: str = "call"
     modes: List[str] = []  # audio | video | screen
     notes: str
+    test_source: str = ""
+    test_name: str = ""
+    test_number: str = ""
 
 
 class SessionStatusRequest(BaseModel):
