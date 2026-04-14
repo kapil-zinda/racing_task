@@ -17,12 +17,13 @@ class CreateSessionRequest(BaseModel):
     session_type: str  # study | revision
     recorder_type: str = "call"
     modes: List[str] = []  # audio | video | screen
-    notes: str
+    notes: str = ""
 
 
 class SessionStatusRequest(BaseModel):
     status: str  # started | paused | resumed | stopped
     elapsed_seconds: int = 0
+    force_stop_previous: bool = False
 
 
 class PresignRequest(BaseModel):
