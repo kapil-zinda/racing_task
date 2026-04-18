@@ -6,6 +6,7 @@ from pymongo import ASCENDING, DESCENDING
 
 from .constants import ACTION_LABELS, MILESTONES, PLAYERS, POINTS_MAP
 from .context import (
+    activity_ledger_collection,
     current_date_str,
     day_doc_id,
     events_collection,
@@ -13,7 +14,7 @@ from .context import (
     sessions_collection,
 )
 from .ledger_domain import log_activity
-from .mission_domain import get_active_mission_id, get_or_create_mission
+from .mission_domain import get_active_mission_id, get_or_create_mission, mission_selector_options
 
 _indexes_ensured = False
 
@@ -141,6 +142,97 @@ def _event_fields_from_detail(detail: str) -> Dict[str, str]:
     }
 
 
+def _catalog_by_exam_label(user_id: str) -> Dict[str, Dict[str, set[str]]]:
+    out: Dict[str, Dict[str, set[str]]] = {}
+    try:
+        options = mission_selector_options(user_id)
+    except Exception:  # noqa: BLE001
+        return out
+    exam_options = options.get("exam_options") if isinstance(options.get("exam_options"), list) else []
+    catalog = options.get("catalog") if isinstance(options.get("catalog"), dict) else {}
+    key_to_label = {}
+    for row in exam_options:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("value") or "").strip()
+        label = str(row.get("label") or "").strip()
+        if key and label:
+            key_to_label[key] = label
+    for exam_key, rows in catalog.items():
+        label = key_to_label.get(str(exam_key), str(exam_key))
+        subject_map: Dict[str, set[str]] = {}
+        if isinstance(rows, list):
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                subject = str(row.get("subject") or "").strip()
+                topics = row.get("topics") if isinstance(row.get("topics"), list) else []
+                if not subject:
+                    continue
+                subject_map.setdefault(subject.lower(), set())
+                for topic in topics:
+                    topic_text = str(topic or "").strip()
+                    if topic_text:
+                        subject_map[subject.lower()].add(topic_text.lower())
+        if subject_map:
+            out[label.lower()] = subject_map
+    return out
+
+
+def _canonicalize_event_fields(user_id: str, fields: Dict[str, str], cache: Dict[str, Dict[str, Dict[str, set[str]]]]) -> Dict[str, str]:
+    if not isinstance(fields, dict):
+        return fields
+    exam = str(fields.get("exam") or "").strip()
+    subject = str(fields.get("subject") or "").strip()
+    topic = str(fields.get("topic") or "").strip()
+    if not exam or not subject:
+        return fields
+
+    catalog = cache.get(user_id)
+    if catalog is None:
+        catalog = _catalog_by_exam_label(user_id)
+        cache[user_id] = catalog
+    if not catalog:
+        return fields
+
+    exam_key = exam.lower()
+    subject_key = subject.lower()
+    topic_key = topic.lower()
+
+    # If the current exam already contains this subject/topic, keep it.
+    if exam_key in catalog:
+        subj_map = catalog[exam_key]
+        if subject_key in subj_map:
+            if not topic_key or topic_key in subj_map[subject_key] or not subj_map[subject_key]:
+                return fields
+
+    # Try finding a unique better exam bucket for this subject/topic.
+    matched_exam = ""
+    for lbl, subj_map in catalog.items():
+        if subject_key not in subj_map:
+            continue
+        if topic_key and subj_map[subject_key] and topic_key not in subj_map[subject_key]:
+            continue
+        if matched_exam:
+            # ambiguous: keep original
+            return fields
+        matched_exam = lbl
+
+    if not matched_exam:
+        return fields
+
+    out = dict(fields)
+    # Preserve human-friendly capitalization by using selector label text as stored in catalog keys.
+    for lbl in catalog.keys():
+        if lbl == matched_exam:
+            out["exam"] = lbl.title() if not lbl.startswith("book:") and not lbl.startswith("random:") else lbl
+            break
+    if out.get("exam", "").startswith("Book:") or out.get("exam", "").startswith("Random:"):
+        return out
+    # For labels like "pmp level up", title-case is acceptable in UI/history rendering.
+    return out
+
+
 def _has_events_for_date(date_str: str) -> bool:
     return events_collection().count_documents({"date": date_str}, limit=1) > 0
 
@@ -160,16 +252,40 @@ def _aggregate_points_for_date(date_str: str) -> Dict[str, int]:
 
 def _history_for_date(date_str: str) -> Dict[str, List[Dict[str, Any]]]:
     history = {player: [] for player in PLAYERS}
+    catalog_cache: Dict[str, Dict[str, Dict[str, set[str]]]] = {}
     cursor = events_collection().find({"date": date_str}).sort("created_at", -1)
     for event in cursor:
         player = event.get("player_id")
         if player not in history:
             continue
+        detail = event.get("detail", "")
+        action_type = event.get("event_type", "")
+        if action_type in {"new_class", "revision"}:
+            raw_fields = event.get("fields") if isinstance(event.get("fields"), dict) else _event_fields_from_detail(detail)
+            original_exam = (raw_fields.get("exam") or "").strip().lower()
+            fixed_fields = _canonicalize_event_fields(player, raw_fields, catalog_cache)
+            remapped_exam = (fixed_fields.get("exam") or "").strip().lower()
+            if original_exam and remapped_exam and original_exam != remapped_exam:
+                # Skip legacy cross-bucket mixed entries in timeline rendering.
+                continue
+            exam = (fixed_fields.get("exam") or "").strip()
+            subject = (fixed_fields.get("subject") or "").strip()
+            topic = (fixed_fields.get("topic") or "").strip()
+            note = (fixed_fields.get("note") or "").strip()
+            work = (fixed_fields.get("work_type") or "").strip().lower()
+            if exam and subject and topic:
+                if action_type == "new_class":
+                    detail = f"exam:{exam} | subject:{subject} | topic:{topic} | work:{work or 'study'}"
+                else:
+                    detail = f"exam:{exam} | subject:{subject} | topic:{topic}"
+                if note:
+                    detail = f"{detail} | note:{note}"
         history[player].append(
             {
-                "action_type": event.get("event_type", ""),
+                "event_id": str(event.get("_id", "")),
+                "action_type": action_type,
                 "action_label": event.get("action_label", ""),
-                "detail": event.get("detail", ""),
+                "detail": detail,
                 "points": int(event.get("points", 0) or 0),
                 "created_at": event.get("created_at", ""),
             }
@@ -376,6 +492,7 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
     ensure_indexes()
     tree: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
     revision_limits = _build_revision_limits(user_id)
+    catalog_cache: Dict[str, Dict[str, Dict[str, set[str]]]] = {}
     test_recordings_by_source_number: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
     test_recordings_by_source_name: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
 
@@ -393,6 +510,18 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
         work_type = (fields.get("work_type") or "").strip().lower()
 
         if action_type in {"new_class", "revision"}:
+            original_exam = (fields.get("exam") or "").strip().lower()
+            fields = _canonicalize_event_fields(user_id, fields, catalog_cache)
+            remapped_exam = (fields.get("exam") or "").strip().lower()
+            # Ignore legacy cross-bucket logs (e.g. exam from one bucket with subject/topic from another)
+            # so they do not pollute syllabus progress answers.
+            if original_exam and remapped_exam and original_exam != remapped_exam:
+                continue
+            exam = (fields.get("exam") or "General").strip() or "General"
+            subject = (fields.get("subject") or "General").strip() or "General"
+            topic = (fields.get("topic") or "General").strip() or "General"
+            note = (fields.get("note") or "").strip()
+            work_type = (fields.get("work_type") or "").strip().lower()
             topic_node = ensure_topic_node(ensure_exam_node(tree, exam), subject, topic)
             revision_limit = _topic_revision_limit(exam, subject, topic, revision_limits)
             topic_node["revision_limit"] = revision_limit
@@ -413,7 +542,9 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
             continue
 
         if action_type == "test_completed":
-            exam_node = ensure_exam_node(tree, exam)
+            # Keep all test progress under one stable exam bucket so UI does not
+            # split tests into separate blocks due to noisy exam text in events.
+            exam_node = ensure_exam_node(tree, "Tests")
             source = (fields.get("source") or "General").strip() or "General"
             test_number = (fields.get("test_number") or "1").strip() or "1"
             stage_raw = (fields.get("stage") or "test_given").strip().lower().replace(" ", "_")
@@ -478,7 +609,6 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
             or date_only(session.get("created_at", ""))
             or session.get("date", "")
         )
-        append_unique(topic_node["recording_dates"], rec_date)
         recording_entry = {
             "note": (session.get("notes") or "").strip(),
             "date": rec_date,
@@ -507,6 +637,7 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
 
         exam = find_exam_for_subject_topic(tree, subject, topic)
         topic_node = ensure_topic_node(ensure_exam_node(tree, exam), subject, topic)
+        append_unique(topic_node["recording_dates"], rec_date)
         key = f"{recording_entry['note']}::{recording_entry['date']}::{recording_entry['session_id']}"
         seen = {
             f"{(r.get('note') or '').strip()}::{r.get('date', '')}::{r.get('session_id', '')}"
@@ -717,6 +848,7 @@ def add_points_payload(player_id: str, action_type: str, test_type: str, detail:
         "fields": fields,
     }
     events_collection().insert_one(event_doc)
+    event_id = str(event_doc.get("_id", ""))
     mission_id = get_active_mission_id(player_id)
     log_activity(
         player_id,
@@ -734,6 +866,7 @@ def add_points_payload(player_id: str, action_type: str, test_type: str, detail:
             "test_name": fields.get("test_name", ""),
             "org": fields.get("org", ""),
             "stage": fields.get("stage", ""),
+            "race_event_id": event_id,
         },
     )
 
@@ -743,6 +876,67 @@ def add_points_payload(player_id: str, action_type: str, test_type: str, detail:
 
     return {
         "message": "Points updated",
+        "date": today,
+        "editable": True,
+        "points": daily_state["points"],
+        "reached": daily_state["reached"],
+        "history": history,
+        "winner_counts": winner_counts(),
+    }
+
+
+def _delete_ledger_for_race_event(event_doc: Dict[str, Any]) -> None:
+    event_id = str(event_doc.get("_id", ""))
+    if not event_id:
+        return
+    coll = activity_ledger_collection()
+    # Preferred path for newer events (direct linkage by race_event_id).
+    result = coll.delete_many({"meta.race_event_id": event_id})
+    if (result.deleted_count or 0) > 0:
+        return
+    # Backward-compatible fallback for old events without race_event_id link.
+    player = str(event_doc.get("player_id", "")).strip().lower()
+    event_type = str(event_doc.get("event_type", "")).strip().lower()
+    created_at = str(event_doc.get("created_at", "")).strip()
+    if not player or not event_type or not created_at:
+        return
+    coll.delete_many(
+        {
+            "user_id": player,
+            "activity_type": f"points_{event_type}",
+            "created_at": created_at,
+        }
+    )
+
+
+def delete_points_event_payload(event_id: str) -> Dict[str, Any]:
+    ensure_indexes()
+    eid = (event_id or "").strip()
+    if not eid:
+        raise ValueError("event_id is required")
+    from bson import ObjectId
+
+    try:
+        oid = ObjectId(eid)
+    except Exception as err:  # noqa: BLE001
+        raise ValueError("Invalid event_id") from err
+
+    doc = events_collection().find_one({"_id": oid, "doc_type": "race_event"})
+    if not doc:
+        raise LookupError("Event not found")
+    today = current_date_str()
+    event_date = str(doc.get("date") or "").strip()
+    if event_date != today:
+        raise ValueError("Only today's entries can be deleted")
+
+    events_collection().delete_one({"_id": oid})
+    _delete_ledger_for_race_event(doc)
+
+    points = _aggregate_points_for_date(today)
+    daily_state = _upsert_daily_state(today, points)
+    history = _history_for_date(today)
+    return {
+        "message": "Entry deleted",
         "date": today,
         "editable": True,
         "points": daily_state["points"],

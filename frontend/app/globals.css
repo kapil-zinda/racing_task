@@ -808,6 +808,12 @@ h1 {
   color: var(--muted);
 }
 
+.subtext-author {
+  margin-top: 6px;
+  font-size: 14px;
+  opacity: 0.92;
+}
+
 .legend {
   margin-top: 14px;
   display: flex;
@@ -906,6 +912,11 @@ h1 {
   color: #f8f8ff;
 }
 
+.btn-day.danger {
+  background: #ff7b72;
+  color: #2a1212;
+}
+
 .day-state {
   margin: 8px 0 0;
   font-size: 12px;
@@ -986,11 +997,56 @@ h1 {
   gap: 8px;
 }
 
+.session-item-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .session-item {
+  flex: 1;
   text-align: left;
   background: rgba(0, 0, 0, 0.22);
   color: #f6f8ff;
   border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.session-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.session-ellipsis-btn {
+  width: 30px;
+  height: 30px;
+  font-size: 17px;
+}
+
+.session-actions-menu {
+  left: auto;
+  right: 0;
+  min-width: 160px;
+  z-index: 40;
+}
+
+.session-menu-delete {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(255, 123, 114, 0.45);
+  background: rgba(255, 123, 114, 0.12);
+  color: #ffd8d4;
+  cursor: pointer;
+}
+
+.session-menu-delete:hover {
+  border-color: rgba(255, 123, 114, 0.72);
+  background: rgba(255, 123, 114, 0.2);
+}
+
+.session-menu-delete:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .session-item.active {
@@ -1682,6 +1738,27 @@ h1 {
 .history-points {
   font-size: 12px;
   color: #ffe08a;
+}
+
+.history-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-delete-btn {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 123, 114, 0.6);
+  background: rgba(255, 123, 114, 0.14);
+  color: #ffd8d4;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+}
+
+.history-delete-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .history-detail {
@@ -2757,6 +2834,213 @@ button:hover {
   color: #dae4ff;
 }
 
+.agent-v2-wrap {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 95;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.agent-v2-fab {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.agent-v2-fab.animal {
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: radial-gradient(circle at 30% 30%, #fff5c7, #ffc4d7 58%, #f9b0c9);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+  display: grid;
+  place-items: center;
+}
+
+.agent-v2-fab.animal:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.animal-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.agent-v2-panel {
+  width: min(220px, calc(100vw - 32px));
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: linear-gradient(165deg, rgba(255, 248, 232, 0.96), rgba(255, 221, 232, 0.9));
+  box-shadow: 0 18px 36px rgba(8, 13, 30, 0.26);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.agent-v2-panel.animal-only {
+  place-items: center;
+}
+
+.pet-stage {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.pet-bunny {
+  position: relative;
+  width: 112px;
+  height: 116px;
+}
+
+.pet-ear {
+  position: absolute;
+  width: 30px;
+  height: 62px;
+  background: linear-gradient(180deg, #fff, #ffe3ea);
+  border: 1px solid rgba(220, 146, 175, 0.55);
+  border-radius: 999px;
+  top: 0;
+  transform-origin: bottom center;
+  transition: transform 120ms ease;
+}
+
+.pet-ear.left {
+  left: 16px;
+  transform: rotate(-10deg);
+}
+
+.pet-ear.right {
+  right: 16px;
+  transform: rotate(10deg);
+}
+
+.pet-bunny.user-speaking .pet-ear.left {
+  transform: rotate(-24deg) translateY(-2px);
+}
+
+.pet-bunny.user-speaking .pet-ear.right {
+  transform: rotate(24deg) translateY(-2px);
+}
+
+.pet-face {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 8px;
+  top: 38px;
+  background: linear-gradient(180deg, #fff, #ffeef3);
+  border: 1px solid rgba(220, 146, 175, 0.6);
+  border-radius: 999px;
+}
+
+.pet-eye {
+  position: absolute;
+  top: 26px;
+  width: 10px;
+  height: 12px;
+  border-radius: 999px;
+  background: #2b2930;
+}
+
+.pet-eye.left {
+  left: 26px;
+}
+
+.pet-eye.right {
+  right: 26px;
+}
+
+.pet-nose {
+  position: absolute;
+  width: 10px;
+  height: 8px;
+  left: 50%;
+  top: 44px;
+  transform: translateX(-50%);
+  background: #ff8fb1;
+  border-radius: 999px;
+}
+
+.pet-mouth {
+  position: absolute;
+  width: 18px;
+  height: 6px;
+  left: 50%;
+  top: 56px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #cb517f;
+}
+
+.pet-bunny.agent-speaking .pet-mouth {
+  animation: petMouthTalk 0.18s infinite alternate ease-in-out;
+}
+
+@keyframes petMouthTalk {
+  from {
+    height: 6px;
+    width: 18px;
+    border-radius: 999px;
+  }
+  to {
+    height: 14px;
+    width: 14px;
+    border-radius: 6px;
+  }
+}
+
+.pet-status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #3f3946;
+}
+
+.pet-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #888;
+}
+
+.pet-dot.live {
+  background: #27c770;
+  box-shadow: 0 0 0 4px rgba(39, 199, 112, 0.18);
+}
+
+.pet-dot.connecting {
+  background: #f4b63d;
+}
+
+.pet-dot.idle {
+  background: #9ba1ae;
+}
+
+.agent-v2-state {
+  font-size: 12px;
+  font-weight: 700;
+  color: #3d3446;
+}
+
+.agent-v2-sleep-note {
+  max-width: 220px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(17, 22, 38, 0.88);
+  color: #f2f6ff;
+  padding: 6px 10px;
+  font-size: 11px;
+  text-align: center;
+}
+
 @media (max-width: 1040px) {
   .mission-status-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2772,6 +3056,15 @@ button:hover {
 }
 
 @media (max-width: 640px) {
+  .agent-v2-wrap {
+    right: 10px;
+    bottom: 10px;
+  }
+
+  .agent-v2-panel {
+    width: min(94vw, 430px);
+  }
+
   .mission-status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -102,6 +102,39 @@ def get_session_payload(session_id_value: str) -> Dict[str, Any]:
     return {"session": doc}
 
 
+def delete_session_payload(session_id_value: str) -> Dict[str, Any]:
+    sid = (session_id_value or "").strip()
+    if not sid:
+        raise ValueError("session_id is required")
+
+    collection = sessions_collection()
+    doc = collection.find_one({"_id": sid, "doc_type": "study_session"})
+    if not doc:
+        raise LookupError("Session not found")
+
+    if doc.get("status") in {"started", "resumed", "paused"}:
+        raise ValueError("Stop the active session before deleting it")
+
+    uploads = doc.get("uploads", {}) or {}
+    retained_s3_keys = []
+    for media_type in MEDIA_TYPES:
+        info = uploads.get(media_type)
+        if isinstance(info, dict):
+            key = (info.get("key") or "").strip()
+            if key:
+                retained_s3_keys.append(key)
+
+    deleted = collection.delete_one({"_id": sid, "doc_type": "study_session"})
+    if deleted.deleted_count == 0:
+        raise LookupError("Session not found")
+
+    return {
+        "message": "Session deleted from app data. Recording files in S3 were kept.",
+        "session_id": sid,
+        "user_id": (doc.get("user_id") or "").strip(),
+        "date": (doc.get("date") or "").strip(),
+        "retained_s3_keys": retained_s3_keys,
+    }
 def _best_effort_finalize_multipart_uploads(collection, session_doc: Dict[str, Any]) -> None:
     cfg = settings()
     bucket = cfg["recording_bucket"]
@@ -122,9 +155,22 @@ def _best_effort_finalize_multipart_uploads(collection, session_doc: Dict[str, A
             continue
 
         try:
-            parts_resp = client.list_parts(Bucket=bucket, Key=key, UploadId=upload_id)
-            parts = parts_resp.get("Parts", []) or []
-            complete_parts = [{"ETag": p["ETag"], "PartNumber": p["PartNumber"]} for p in parts if p.get("ETag") and p.get("PartNumber")]
+            complete_parts = []
+            marker = 0
+            while True:
+                params = {"Bucket": bucket, "Key": key, "UploadId": upload_id}
+                if marker:
+                    params["PartNumberMarker"] = marker
+                parts_resp = client.list_parts(**params)
+                parts = parts_resp.get("Parts", []) or []
+                complete_parts.extend(
+                    [{"ETag": p["ETag"], "PartNumber": p["PartNumber"]} for p in parts if p.get("ETag") and p.get("PartNumber")]
+                )
+                if not parts_resp.get("IsTruncated"):
+                    break
+                marker = int(parts_resp.get("NextPartNumberMarker") or marker or 0)
+                if marker <= 0:
+                    break
 
             if complete_parts:
                 client.complete_multipart_upload(

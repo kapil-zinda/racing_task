@@ -1,0 +1,735 @@
+Perfect. You already have the most important part: **a real backend with study state, mission data, syllabus data, extras/resources, and recorder controls**.
+
+So now the bot should be built as a layer **on top of your existing system**, not as a separate product.
+
+---
+
+# 1) What you should build
+
+Build one **Agent Orchestrator** that sits between:
+
+* your **frontend website**
+* your **existing backend APIs**
+* the **LLM / voice layer**
+* a small **memory + analytics store**
+
+So the flow becomes:
+
+**Voice/Text from user → Agent Orchestrator → calls your APIs / triggers frontend actions → responds in voice/text**
+
+That gives you one companion that can:
+
+* talk with you
+* understand your mood
+* analyse your study data
+* open the right page
+* start or stop a recording session
+* suggest next actions
+* enforce accountability
+
+---
+
+# 2) Recommended architecture
+
+## A. Frontend
+
+Keep your website as the control surface.
+
+Add these components:
+
+### `VoiceCompanionWidget`
+
+Floating widget available on all pages.
+
+Responsibilities:
+
+* mic button
+* transcript display
+* voice reply playback
+* strict/supportive mode indicator
+* quick buttons like:
+
+  * “What now?”
+  * “Analyse today”
+  * “Motivate me”
+  * “Start study session”
+  * “Show weak topics”
+
+### `AgentBridge`
+
+A frontend service that:
+
+* sends user utterance/text to backend orchestrator
+* receives structured action requests
+* executes frontend-only actions
+* returns action result to backend
+
+### `PageActionRegistry`
+
+A single registry of allowed frontend actions.
+
+Example:
+
+```ts
+const PageActionRegistry = {
+  switch_page_home: () => router.push("/"),
+  switch_page_recorder: () => router.push("/recorder"),
+  switch_page_syllabus: () => router.push("/syllabus"),
+  switch_page_mission: () => router.push("/mission"),
+  switch_page_resources: (subpage?: "search" | "content" | "qna") => {
+    router.push(subpage ? `/${subpage}` : "/search");
+  },
+  start_recording_session: (sessionId: string) => startRecording(sessionId),
+  pause_recording_session: (sessionId: string) => pauseRecording(sessionId),
+  resume_recording_session: (sessionId: string) => resumeRecording(sessionId),
+  end_recording_session: (sessionId: string) => endRecording(sessionId),
+};
+```
+
+This is much better than letting the model manipulate DOM randomly.
+
+---
+
+## B. Backend Agent Orchestrator
+
+This is the brain.
+
+Create a new service, for example:
+
+* `POST /agent/chat`
+* `POST /agent/voice`
+* `GET /agent/session/:id`
+* `POST /agent/memory`
+* `GET /agent/suggestions`
+
+Its responsibilities:
+
+1. receive message/audio
+2. load current user context
+3. call your existing study APIs as tools
+4. decide whether a frontend action is needed
+5. maintain memory/personality
+6. return:
+
+   * assistant reply
+   * optional frontend actions
+   * optional follow-up reminders/prompts
+
+---
+
+# 3) Use your existing APIs as tools
+
+Your current backend is already rich enough for a strong MVP.
+
+## Core study tools
+
+### State and activity
+
+```text
+read_points_state(date)
+-> GET /state?date=YYYY-MM-DD
+
+read_days()
+-> GET /days
+
+write_points(player_id, action_type, test_type?, detail?)
+-> POST /points
+
+reset_today_points()
+-> POST /reset
+```
+
+Use these for:
+
+* daily summary
+* streak/accountability
+* “what have I done today?”
+* “did I waste today?”
+* awarding action points via voice-confirmed actions
+
+---
+
+### Extras/resources
+
+```text
+read_extras(user_id)
+-> GET /extras?user_id=kapil|divya
+
+write_extras(user_id, rows)
+-> PUT /extras
+```
+
+Use these for:
+
+* recommending backup study items
+* opening saved resources
+* “what should I watch/read now?”
+* building quick action plans from available materials
+
+---
+
+### Syllabus intelligence
+
+```text
+read_syllabus(user_id)
+-> GET /syllabus?user_id=...
+```
+
+This is one of the most important tools.
+
+Use it for:
+
+* weak-topic detection
+* revision due detection
+* not started topics
+* missing first/second revisions
+* topic-wise analysis
+* “what should I study now?”
+
+---
+
+### Mission analysis
+
+```text
+read_mission_control(user_id, lookback_days)
+-> GET /mission-control?user_id=...&lookback_days=...
+
+read_mission(user_id, lookback_days)
+-> GET /mission?user_id=...&lookback_days=...
+
+write_mission(...)
+-> PUT /mission
+
+read_mission_options(user_id)
+-> GET /mission/options?user_id=...
+```
+
+Use these for:
+
+* weekly planning
+* target vs actual
+* missed mission items
+* motivational comparison
+* generating next 3-hour or full-day plan
+
+---
+
+### Searchable content
+
+```text
+make_file_searchable(id, item_type, course)
+-> POST /content/make-searchable
+
+make_file_unsearchable(id, item_type, recursive?, scope:"searchable")
+-> POST /content/delete
+
+read_searchable_content()
+-> GET /content/list?view_mode=searchable
+-> GET /content/tree?view_mode=searchable
+```
+
+Use these for:
+
+* knowledge assistant
+* content curation
+* voice command like:
+
+  * “make this folder searchable”
+  * “remove this file from search”
+  * “show searchable content”
+
+---
+
+## Frontend action tools
+
+These should be treated as **action tools**, not backend data tools.
+
+```text
+switch_page_home
+switch_page_recorder
+switch_page_syllabus
+switch_page_mission
+switch_page_resources
+start_recording_session
+pause_recording_session
+resume_recording_session
+end_recording_session
+```
+
+These should be executed by the frontend after the agent returns a structured action payload.
+
+---
+
+# 4) Tool layer design
+
+Create two tool classes:
+
+## A. Data tools
+
+Call backend APIs and return structured JSON.
+
+Example:
+
+```python
+class StudyTools:
+    def read_points_state(self, date: str): ...
+    def read_days(self): ...
+    def write_points(self, player_id: str, action_type: str, test_type=None, detail=None): ...
+    def read_extras(self, user_id: str): ...
+    def write_extras(self, user_id: str, rows: list): ...
+    def read_syllabus(self, user_id: str): ...
+    def read_mission_control(self, user_id: str, lookback_days: int = 30): ...
+    def read_mission(self, user_id: str, lookback_days: int = 30): ...
+    def write_mission(self, payload: dict): ...
+    def read_mission_options(self, user_id: str): ...
+    def make_file_searchable(self, id: str, item_type: str, course: str): ...
+    def make_file_unsearchable(self, id: str, item_type: str, recursive=False): ...
+    def read_searchable_content(self): ...
+```
+
+## B. UI action tools
+
+These do not execute directly in backend.
+They emit action instructions.
+
+Example:
+
+```python
+class FrontendActionTools:
+    def switch_page(self, page: str): ...
+    def start_recording_session(self, session_id: str): ...
+    def pause_recording_session(self, session_id: str): ...
+    def resume_recording_session(self, session_id: str): ...
+    def end_recording_session(self, session_id: str): ...
+```
+
+The backend returns:
+
+```json
+{
+  "reply": "I’ve opened your mission page. Your backlog needs attention.",
+  "ui_actions": [
+    { "name": "switch_page_mission", "args": {} }
+  ]
+}
+```
+
+---
+
+# 5) What the agent should know about your domain
+
+You already gave important business rules. Bake them into analytics.
+
+## Reporting rules
+
+Since you do not have a single report endpoint, the agent should synthesize reports from:
+
+* `GET /days`
+* `GET /state?date=...`
+* `GET /mission-control?...`
+* `GET /syllabus?...`
+
+And apply these rules:
+
+```text
+not_started_topics:
+  class_study_first_date == ""
+
+missing_first_revision:
+  class_study_first_date != "" &&
+  first_revision_date == "" &&
+  days_since_class >= X
+
+missing_second_revision:
+  first_revision_date != "" &&
+  second_revision_date == "" &&
+  days_since_first_revision >= Y
+```
+
+Mission defaults:
+
+* `X = 7`
+* `Y = 15`
+
+This should be part of the agent’s domain instructions so it speaks like it understands your system.
+
+---
+
+# 6) Add three small backend pieces that are missing
+
+Your current APIs are good, but for a true companion bot you still need 3 new modules.
+
+## A. Memory store
+
+A table to remember:
+
+* preferred tone: supportive / strict
+* emotional triggers
+* best study hours
+* recurring weak subjects
+* recent promises made by user
+* last few reflections
+* what worked recently
+
+Suggested table:
+
+```sql
+agent_memory (
+  id uuid primary key,
+  user_id text not null,
+  key text not null,
+  value jsonb not null,
+  importance int default 1,
+  source text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+)
+```
+
+---
+
+## B. Conversation/session table
+
+```sql
+agent_sessions (
+  id uuid primary key,
+  user_id text not null,
+  mode text,              -- supportive, strict, planner, analyst
+  page_context text,
+  current_session_id text,
+  started_at timestamptz default now(),
+  last_active_at timestamptz default now()
+)
+```
+
+```sql
+agent_messages (
+  id uuid primary key,
+  session_id uuid not null,
+  role text not null,     -- user, assistant, tool
+  content jsonb not null,
+  created_at timestamptz default now()
+)
+```
+
+---
+
+## C. Nudge / accountability engine
+
+This is what “forces” you gently but firmly.
+
+```sql
+study_nudges (
+  id uuid primary key,
+  user_id text not null,
+  nudge_type text,
+  reason text,
+  due_at timestamptz,
+  status text default 'pending',
+  metadata jsonb
+)
+```
+
+Use this for:
+
+* “You promised 2 hours of revision and did none”
+* “No activity in 90 minutes”
+* “First revision of polity is overdue”
+* “You ended session too early”
+
+---
+
+# 7) Agent modes
+
+The same bot should switch between modes.
+
+## Supportive mode
+
+Used when:
+
+* user is low
+* lonely
+* anxious
+* needs encouragement
+
+Tone:
+
+* warm
+* steady
+* non-judgmental
+
+## Strict mode
+
+Used when:
+
+* user explicitly asks
+* repeated avoidance is detected
+* mission is slipping
+
+Tone:
+
+* firm
+* direct
+* no emotional over-softening
+
+## Analyst mode
+
+Used when:
+
+* user asks for performance analysis
+* weekly report
+* what to do now
+* weak topic breakdown
+
+## Action mode
+
+Used when:
+
+* navigation or recorder action is needed
+
+---
+
+# 8) Exact orchestration flow
+
+## Example 1: “What should I do right now?”
+
+1. user speaks
+2. agent loads:
+
+   * `read_mission_control(user_id, lookback_days=7)`
+   * `read_syllabus(user_id)`
+   * optionally `read_points_state(today)`
+3. analytics layer computes:
+
+   * overdue revisions
+   * not started topics
+   * mission lag
+4. agent replies:
+
+   * “Start Modern History revision for 50 minutes, then 30 polity MCQs.”
+5. optional UI action:
+
+   * open mission page
+
+---
+
+## Example 2: “Open recorder and start session”
+
+1. agent emits:
+
+```json
+[
+  { "name": "switch_page_recorder", "args": {} },
+  { "name": "start_recording_session", "args": { "session_id": "abc123" } }
+]
+```
+
+2. frontend executes
+3. frontend returns success
+4. assistant says:
+
+   * “Recorder started. Stay with this session till the end.”
+
+---
+
+## Example 3: “Analyse my week”
+
+1. agent calls:
+
+   * `read_days()`
+   * `read_points_state(date)` for last 7 days
+   * `read_mission_control(user_id, 7)`
+   * `read_syllabus(user_id)`
+2. builds report:
+
+   * days active
+   * streak breaks
+   * overdue revisions
+   * subjects ignored
+   * strongest day
+   * weakest day
+3. returns:
+
+   * performance summary
+   * top 3 corrections
+   * next 24-hour plan
+
+---
+
+# 9) Frontend response format
+
+Make the backend always return structured output like:
+
+```json
+{
+  "reply_text": "You are behind on first revision in 6 topics. Open mission page now.",
+  "voice_text": "You are behind on first revision in 6 topics. I’m opening mission page now.",
+  "mode": "strict",
+  "ui_actions": [
+    { "name": "switch_page_mission", "args": {} }
+  ],
+  "cards": [
+    {
+      "type": "study_summary",
+      "title": "Today",
+      "data": {
+        "points": 48,
+        "milestones": 2,
+        "pending_revisions": 6
+      }
+    }
+  ],
+  "followups": [
+    "Would you like a 3-hour rescue plan?"
+  ]
+}
+```
+
+This makes the UI easy to render.
+
+---
+
+# 10) System prompt for your bot
+
+Use something like this as the core system prompt:
+
+```text
+You are a voice-first personal study companion for the user.
+
+Your role is not just to chat. You must:
+1. understand the user's emotional state,
+2. analyse study data from tools,
+3. guide the user toward the highest-impact next action,
+4. use website tools and page actions when helpful,
+5. keep the user accountable,
+6. adapt tone between supportive and strict modes.
+
+Behavior rules:
+- Be caring, direct, and useful.
+- Never give generic study advice when tool data can answer better.
+- Always prefer using available tools before making assumptions.
+- When the user asks about study progress, mission, backlog, revisions, weak areas, or what to do next, inspect the relevant tools.
+- When navigation or recorder control is needed, emit structured UI actions.
+- Use the platform’s rules for overdue revision:
+  - not_started_topics: class_study_first_date == ""
+  - missing_first_revision: class_study_first_date != "" and first_revision_date == "" and days_since_class >= X
+  - missing_second_revision: first_revision_date != "" and second_revision_date == "" and days_since_first_revision >= Y
+  - default X=7, Y=15 unless another value is provided by tool context
+- In supportive mode, be warm and grounding.
+- In strict mode, be firm and challenge avoidance, but do not insult or humiliate.
+- Keep answers concrete. End with one clear next step.
+- When useful, summarize in this order:
+  1. what is happening,
+  2. why it matters,
+  3. what to do now.
+
+You are a companion with memory.
+Remember:
+- recurring weak areas,
+- preferred coaching tone,
+- recent promises,
+- emotional patterns,
+- productivity patterns.
+
+Your goal is to help the user feel less alone and act more consistently.
+```
+
+---
+
+# 11) The most valuable analytics you should implement first
+
+From your existing APIs, the bot should compute:
+
+* today’s points and milestone progress
+* active days in last 7/30 days
+* average daily points
+* missed study days
+* not started topics
+* missing first revision
+* missing second revision
+* most ignored subject
+* most progressed subject
+* mission completion ratio
+* topic backlog count
+* test completion trend
+* extra resources not touched
+* rescue plan for today
+
+These will make the bot feel intelligent immediately.
+
+---
+
+# 12) Best MVP for your exact backend
+
+Build this first:
+
+## MVP v1
+
+* text + voice assistant widget
+* agent orchestrator endpoint
+* tool wrappers around your existing APIs
+* page action registry
+* daily analysis
+* weekly analysis
+* “what now?” recommendation
+* recorder controls
+* supportive / strict mode toggle
+* small memory store
+
+That is enough for a seriously useful companion.
+
+---
+
+# 13) My direct recommendation for your code structure
+
+```text
+/backend
+  /agent
+    controller.py
+    orchestrator.py
+    prompts.py
+    schemas.py
+    memory.py
+    analytics.py
+    report_builder.py
+    tool_router.py
+    tools/
+      study_tools.py
+      mission_tools.py
+      syllabus_tools.py
+      content_tools.py
+      frontend_action_tools.py
+
+/frontend
+  /components/agent
+    VoiceCompanionWidget.tsx
+    AgentTranscript.tsx
+    AgentModeBadge.tsx
+    AgentQuickActions.tsx
+  /lib/agent
+    agentBridge.ts
+    pageActionRegistry.ts
+    voiceClient.ts
+    actionExecutor.ts
+```
+
+---
+
+# 14) What to do next
+
+Start with these 4 implementation steps:
+
+1. build `/agent/chat` that wraps your current APIs as tools
+2. create `PageActionRegistry` on frontend
+3. implement `report_builder.py` using your `days/state/mission-control/syllabus` rules
+4. add `agent_memory` table so the bot starts feeling personal
+
+Once that is done, the bot will already be able to:
+
+* talk to you
+* open the correct page
+* analyse your studies
+* tell you what to do next
+* support and pressure you in a human way
+
+Share your backend stack language and frontend stack, and I’ll write the exact API contract, tool schemas, analytics code structure, and first working orchestrator skeleton around these endpoints.
