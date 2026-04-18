@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import ActivityInternalMenu from "../components/ActivityInternalMenu";
+import { AGENT_PENDING_RECORDER_ACTION_KEY, AGENT_RECORDER_EVENT } from "../lib/agent/constants";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -437,7 +438,7 @@ export default function RecorderPage() {
   };
 
   const fetchSessions = async (userValue = sessionForm.user_id) => {
-    if (!API_BASE_URL || !userValue) return;
+    if (!API_BASE_URL || !userValue) return [];
     setSessionLoading(true);
     setSessionError("");
     try {
@@ -447,13 +448,16 @@ export default function RecorderPage() {
         throw new Error(`Sessions API failed: ${res.status} ${txt}`);
       }
       const data = await res.json();
-      setSessionList(data.sessions || []);
+      const sessions = data.sessions || [];
+      setSessionList(sessions);
       if (selectedSession) {
-        const refreshed = (data.sessions || []).find((s) => s._id === selectedSession._id);
+        const refreshed = sessions.find((s) => s._id === selectedSession._id);
         if (refreshed) setSelectedSession(refreshed);
       }
+      return sessions;
     } catch (err) {
       setSessionError(String(err.message || err));
+      return [];
     } finally {
       setSessionLoading(false);
     }
@@ -952,13 +956,14 @@ export default function RecorderPage() {
     setLiveControls({ micMuted: false, cameraOff: false, sharingScreen: false });
   };
 
-  const pushSessionStatus = async (status) => {
-    if (!API_BASE_URL || !selectedSession?._id) return;
+  const pushSessionStatus = async (status, sessionOverride = null) => {
+    const activeSession = sessionOverride || selectedSession;
+    if (!API_BASE_URL || !activeSession?._id) return;
     const elapsed = timerState.running
       ? timerState.baseElapsed + Math.floor((Date.now() - timerState.startedAt) / 1000)
       : timerState.baseElapsed;
     try {
-      const res = await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/status`, {
+      const res = await fetch(`${API_BASE_URL}/sessions/${activeSession._id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, elapsed_seconds: elapsed })
@@ -970,28 +975,36 @@ export default function RecorderPage() {
       const data = await res.json();
       setSelectedSession(data.session);
       setTimerState({ running: false, startedAt: 0, baseElapsed: data.session?.elapsed_seconds || elapsed });
-      await fetchSessions(selectedSession?.user_id || sessionForm.user_id);
+      await fetchSessions(activeSession?.user_id || sessionForm.user_id);
     } catch (err) {
       setSessionError(String(err.message || err));
     }
   };
 
-  const startSession = async () => {
-    if (!selectedSession || selectedSession.status === "stopped") return;
+  const startSession = async (sessionOverride = null) => {
+    const activeSession = sessionOverride || selectedSession;
+    if (!activeSession) {
+      setSessionError("No active session selected. Create/select a session first.");
+      return;
+    }
+    if (activeSession.status === "stopped") {
+      setSessionError("Selected session is already stopped. Create a new session.");
+      return;
+    }
     setSessionError("");
-    if (!selectedSession.subject?.trim() || !selectedSession.topic?.trim()) {
+    if (!activeSession.subject?.trim() || !activeSession.topic?.trim()) {
       setSessionError("Subject and topic are required to start a session.");
       return;
     }
     try {
-      await initRecorders(selectedSession.modes || []);
+      await initRecorders(activeSession.modes || []);
     } catch (err) {
       stopAndReleaseStreams();
       setSessionError(`Recorder permission/device error: ${String(err.message || err)}`);
       return;
     }
-    await pushSessionStatus("started");
-    setTimerState({ running: true, startedAt: Date.now(), baseElapsed: selectedSession.elapsed_seconds || 0 });
+    await pushSessionStatus("started", activeSession);
+    setTimerState({ running: true, startedAt: Date.now(), baseElapsed: activeSession.elapsed_seconds || 0 });
   };
 
   const pauseSession = async () => {
@@ -1052,6 +1065,110 @@ export default function RecorderPage() {
       setSessionError(String(err.message || err));
     }
   };
+
+  const executeAgentRecorderAction = async (payload) => {
+    const actionName = String(payload?.name || "").trim();
+    const args = payload?.args && typeof payload.args === "object" ? payload.args : {};
+    if (!actionName) return;
+    if (!["start_recording_session", "pause_recording_session", "resume_recording_session", "end_recording_session"].includes(actionName)) {
+      return;
+    }
+    const requestedSessionId = String(args?.session_id || "").trim();
+    let activeSession = selectedSession;
+    if (requestedSessionId && selectedSession?._id !== requestedSessionId) {
+      const direct = (sessionList || []).find((row) => row?._id === requestedSessionId);
+      if (direct) {
+        selectSession(direct);
+        activeSession = direct;
+      } else {
+        const fetched = await fetchSessions(sessionForm.user_id);
+        const latest = (fetched || []).find((row) => row?._id === requestedSessionId);
+        if (latest) {
+          selectSession(latest);
+          activeSession = latest;
+        }
+      }
+    }
+    if (actionName === "start_recording_session") {
+      if (!activeSession || activeSession.status === "stopped") {
+        if (!API_BASE_URL) {
+          setSessionError("Backend API URL is required to create/start recording session.");
+          return;
+        }
+        const recorderType = String(args?.recorder_type || "audio").trim().toLowerCase();
+        const sessionType = String(args?.session_type || "study").trim().toLowerCase();
+        const incomingSubject = String(args?.subject || "").trim();
+        const incomingTopic = String(args?.topic || "").trim();
+        const incomingNotes = String(args?.notes || "").trim();
+        const fallback = buildSessionSubjectTopic();
+        const resolvedSubject = incomingSubject || fallback.subject || "";
+        const resolvedTopic = incomingTopic || fallback.topic || "";
+
+        if (!resolvedSubject || !resolvedTopic) {
+          const plan = missionSelector?.plan && typeof missionSelector.plan === "object" ? missionSelector.plan : {};
+          const courseCount = Array.isArray(plan.courses) ? plan.courses.length : 0;
+          const bookCount = Array.isArray(plan.books) ? plan.books.length : 0;
+          const randomCount = Array.isArray(plan.random) ? plan.random.length : 0;
+          const testCount = Array.isArray(plan.tests) ? plan.tests.length : 0;
+          setSessionError(
+            `Agent needs confirmation before start. Pick subject/topic from your plan (courses:${courseCount}, books:${bookCount}, random:${randomCount}, tests:${testCount}) and retry.`
+          );
+          return;
+        }
+
+        const payloadBody = {
+          user_id: sessionForm.user_id,
+          subject: resolvedSubject,
+          topic: resolvedTopic,
+          session_type: ["study", "revision", "analysis", "test"].includes(sessionType) ? sessionType : "study",
+          recorder_type: recorderType || "audio",
+          notes: incomingNotes || `Agent-triggered ${recorderType || "audio"} session`,
+        };
+        const res = await fetch(`${API_BASE_URL}/sessions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payloadBody),
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          setSessionError(`Agent create session failed: ${res.status} ${txt}`);
+          return;
+        }
+        const data = await res.json();
+        if (data?.session) {
+          activeSession = data.session;
+          setSelectedSession(data.session);
+          await fetchSessions(sessionForm.user_id);
+        }
+      }
+      await startSession(activeSession);
+    }
+    if (actionName === "pause_recording_session") await pauseSession();
+    if (actionName === "resume_recording_session") await resumeSession();
+    if (actionName === "end_recording_session") await stopSession();
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const onAgentAction = (event) => {
+      const payload = event?.detail || {};
+      executeAgentRecorderAction(payload).catch((err) => {
+        setSessionError(`Agent action failed: ${String(err?.message || err)}`);
+      });
+    };
+    window.addEventListener(AGENT_RECORDER_EVENT, onAgentAction);
+    try {
+      const raw = window.sessionStorage.getItem(AGENT_PENDING_RECORDER_ACTION_KEY);
+      if (raw) {
+        const payload = JSON.parse(raw);
+        window.sessionStorage.removeItem(AGENT_PENDING_RECORDER_ACTION_KEY);
+        executeAgentRecorderAction(payload).catch((err) => {
+          setSessionError(`Agent action failed: ${String(err?.message || err)}`);
+        });
+      }
+    } catch (_) {}
+    return () => window.removeEventListener(AGENT_RECORDER_EVENT, onAgentAction);
+  }, [selectedSession, sessionList, sessionForm.user_id]);
 
   const retryPendingUploads = async () => {
     if (!selectedSession?._id || pendingFinalizeModes.length === 0) return;

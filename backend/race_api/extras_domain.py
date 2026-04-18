@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 from pymongo import ASCENDING
 
 from .constants import PLAYERS
-from .context import extras_collection
+from .context import current_date_str, extras_collection
 from .ledger_domain import log_activity
 from .mission_domain import get_active_mission_id
 
@@ -16,7 +16,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _doc_id(user_id: str) -> str:
+def _normalize_date(value: str | None) -> str:
+    raw = str(value or "").strip()
+    if len(raw) >= 10:
+        return raw[:10]
+    return current_date_str()
+
+
+def _doc_id(user_id: str, date_value: str) -> str:
+    return f"extras:{user_id}:{date_value}"
+
+
+def _legacy_doc_id(user_id: str) -> str:
     return f"extras:{user_id}"
 
 
@@ -25,7 +36,12 @@ def _ensure_indexes() -> None:
     if _extras_indexes_ensured:
         return
     coll = extras_collection()
-    coll.create_index([("user_id", ASCENDING)], unique=True)
+    try:
+        coll.drop_index("user_id_1")
+    except Exception:  # noqa: BLE001
+        pass
+    coll.create_index([("user_id", ASCENDING), ("date", ASCENDING)], unique=True, name="user_date_unique_idx")
+    coll.create_index([("user_id", ASCENDING), ("updated_at", ASCENDING)])
     _extras_indexes_ensured = True
 
 
@@ -77,20 +93,24 @@ def _duration_to_minutes(raw: str) -> int:
     return max(0, minutes)
 
 
-def get_extras_payload(user_id: str) -> Dict[str, Any]:
+def get_extras_payload(user_id: str, date_value: str | None = None) -> Dict[str, Any]:
     uid = (user_id or "").strip().lower()
     if uid not in PLAYERS:
         raise ValueError("Invalid user_id")
+    day = _normalize_date(date_value)
     _ensure_indexes()
-    doc = extras_collection().find_one({"_id": _doc_id(uid)})
+    doc = extras_collection().find_one({"_id": _doc_id(uid, day)})
+    if not doc and day == current_date_str():
+        doc = extras_collection().find_one({"_id": _legacy_doc_id(uid)})
     rows = [ _normalize_row(r) for r in (doc.get("rows", []) if isinstance(doc, dict) else []) ]
-    return {"user_id": uid, "rows": rows}
+    return {"user_id": uid, "date": day, "rows": rows}
 
 
-def save_extras_payload(user_id: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def save_extras_payload(user_id: str, rows: List[Dict[str, Any]], date_value: str | None = None) -> Dict[str, Any]:
     uid = (user_id or "").strip().lower()
     if uid not in PLAYERS:
         raise ValueError("Invalid user_id")
+    day = _normalize_date(date_value)
     _ensure_indexes()
     normalized_rows = [_normalize_row(r) for r in (rows or [])]
     total_minutes = sum(_duration_to_minutes(r.get("duration", "")) for r in normalized_rows)
@@ -99,10 +119,11 @@ def save_extras_payload(user_id: str, rows: List[Dict[str, Any]]) -> Dict[str, A
         kind = str(row.get("kind", "") or "").strip().lower() or "unknown"
         kind_counts[kind] = kind_counts.get(kind, 0) + 1
     extras_collection().update_one(
-        {"_id": _doc_id(uid)},
+        {"_id": _doc_id(uid, day)},
         {
             "$set": {
                 "user_id": uid,
+                "date": day,
                 "rows": normalized_rows,
                 "updated_at": _now(),
             },
@@ -110,13 +131,14 @@ def save_extras_payload(user_id: str, rows: List[Dict[str, Any]]) -> Dict[str, A
         },
         upsert=True,
     )
-    mission_id = get_active_mission_id(uid)
-    log_activity(
-        uid,
-        "extras_update",
-        count=len(normalized_rows),
-        duration_minutes=total_minutes,
-        mission_id=mission_id,
-        meta={"kind_counts": kind_counts},
-    )
-    return {"message": "Extras saved", "user_id": uid, "rows": normalized_rows}
+    if day == current_date_str():
+        mission_id = get_active_mission_id(uid)
+        log_activity(
+            uid,
+            "extras_update",
+            count=len(normalized_rows),
+            duration_minutes=total_minutes,
+            mission_id=mission_id,
+            meta={"kind_counts": kind_counts},
+        )
+    return {"message": "Extras saved", "user_id": uid, "date": day, "rows": normalized_rows}

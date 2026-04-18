@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import MainMenu from "./components/MainMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const QUOTE_API_URL = "https://motivational-spark-api.vercel.app/api/quotes/random";
+const FALLBACK_HERO_QUOTE = {
+  quote: "Keep racing and unlock rewards at each milestone.",
+  author: "",
+};
 const NOTICE_TTL_MS = 15000;
 const GLOBAL_USER_STORAGE_KEY = "global_user_id";
 const HOME_EXTRAS_STORAGE_KEY = "home_extras_by_user_v1";
@@ -292,6 +297,8 @@ export default function HomePage() {
     duration: "",
     kind: "time_waste",
   });
+  const [heroQuote, setHeroQuote] = useState(FALLBACK_HERO_QUOTE);
+  const effectiveExtrasDate = todayDate || new Date().toISOString().slice(0, 10);
   const recorderRefs = useRef({});
   const streamRefs = useRef({});
   const chunkRefs = useRef({ audio: [], video: [], screen: [] });
@@ -305,6 +312,35 @@ export default function HomePage() {
     const maxCount = rows.reduce((mx, row) => Math.max(mx, Number(row?.number_of_tests || 1)), 1);
     return Array.from({ length: maxCount }, (_, idx) => String(idx + 1));
   };
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadHeroQuote = async () => {
+      try {
+        const res = await fetch(QUOTE_API_URL, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`Quote API failed: ${res.status}`);
+
+        const data = await res.json();
+        const quote = String(data?.quote || "").trim();
+        const author = String(data?.author || "").trim();
+        if (!quote) throw new Error("Quote API returned an empty quote");
+
+        setHeroQuote({
+          quote,
+          author: author || "Unknown",
+        });
+      } catch {
+        if (!controller.signal.aborted) setHeroQuote(FALLBACK_HERO_QUOTE);
+      }
+    };
+
+    loadHeroQuote();
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -431,7 +467,9 @@ export default function HomePage() {
       if (!selectedUserId) return;
       if (API_BASE_URL) {
         try {
-          const res = await fetch(`${API_BASE_URL}/extras?user_id=${encodeURIComponent(selectedUserId)}`);
+          const res = await fetch(
+            `${API_BASE_URL}/extras?user_id=${encodeURIComponent(selectedUserId)}&date=${encodeURIComponent(effectiveExtrasDate)}`
+          );
           if (!res.ok) {
             const txt = await res.text();
             throw new Error(`Extras API failed: ${res.status} ${txt}`);
@@ -449,13 +487,20 @@ export default function HomePage() {
         if (!rawExtras) return;
         try {
           const parsed = JSON.parse(rawExtras);
+          const userEntry = parsed?.[selectedUserId];
+          let rows = [];
+          if (Array.isArray(userEntry)) {
+            rows = userEntry;
+          } else if (userEntry && typeof userEntry === "object") {
+            rows = Array.isArray(userEntry?.[effectiveExtrasDate]) ? userEntry[effectiveExtrasDate] : [];
+          }
           extrasHydratingRef.current[selectedUserId] = true;
-          setExtrasByUser((prev) => ({ ...prev, [selectedUserId]: Array.isArray(parsed?.[selectedUserId]) ? parsed[selectedUserId] : [] }));
+          setExtrasByUser((prev) => ({ ...prev, [selectedUserId]: rows }));
         } catch (_) {}
       }
     };
     loadExtrasForUser();
-  }, [selectedUserId, API_BASE_URL]);
+  }, [selectedUserId, API_BASE_URL, effectiveExtrasDate]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -473,7 +518,7 @@ export default function HomePage() {
           const res = await fetch(`${API_BASE_URL}/extras`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: selectedUserId, rows: userRows }),
+            body: JSON.stringify({ user_id: selectedUserId, date: effectiveExtrasDate, rows: userRows }),
           });
           if (!res.ok) {
             const txt = await res.text();
@@ -485,13 +530,32 @@ export default function HomePage() {
         return;
       }
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(HOME_EXTRAS_STORAGE_KEY, JSON.stringify(extrasByUser));
+        const raw = window.localStorage.getItem(HOME_EXTRAS_STORAGE_KEY);
+        let parsed = {};
+        try {
+          parsed = raw ? JSON.parse(raw) : {};
+        } catch (_) {
+          parsed = {};
+        }
+        const userEntry = parsed?.[selectedUserId];
+        const normalizedUserEntry =
+          userEntry && typeof userEntry === "object" && !Array.isArray(userEntry)
+            ? userEntry
+            : {};
+        const nextParsed = {
+          ...parsed,
+          [selectedUserId]: {
+            ...normalizedUserEntry,
+            [effectiveExtrasDate]: userRows,
+          },
+        };
+        window.localStorage.setItem(HOME_EXTRAS_STORAGE_KEY, JSON.stringify(nextParsed));
       }
     }, 500);
     return () => {
       if (extrasSaveTimerRef.current) clearTimeout(extrasSaveTimerRef.current);
     };
-  }, [extrasByUser, selectedUserId, API_BASE_URL]);
+  }, [extrasByUser, selectedUserId, API_BASE_URL, effectiveExtrasDate]);
 
   useEffect(() => {
     if (API_BASE_URL) return;
@@ -1089,9 +1153,8 @@ export default function HomePage() {
             );
           })}
         </div>
-        <p className="subtext">
-          New class + revised class + resolved tickets = points. Keep racing and unlock rewards at each milestone.
-        </p>
+        <p className="subtext">"{heroQuote.quote}"</p>
+        {heroQuote.author ? <p className="subtext subtext-author">- {heroQuote.author}</p> : null}
         <div className="legend">
           <span><i className="dot dot-gold" />New Class: +3</span>
           <span><i className="dot dot-blue" />Revision: +2</span>

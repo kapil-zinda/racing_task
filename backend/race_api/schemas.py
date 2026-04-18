@@ -145,6 +145,7 @@ class ExtraRowInput(BaseModel):
 
 class ExtrasUpsertRequest(BaseModel):
     user_id: str
+    date: str = ""
     rows: List[ExtraRowInput] = []
 
 
@@ -168,3 +169,45 @@ class MissionUpsertRequest(BaseModel):
     weights: dict = {}
     targets: dict | None = None
     plan: dict = {}
+
+
+class AgentV2CreateRequest(BaseModel):
+    user_id: str
+    mode: str = "supportive"
+    page_context: str = ""
+    current_session_id: str = ""
+
+
+class AgentV2ChatRequest(BaseModel):
+    session_id: str
+    user_id: str
+    message: str
+    mode: str = ""
+    page_context: str = ""
+    allow_ui_actions: bool = True
+
+
+class AgentV2MemoryUpsertRequest(BaseModel):
+    user_id: str
+    key: str
+    value: dict
+    importance: int = 1
+    source: str = "manual"
+
+
+class AgentV2EntryRequest(BaseModel):
+    user_id: str
+    entry_type: str
+    exam: str = ""
+    course: str = ""
+    book_name: str = ""
+    source: str = ""
+    subject: str = ""
+    topic: str = ""
+    test_name: str = ""
+    test_number: str = ""
+    stage: str = ""
+    org: str = ""
+    note: str = ""
+    work_type: str = "study"
+    confirm: bool = False

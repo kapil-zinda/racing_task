@@ -43,6 +43,14 @@ def settings() -> Dict[str, Any]:
         "mongodb_qna_messages_collection": os.getenv("MONGODB_QNA_MESSAGES_COLLECTION", "qna_messages"),
         "mongodb_missions_collection": os.getenv("MONGODB_MISSIONS_COLLECTION", "missions"),
         "mongodb_activity_ledger_collection": os.getenv("MONGODB_ACTIVITY_LEDGER_COLLECTION", "activity_ledger"),
+        "mongodb_agent_v2_daily_aggregates_collection": os.getenv(
+            "MONGODB_AGENT_V2_DAILY_AGGREGATES_COLLECTION",
+            "agent_v2_daily_aggregates",
+        ),
+        "mongodb_agent_v2_sessions_collection": os.getenv("MONGODB_AGENT_V2_SESSIONS_COLLECTION", "agent_v2_sessions"),
+        "mongodb_agent_v2_messages_collection": os.getenv("MONGODB_AGENT_V2_MESSAGES_COLLECTION", "agent_v2_messages"),
+        "mongodb_agent_v2_memory_collection": os.getenv("MONGODB_AGENT_V2_MEMORY_COLLECTION", "agent_v2_memory"),
+        "mongodb_agent_v2_nudges_collection": os.getenv("MONGODB_AGENT_V2_NUDGES_COLLECTION", "agent_v2_nudges"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
         "aws_region": os.getenv("AWS_REGION", "ap-south-1"),
         "recording_bucket": os.getenv("RECORDING_BUCKET", ""),
@@ -138,6 +146,31 @@ def missions_collection():
 def activity_ledger_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_activity_ledger_collection"]]
+
+
+def agent_v2_daily_aggregates_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_agent_v2_daily_aggregates_collection"]]
+
+
+def agent_v2_sessions_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_agent_v2_sessions_collection"]]
+
+
+def agent_v2_messages_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_agent_v2_messages_collection"]]
+
+
+def agent_v2_memory_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_agent_v2_memory_collection"]]
+
+
+def agent_v2_nudges_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_agent_v2_nudges_collection"]]
 
 
 def s3_client():

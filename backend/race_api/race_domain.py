@@ -478,7 +478,6 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
             or date_only(session.get("created_at", ""))
             or session.get("date", "")
         )
-        append_unique(topic_node["recording_dates"], rec_date)
         recording_entry = {
             "note": (session.get("notes") or "").strip(),
             "date": rec_date,
@@ -507,6 +506,7 @@ def build_syllabus_payload(user_id: str) -> Dict[str, Any]:
 
         exam = find_exam_for_subject_topic(tree, subject, topic)
         topic_node = ensure_topic_node(ensure_exam_node(tree, exam), subject, topic)
+        append_unique(topic_node["recording_dates"], rec_date)
         key = f"{recording_entry['note']}::{recording_entry['date']}::{recording_entry['session_id']}"
         seen = {
             f"{(r.get('note') or '').strip()}::{r.get('date', '')}::{r.get('session_id', '')}"

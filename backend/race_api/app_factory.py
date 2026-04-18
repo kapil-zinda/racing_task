@@ -18,7 +18,7 @@ from .content_domain import (
     rename_item,
 )
 from .extras_domain import get_extras_payload, save_extras_payload
-from .context import logger
+from .context import current_date_str, logger
 from .race_domain import (
     add_points_payload,
     build_mission_control_payload,
@@ -26,6 +26,27 @@ from .race_domain import (
     get_days_payload,
     get_state_payload,
     reset_race_payload,
+)
+from .agent_v2_domain import (
+    agent_context_payload,
+    recommendations_next_actions_payload,
+    rebuild_daily_aggregates_payload,
+    refresh_daily_aggregate,
+    refresh_daily_aggregates_for_date,
+    report_period_payload,
+    report_revision_gaps_payload,
+    search_suggest_payload,
+    search_unified_payload,
+    state_range_payload,
+)
+from .agent_v2_chat_domain import (
+    create_agent_v2_session_payload,
+    get_agent_v2_session_payload,
+    run_agent_v2_chat_payload,
+    upsert_agent_v2_memory_payload,
+    agent_v2_suggestions_payload,
+    prepare_entry_payload,
+    log_entry_payload,
 )
 from .pdf_search_domain import (
     create_pdf_presigned_upload,
@@ -57,6 +78,10 @@ from .schemas import (
     QnaAskRequest,
     QnaSessionCreateRequest,
     MissionUpsertRequest,
+    AgentV2ChatRequest,
+    AgentV2CreateRequest,
+    AgentV2EntryRequest,
+    AgentV2MemoryUpsertRequest,
     SessionStatusRequest,
 )
 from .session_domain import (
@@ -326,10 +351,221 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /mission/options")
 
-    @app.get("/extras")
-    def get_extras(user_id: str = Query(default="kapil")):
+    @app.get("/agent-v2/context")
+    def agent_v2_context(
+        user_id: str = Query(default="kapil"),
+        date: str | None = Query(default=None),
+        lookback_days: int = Query(default=14, ge=1, le=365),
+        x_days: int = Query(default=7, ge=1, le=60),
+        y_days: int = Query(default=15, ge=1, le=90),
+    ):
         try:
-            return get_extras_payload(user_id)
+            return agent_context_payload(user_id, date, lookback_days, x_days, y_days)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /agent-v2/context")
+
+    @app.get("/agent-v2/reports/period")
+    def agent_v2_report_period(
+        user_id: str = Query(default="kapil"),
+        from_date: str = Query(..., alias="from"),
+        to_date: str = Query(..., alias="to"),
+        group_by: str = Query(default="day"),
+        x_days: int = Query(default=7, ge=1, le=60),
+        y_days: int = Query(default=15, ge=1, le=90),
+    ):
+        try:
+            return report_period_payload(user_id, from_date, to_date, group_by, x_days, y_days)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /agent-v2/reports/period")
+
+    @app.get("/agent-v2/reports/revision-gaps")
+    def agent_v2_revision_gaps(
+        user_id: str = Query(default="kapil"),
+        x_days: int = Query(default=7, ge=1, le=60),
+        y_days: int = Query(default=15, ge=1, le=90),
+        limit: int = Query(default=200, ge=1, le=1000),
+        reference_date: str | None = Query(default=None),
+    ):
+        try:
+            return report_revision_gaps_payload(user_id, x_days, y_days, limit, reference_date)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /agent-v2/reports/revision-gaps")
+
+    @app.get("/agent-v2/recommendations/next-actions")
+    def agent_v2_next_actions(
+        user_id: str = Query(default="kapil"),
+        duration_min: int = Query(default=60, ge=15, le=720),
+        mode: str = Query(default="supportive"),
+        limit: int = Query(default=5, ge=1, le=20),
+        x_days: int = Query(default=7, ge=1, le=60),
+        y_days: int = Query(default=15, ge=1, le=90),
+    ):
+        try:
+            return recommendations_next_actions_payload(user_id, duration_min, mode, limit, x_days, y_days)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /agent-v2/recommendations/next-actions")
+
+    @app.get("/agent-v2/search/unified")
+    def agent_v2_search_unified(
+        q: str = Query(...),
+        user_id: str = Query(default="kapil"),
+        course: str | None = Query(default=None),
+        types: str | None = Query(default=None),
+        limit: int = Query(default=20, ge=1, le=100),
+    ):
+        try:
+            return search_unified_payload(q, user_id, course, types, limit)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /agent-v2/search/unified")
+
+    @app.get("/agent-v2/search/suggest")
+    def agent_v2_search_suggest(
+        user_id: str = Query(default="kapil"),
+        q: str | None = Query(default=None),
+        limit: int = Query(default=12, ge=1, le=50),
+    ):
+        try:
+            return search_suggest_payload(user_id, q, limit)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /agent-v2/search/suggest")
+
+    @app.get("/agent-v2/state/range")
+    def agent_v2_state_range(
+        from_date: str = Query(..., alias="from"),
+        to_date: str = Query(..., alias="to"),
+        user_id: str | None = Query(default=None),
+        include_history: bool = Query(default=False),
+    ):
+        try:
+            return state_range_payload(from_date, to_date, user_id, include_history)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /agent-v2/state/range")
+
+    @app.post("/agent-v2/aggregates/rebuild")
+    def agent_v2_rebuild_aggregates(
+        from_date: str | None = Query(default=None, alias="from"),
+        to_date: str | None = Query(default=None, alias="to"),
+        user_id: str | None = Query(default=None),
+    ):
+        try:
+            return rebuild_daily_aggregates_payload(from_date, to_date, user_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /agent-v2/aggregates/rebuild")
+
+    @app.post("/agent-v2/aggregates/refresh")
+    def agent_v2_refresh_aggregates(date: str | None = Query(default=None)):
+        try:
+            return refresh_daily_aggregates_for_date(date or current_date_str())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /agent-v2/aggregates/refresh")
+
+    @app.post("/agent-v2/create-agent")
+    def agent_v2_create(payload: AgentV2CreateRequest):
+        try:
+            return create_agent_v2_session_payload(
+                payload.user_id,
+                mode=payload.mode,
+                page_context=payload.page_context,
+                current_session_id=payload.current_session_id,
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /agent-v2/create-agent")
+
+    @app.post("/agent-v2/chat")
+    def agent_v2_chat(payload: AgentV2ChatRequest):
+        try:
+            return run_agent_v2_chat_payload(
+                payload.session_id,
+                payload.user_id,
+                payload.message,
+                mode=payload.mode,
+                page_context=payload.page_context,
+                allow_ui_actions=payload.allow_ui_actions,
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /agent-v2/chat")
+
+    @app.get("/agent-v2/session/{session_id}")
+    def agent_v2_session(session_id: str):
+        try:
+            return get_agent_v2_session_payload(session_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /agent-v2/session/{id}")
+
+    @app.post("/agent-v2/memory")
+    def agent_v2_memory(payload: AgentV2MemoryUpsertRequest):
+        try:
+            return upsert_agent_v2_memory_payload(
+                payload.user_id,
+                payload.key,
+                payload.value,
+                payload.importance,
+                payload.source,
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /agent-v2/memory")
+
+    @app.get("/agent-v2/suggestions")
+    def agent_v2_suggestions(
+        user_id: str = Query(default="kapil"),
+        duration_min: int = Query(default=60, ge=15, le=720),
+        mode: str = Query(default="supportive"),
+        limit: int = Query(default=5, ge=1, le=20),
+    ):
+        try:
+            return agent_v2_suggestions_payload(user_id, duration_min, mode, limit)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /agent-v2/suggestions")
+
+    @app.post("/agent-v2/entries/prepare")
+    def agent_v2_prepare_entry(payload: AgentV2EntryRequest):
+        try:
+            return prepare_entry_payload(
+                payload.user_id,
+                payload.entry_type,
+                exam=payload.exam,
+                course=payload.course,
+                book_name=payload.book_name,
+                source=payload.source,
+                subject=payload.subject,
+                topic=payload.topic,
+                test_name=payload.test_name,
+                test_number=payload.test_number,
+                stage=payload.stage,
+                org=payload.org,
+                note=payload.note,
+                work_type=payload.work_type,
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /agent-v2/entries/prepare")
+
+    @app.post("/agent-v2/entries/log")
+    def agent_v2_log_entry(payload: AgentV2EntryRequest):
+        try:
+            return log_entry_payload(
+                payload.user_id,
+                payload.entry_type,
+                confirm=payload.confirm,
+                exam=payload.exam,
+                course=payload.course,
+                book_name=payload.book_name,
+                source=payload.source,
+                subject=payload.subject,
+                topic=payload.topic,
+                test_name=payload.test_name,
+                test_number=payload.test_number,
+                stage=payload.stage,
+                org=payload.org,
+                note=payload.note,
+                work_type=payload.work_type,
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /agent-v2/entries/log")
+
+    @app.get("/extras")
+    def get_extras(user_id: str = Query(default="kapil"), date: str | None = Query(default=None)):
+        try:
+            return get_extras_payload(user_id, date)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /extras")
 
@@ -337,7 +573,12 @@ def create_app() -> FastAPI:
     def save_extras(payload: ExtrasUpsertRequest):
         try:
             rows = [r.model_dump() for r in payload.rows]
-            return save_extras_payload(payload.user_id, rows)
+            result = save_extras_payload(payload.user_id, rows, payload.date)
+            try:
+                refresh_daily_aggregate(payload.user_id, current_date_str())
+            except Exception as agg_err:  # noqa: BLE001
+                logger.warning("agent-v2 aggregate refresh failed after PUT /extras: %s", agg_err)
+            return result
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "PUT /extras")
 
@@ -348,14 +589,25 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=400, detail="Unknown player_id")
             if payload.action_type not in POINTS_MAP:
                 raise HTTPException(status_code=400, detail="Unknown action_type")
-            return add_points_payload(payload.player_id, payload.action_type, payload.test_type, payload.detail)
+            result = add_points_payload(payload.player_id, payload.action_type, payload.test_type, payload.detail)
+            try:
+                refresh_daily_aggregate(payload.player_id, result.get("date") or current_date_str())
+            except Exception as agg_err:  # noqa: BLE001
+                logger.warning("agent-v2 aggregate refresh failed after POST /points: %s", agg_err)
+            return result
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /points")
 
     @app.post("/reset")
     def reset_race():
         try:
-            return reset_race_payload()
+            result = reset_race_payload()
+            try:
+                refresh_daily_aggregate("kapil", result.get("date") or current_date_str())
+                refresh_daily_aggregate("divya", result.get("date") or current_date_str())
+            except Exception as agg_err:  # noqa: BLE001
+                logger.warning("agent-v2 aggregate refresh failed after POST /reset: %s", agg_err)
+            return result
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /reset")
 
@@ -383,7 +635,16 @@ def create_app() -> FastAPI:
     @app.post("/sessions/{session_id}/status")
     def update_session_status(session_id: str, payload: SessionStatusRequest):
         try:
-            return update_session_status_payload(session_id, payload)
+            result = update_session_status_payload(session_id, payload)
+            try:
+                session = result.get("session", {}) if isinstance(result, dict) else {}
+                uid = (session.get("user_id") or "").strip().lower()
+                d = (session.get("date") or current_date_str()).strip()
+                if uid in PLAYERS and d:
+                    refresh_daily_aggregate(uid, d)
+            except Exception as agg_err:  # noqa: BLE001
+                logger.warning("agent-v2 aggregate refresh failed after POST /sessions/{id}/status: %s", agg_err)
+            return result
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /sessions/{id}/status")
 
