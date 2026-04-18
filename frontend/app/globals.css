@@ -912,6 +912,11 @@ h1 {
   color: #f8f8ff;
 }
 
+.btn-day.danger {
+  background: #ff7b72;
+  color: #2a1212;
+}
+
 .day-state {
   margin: 8px 0 0;
   font-size: 12px;
@@ -2866,6 +2871,39 @@ button:hover {
   font-size: 13px;
   padding: 8px 10px;
   resize: vertical;
+}
+
+.agent-v2-voice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-v2-state {
+  font-size: 12px;
+  color: #c9d4f3;
+}
+
+.agent-v2-empty {
+  font-size: 12px;
+  color: #bdcaec;
+  border: 1px dashed rgba(255, 255, 255, 0.24);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.agent-v2-audio {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.agent-v2-live {
+  font-size: 12px;
+  color: #bfe3ff;
+  border: 1px solid rgba(114, 221, 247, 0.42);
+  background: rgba(114, 221, 247, 0.1);
+  border-radius: 10px;
+  padding: 8px 10px;
 }
 
 @media (max-width: 1040px) {

@@ -48,7 +48,17 @@ async function ensureSession(userId) {
   return sessionId;
 }
 
-export async function sendAgentChat({ message, mode = "", pageContext = "", allowUiActions = true }) {
+export async function sendAgentChat({
+  message = "",
+  mode = "",
+  pageContext = "",
+  allowUiActions = true,
+  inputAudioBase64 = "",
+  inputAudioMimeType = "audio/webm",
+  responseAudio = true,
+  responseAudioFormat = "mp3",
+  responseVoice = "alloy",
+}) {
   const userId = readUser();
   const sessionId = await ensureSession(userId);
   const res = await fetch(`${API_BASE_URL}/agent-v2/chat`, {
@@ -58,9 +68,14 @@ export async function sendAgentChat({ message, mode = "", pageContext = "", allo
       session_id: sessionId,
       user_id: userId,
       message,
+      input_audio_base64: inputAudioBase64,
+      input_audio_mime_type: inputAudioMimeType,
       mode,
       page_context: pageContext,
       allow_ui_actions: Boolean(allowUiActions),
+      response_audio: Boolean(responseAudio),
+      response_audio_format: responseAudioFormat,
+      response_voice: responseVoice,
     }),
   });
   if (!res.ok) {
@@ -70,3 +85,21 @@ export async function sendAgentChat({ message, mode = "", pageContext = "", allo
   return res.json();
 }
 
+export async function getAgentRealtimeToken({ pageContext = "", voice = "" } = {}) {
+  const userId = readUser();
+  if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
+  const res = await fetch(`${API_BASE_URL}/agent-v2/realtime/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: userId,
+      page_context: pageContext,
+      voice,
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Realtime token failed: ${res.status} ${txt}`);
+  }
+  return res.json();
+}

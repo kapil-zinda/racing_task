@@ -41,6 +41,7 @@ from .agent_v2_domain import (
 )
 from .agent_v2_chat_domain import (
     create_agent_v2_session_payload,
+    create_agent_v2_realtime_token_payload,
     get_agent_v2_session_payload,
     run_agent_v2_chat_payload,
     upsert_agent_v2_memory_payload,
@@ -82,6 +83,7 @@ from .schemas import (
     AgentV2CreateRequest,
     AgentV2EntryRequest,
     AgentV2MemoryUpsertRequest,
+    AgentV2RealtimeTokenRequest,
     SessionStatusRequest,
 )
 from .session_domain import (
@@ -471,6 +473,17 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /agent-v2/create-agent")
 
+    @app.post("/agent-v2/realtime/token")
+    def agent_v2_realtime_token(payload: AgentV2RealtimeTokenRequest):
+        try:
+            return create_agent_v2_realtime_token_payload(
+                payload.user_id,
+                page_context=payload.page_context,
+                voice=payload.voice,
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /agent-v2/realtime/token")
+
     @app.post("/agent-v2/chat")
     def agent_v2_chat(payload: AgentV2ChatRequest):
         try:
@@ -478,9 +491,14 @@ def create_app() -> FastAPI:
                 payload.session_id,
                 payload.user_id,
                 payload.message,
+                input_audio_base64=payload.input_audio_base64,
+                input_audio_mime_type=payload.input_audio_mime_type,
                 mode=payload.mode,
                 page_context=payload.page_context,
                 allow_ui_actions=payload.allow_ui_actions,
+                response_audio=payload.response_audio,
+                response_audio_format=payload.response_audio_format,
+                response_voice=payload.response_voice,
             )
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /agent-v2/chat")
