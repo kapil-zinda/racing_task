@@ -155,9 +155,22 @@ def _best_effort_finalize_multipart_uploads(collection, session_doc: Dict[str, A
             continue
 
         try:
-            parts_resp = client.list_parts(Bucket=bucket, Key=key, UploadId=upload_id)
-            parts = parts_resp.get("Parts", []) or []
-            complete_parts = [{"ETag": p["ETag"], "PartNumber": p["PartNumber"]} for p in parts if p.get("ETag") and p.get("PartNumber")]
+            complete_parts = []
+            marker = 0
+            while True:
+                params = {"Bucket": bucket, "Key": key, "UploadId": upload_id}
+                if marker:
+                    params["PartNumberMarker"] = marker
+                parts_resp = client.list_parts(**params)
+                parts = parts_resp.get("Parts", []) or []
+                complete_parts.extend(
+                    [{"ETag": p["ETag"], "PartNumber": p["PartNumber"]} for p in parts if p.get("ETag") and p.get("PartNumber")]
+                )
+                if not parts_resp.get("IsTruncated"):
+                    break
+                marker = int(parts_resp.get("NextPartNumberMarker") or marker or 0)
+                if marker <= 0:
+                    break
 
             if complete_parts:
                 client.complete_multipart_upload(

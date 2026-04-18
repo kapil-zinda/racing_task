@@ -9,6 +9,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
 const MULTIPART_COMPLETE_RETRIES = 3;
 const MULTIPART_COMPLETE_RETRY_DELAY_MS = 1200;
+const RECORDER_FLUSH_INTERVAL_MS = 1500;
+const MULTIPART_FILE_PART_BYTES = 6 * 1024 * 1024;
 const GLOBAL_USER_STORAGE_KEY = "global_user_id";
 const SESSION_MEDIA_TYPES = ["audio", "video", "screen", "attachment"];
 const RECORDER_TYPES = [
@@ -232,6 +234,7 @@ export default function RecorderPage() {
   const explainerRecorderRef = useRef(null);
   const explainerRecorderStreamRef = useRef(null);
   const explainerRecorderChunksRef = useRef([]);
+  const recorderFlushTimersRef = useRef({});
 
   const applyGlobalUser = async (nextUser) => {
     const user = nextUser === "divya" ? "divya" : "kapil";
@@ -593,7 +596,9 @@ export default function RecorderPage() {
   };
 
   const selectSession = async (session) => {
-    if (selectedSession?._id && session?._id === selectedSession._id) {
+    const normalized = normalizeSessionDoc(session);
+    if (!normalized?._id) return;
+    if (selectedSession?._id && normalized._id === selectedSession._id) {
       return;
     }
     const currentStatus = selectedSession?.status || "created";
@@ -687,6 +692,10 @@ export default function RecorderPage() {
       (stream?.getTracks?.() || []).forEach((t) => t.stop());
     });
     streamRefs.current = {};
+    Object.values(recorderFlushTimersRef.current || {}).forEach((timerId) => {
+      if (timerId) clearInterval(timerId);
+    });
+    recorderFlushTimersRef.current = {};
     if (cameraPreviewRef.current) cameraPreviewRef.current.srcObject = null;
     if (screenPreviewRef.current) screenPreviewRef.current.srcObject = null;
     if (combinedPreviewRef.current) combinedPreviewRef.current.srcObject = null;
@@ -937,11 +946,29 @@ export default function RecorderPage() {
     resetMultipartStateForMode(mode);
     const mimeType = getMimeForMode(mode);
     const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    const clearFlushTimer = () => {
+      const timerId = recorderFlushTimersRef.current[mode];
+      if (timerId) clearInterval(timerId);
+      delete recorderFlushTimersRef.current[mode];
+    };
     rec.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) handleRecorderChunk(mode, e.data);
     };
+    rec.onstop = () => {
+      clearFlushTimer();
+    };
+    rec.onerror = () => {
+      clearFlushTimer();
+    };
     recorderRefs.current[mode] = rec;
     rec.start();
+    // We avoid MediaRecorder timeslice due to duplicate-timeline issues on some browsers.
+    // Instead, force periodic chunk emission while recording.
+    recorderFlushTimersRef.current[mode] = setInterval(() => {
+      try {
+        if (rec.state === "recording") rec.requestData();
+      } catch (_) {}
+    }, RECORDER_FLUSH_INTERVAL_MS);
   };
 
   const connectStreamAudioToComposite = (stream) => {
@@ -1129,8 +1156,10 @@ export default function RecorderPage() {
     setLiveControls({ micMuted: false, cameraOff: false, sharingScreen: false });
   };
 
-  const pushSessionStatus = async (status, options = {}) => {
-    if (!API_BASE_URL || !selectedSession?._id) return;
+  const pushSessionStatus = async (status, options = {}, sessionOverride = null) => {
+    const activeSession = normalizeSessionDoc(sessionOverride || selectedSession);
+    const sid = resolveSessionId(activeSession);
+    if (!API_BASE_URL || !sid) return;
     const elapsed = timerState.running
       ? timerState.baseElapsed + Math.floor((Date.now() - timerState.startedAt) / 1000)
       : timerState.baseElapsed;
@@ -1149,10 +1178,13 @@ export default function RecorderPage() {
         throw new Error(`Status update failed: ${res.status} ${txt}`);
       }
       const data = await res.json();
-      setSelectedSession(normalizeSessionDoc(data.session));
-      broadcastRecorderStatus(data?.session?.status || status);
-      setTimerState({ running: false, startedAt: 0, baseElapsed: data.session?.elapsed_seconds || elapsed });
-      await fetchSessions(activeSession?.user_id || sessionForm.user_id);
+      const updatedSession = normalizeSessionDoc(data?.session);
+      if (updatedSession?._id) {
+        setSelectedSession(updatedSession);
+      }
+      broadcastRecorderStatus(updatedSession?.status || status);
+      setTimerState({ running: false, startedAt: 0, baseElapsed: updatedSession?.elapsed_seconds || elapsed });
+      await fetchSessions(updatedSession?.user_id || activeSession?.user_id || sessionForm.user_id);
     } catch (err) {
       setSessionError(String(err.message || err));
       throw err;
@@ -1200,7 +1232,7 @@ export default function RecorderPage() {
       return;
     }
     try {
-      await pushSessionStatus("started");
+      await pushSessionStatus("started", {}, activeSession);
     } catch (err) {
       const msg = String(err?.message || err || "");
       const conflict = msg.includes("Another session is active in another tab/device");
@@ -1214,7 +1246,7 @@ export default function RecorderPage() {
           return;
         }
         try {
-          await pushSessionStatus("started", { forceStopPrevious: true });
+          await pushSessionStatus("started", { forceStopPrevious: true }, activeSession);
         } catch (_) {
           stopAndReleaseStreams();
           recorderRefs.current = {};
@@ -1226,7 +1258,7 @@ export default function RecorderPage() {
         return;
       }
     }
-    setTimerState({ running: true, startedAt: Date.now(), baseElapsed: selectedSession.elapsed_seconds || 0 });
+    setTimerState({ running: true, startedAt: Date.now(), baseElapsed: activeSession?.elapsed_seconds || 0 });
   };
 
   const pauseSession = async () => {
@@ -1247,7 +1279,7 @@ export default function RecorderPage() {
     try {
       await pushSessionStatus("resumed");
     } catch (_) {}
-    const base = selectedSession.elapsed_seconds || timerState.baseElapsed || 0;
+    const base = selectedSession?.elapsed_seconds || timerState.baseElapsed || 0;
     setTimerState({ running: true, startedAt: Date.now(), baseElapsed: base });
   };
 
@@ -1309,13 +1341,13 @@ export default function RecorderPage() {
     if (requestedSessionId && selectedSession?._id !== requestedSessionId) {
       const direct = (sessionList || []).find((row) => row?._id === requestedSessionId);
       if (direct) {
-        selectSession(direct);
+        await selectSession(direct);
         activeSession = direct;
       } else {
         const fetched = await fetchSessions(sessionForm.user_id);
         const latest = (fetched || []).find((row) => row?._id === requestedSessionId);
         if (latest) {
-          selectSession(latest);
+          await selectSession(latest);
           activeSession = latest;
         }
       }
@@ -1366,10 +1398,14 @@ export default function RecorderPage() {
           return;
         }
         const data = await res.json();
-        if (data?.session) {
-          activeSession = data.session;
-          setSelectedSession(data.session);
+        const createdSession = normalizeSessionDoc(data?.session);
+        if (createdSession?._id) {
+          activeSession = createdSession;
+          setSelectedSession(activeSession);
           await fetchSessions(sessionForm.user_id);
+        } else {
+          setSessionError("Agent create session failed: session id missing in response.");
+          return;
         }
       }
       await startSession(activeSession);
@@ -1488,6 +1524,98 @@ export default function RecorderPage() {
     const inputName = input.name || fallbackName || `${mediaType}.webm`;
     const extension = inputName.split(".").pop()?.toLowerCase() || "webm";
     const contentType = input.type || "application/octet-stream";
+
+    const uploadMediaMultipart = async () => {
+      const startRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          media_type: mediaType,
+          content_type: contentType,
+          extension
+        })
+      });
+      if (!startRes.ok) {
+        const txt = await startRes.text();
+        throw new Error(`Multipart start failed: ${startRes.status} ${txt}`);
+      }
+      const startData = await startRes.json();
+      const uploadId = String(startData?.upload_id || "").trim();
+      if (!uploadId) throw new Error("Multipart start failed: upload_id missing.");
+
+      const size = Number(input.size || 0);
+      const parts = [];
+      let partNumber = 1;
+      let offset = 0;
+
+      try {
+        while (offset < size) {
+          const nextOffset = Math.min(offset + MULTIPART_FILE_PART_BYTES, size);
+          const chunk = input.slice(offset, nextOffset);
+
+          const presignRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/presign-part`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              media_type: mediaType,
+              upload_id: uploadId,
+              part_number: partNumber
+            })
+          });
+          if (!presignRes.ok) {
+            const txt = await presignRes.text();
+            throw new Error(`Multipart presign part failed: ${presignRes.status} ${txt}`);
+          }
+          const presignData = await presignRes.json();
+          const putRes = await fetch(presignData.upload_url, {
+            method: "PUT",
+            body: chunk
+          });
+          if (!putRes.ok) {
+            throw new Error(`Multipart part upload failed: ${putRes.status}`);
+          }
+          const etag = putRes.headers.get("ETag") || "";
+          if (!etag) {
+            throw new Error("S3 did not expose ETag header. Configure bucket CORS ExposeHeaders to include ETag.");
+          }
+          parts.push({ part_number: partNumber, etag });
+          partNumber += 1;
+          offset = nextOffset;
+        }
+
+        const completeRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/complete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            media_type: mediaType,
+            upload_id: uploadId,
+            parts
+          })
+        });
+        if (!completeRes.ok) {
+          const txt = await completeRes.text();
+          throw new Error(`Multipart complete failed: ${completeRes.status} ${txt}`);
+        }
+      } catch (err) {
+        try {
+          await fetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/abort`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              media_type: mediaType,
+              upload_id: uploadId
+            })
+          });
+        } catch (_) {}
+        throw err;
+      }
+    };
+
+    if (Number(input.size || 0) >= MULTIPART_MIN_PART_BYTES) {
+      await uploadMediaMultipart();
+      return;
+    }
+
     const presignRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}/presign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
