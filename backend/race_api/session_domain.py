@@ -42,14 +42,11 @@ def create_session_payload(payload) -> Dict[str, Any]:
 
     subject = payload.subject.strip()
     topic = payload.topic.strip()
-    notes = payload.notes.strip()
+    notes = (payload.notes or "").strip()
     if not subject:
         raise ValueError("subject is required")
     if not topic:
         raise ValueError("topic is required")
-    if not notes:
-        raise ValueError("notes are required")
-
     recorder_type, modes = _normalize_modes(payload.recorder_type, payload.modes)
     test_source = (getattr(payload, "test_source", "") or "").strip()
     test_name = (getattr(payload, "test_name", "") or "").strip()
@@ -138,6 +135,58 @@ def delete_session_payload(session_id_value: str) -> Dict[str, Any]:
         "date": (doc.get("date") or "").strip(),
         "retained_s3_keys": retained_s3_keys,
     }
+def _best_effort_finalize_multipart_uploads(collection, session_doc: Dict[str, Any]) -> None:
+    cfg = settings()
+    bucket = cfg["recording_bucket"]
+    if not bucket:
+        return
+
+    doc_id = session_doc.get("_id")
+    uploads = session_doc.get("uploads", {}) or {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    set_fields: Dict[str, Any] = {}
+    client = s3_client()
+
+    for media_type in MEDIA_TYPES:
+        info = uploads.get(media_type) or {}
+        key = info.get("key")
+        upload_id = info.get("upload_id")
+        if not key or not upload_id:
+            continue
+
+        try:
+            parts_resp = client.list_parts(Bucket=bucket, Key=key, UploadId=upload_id)
+            parts = parts_resp.get("Parts", []) or []
+            complete_parts = [{"ETag": p["ETag"], "PartNumber": p["PartNumber"]} for p in parts if p.get("ETag") and p.get("PartNumber")]
+
+            if complete_parts:
+                client.complete_multipart_upload(
+                    Bucket=bucket,
+                    Key=key,
+                    UploadId=upload_id,
+                    MultipartUpload={"Parts": complete_parts},
+                )
+                object_url = f"https://{bucket}.s3.{cfg['aws_region']}.amazonaws.com/{key}"
+                set_fields[f"uploads.{media_type}"] = {
+                    "key": key,
+                    "content_type": info.get("content_type", "application/octet-stream"),
+                    "object_url": object_url,
+                    "status": "completed",
+                    "completed_at": now_iso,
+                    "updated_at": now_iso,
+                }
+            else:
+                client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
+                set_fields[f"uploads.{media_type}.status"] = "aborted"
+                set_fields[f"uploads.{media_type}.updated_at"] = now_iso
+        except ClientError:
+            logger.exception("Best-effort multipart finalize failed for %s on %s", media_type, doc_id)
+        except Exception:
+            logger.exception("Unexpected multipart finalize failure for %s on %s", media_type, doc_id)
+
+    if set_fields:
+        set_fields["updated_at"] = now_iso
+        collection.update_one({"_id": doc_id}, {"$set": set_fields})
 
 
 def update_session_status_payload(session_id_value: str, payload) -> Dict[str, Any]:
@@ -173,28 +222,29 @@ def update_session_status_payload(session_id_value: str, payload) -> Dict[str, A
             }
         )
         if other_active:
-            other_date = str(other_active.get("date") or "").strip()
-            current_date = str(doc.get("date") or "").strip()
-            # Auto-close stale active sessions from a different date so they don't block new starts forever.
-            if other_date and current_date and other_date != current_date:
-                stale_elapsed = max(0, int(other_active.get("elapsed_seconds") or 0))
+            if payload.status == "started":
+                if not getattr(payload, "force_stop_previous", False):
+                    raise ValueError(
+                        "Another session is active in another tab/device. Pass force_stop_previous=true to stop it and continue."
+                    )
                 now_iso = datetime.now(timezone.utc).isoformat()
+                other_elapsed = max(0, int(other_active.get("elapsed_seconds", 0) or 0))
+                _best_effort_finalize_multipart_uploads(collection, other_active)
                 collection.update_one(
-                    {"_id": other_active.get("_id"), "doc_type": "study_session"},
+                    {"_id": other_active.get("_id")},
                     {
                         "$set": {
                             "status": "stopped",
-                            "elapsed_seconds": stale_elapsed,
                             "stopped_at": now_iso,
-                            "total_time_minutes": max(1, (stale_elapsed + 59) // 60) if stale_elapsed > 0 else 0,
+                            "total_time_minutes": max(0, (other_elapsed + 59) // 60),
                             "updated_at": now_iso,
                         },
                         "$push": {
                             "events": {
                                 "status": "stopped",
-                                "elapsed_seconds": stale_elapsed,
+                                "elapsed_seconds": other_elapsed,
                                 "at": now_iso,
-                                "meta": "auto_stopped_stale_session",
+                                "reason": "auto_stopped_by_new_session_start",
                             }
                         },
                     },
@@ -219,7 +269,7 @@ def update_session_status_payload(session_id_value: str, payload) -> Dict[str, A
             update_fields["start_time"] = datetime.now(timezone.utc).isoformat()
     if payload.status == "stopped":
         update_fields["stopped_at"] = datetime.now(timezone.utc).isoformat()
-        update_fields["total_time_minutes"] = max(1, (elapsed_seconds + 59) // 60)
+        update_fields["total_time_minutes"] = max(0, (elapsed_seconds + 59) // 60)
 
     collection.update_one({"_id": session_id_value}, {"$set": update_fields, "$push": {"events": event}})
     updated = collection.find_one({"_id": session_id_value})
