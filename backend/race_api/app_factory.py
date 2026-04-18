@@ -23,6 +23,7 @@ from .race_domain import (
     add_points_payload,
     build_mission_control_payload,
     build_syllabus_payload,
+    delete_points_event_payload,
     get_days_payload,
     get_state_payload,
     reset_race_payload,
@@ -58,6 +59,7 @@ from .qna_domain import ask_qna_in_session, create_qna_session, get_qna_messages
 from .mission_domain import get_or_create_mission, mission_progress_payload, mission_selector_options, upsert_mission
 from .schemas import (
     AddPointsRequest,
+    DeletePointsEventRequest,
     ContentCreateFolderRequest,
     ContentDeleteRequest,
     ContentCompleteUploadRequest,
@@ -92,6 +94,7 @@ from .session_domain import (
     create_presigned_playback_url_payload,
     create_presigned_upload_payload,
     create_session_payload,
+    delete_session_payload,
     get_session_payload,
     list_sessions_payload,
     presign_multipart_part_payload,
@@ -616,6 +619,22 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /points")
 
+    @app.post("/points/delete")
+    def delete_points_event(payload: DeletePointsEventRequest):
+        try:
+            result = delete_points_event_payload(payload.event_id)
+            try:
+                refresh_daily_aggregate("kapil", result.get("date", ""))
+            except Exception as agg_err:  # noqa: BLE001
+                logger.warning("agent-v2 aggregate refresh failed after POST /points/delete (kapil): %s", agg_err)
+            try:
+                refresh_daily_aggregate("divya", result.get("date", ""))
+            except Exception as agg_err:  # noqa: BLE001
+                logger.warning("agent-v2 aggregate refresh failed after POST /points/delete (divya): %s", agg_err)
+            return result
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /points/delete")
+
     @app.post("/reset")
     def reset_race():
         try:
@@ -665,6 +684,21 @@ def create_app() -> FastAPI:
             return result
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /sessions/{id}/status")
+
+    @app.post("/sessions/{session_id}/delete")
+    def delete_session(session_id: str):
+        try:
+            result = delete_session_payload(session_id)
+            try:
+                uid = (result.get("user_id") or "").strip().lower()
+                d = (result.get("date") or current_date_str()).strip()
+                if uid in PLAYERS and d:
+                    refresh_daily_aggregate(uid, d)
+            except Exception as agg_err:  # noqa: BLE001
+                logger.warning("agent-v2 aggregate refresh failed after POST /sessions/{id}/delete: %s", agg_err)
+            return result
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /sessions/{id}/delete")
 
     @app.post("/sessions/{session_id}/presign")
     def create_presigned_upload(session_id: str, payload: PresignRequest):

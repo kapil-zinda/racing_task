@@ -105,6 +105,41 @@ def get_session_payload(session_id_value: str) -> Dict[str, Any]:
     return {"session": doc}
 
 
+def delete_session_payload(session_id_value: str) -> Dict[str, Any]:
+    sid = (session_id_value or "").strip()
+    if not sid:
+        raise ValueError("session_id is required")
+
+    collection = sessions_collection()
+    doc = collection.find_one({"_id": sid, "doc_type": "study_session"})
+    if not doc:
+        raise LookupError("Session not found")
+
+    if doc.get("status") in {"started", "resumed", "paused"}:
+        raise ValueError("Stop the active session before deleting it")
+
+    uploads = doc.get("uploads", {}) or {}
+    retained_s3_keys = []
+    for media_type in MEDIA_TYPES:
+        info = uploads.get(media_type)
+        if isinstance(info, dict):
+            key = (info.get("key") or "").strip()
+            if key:
+                retained_s3_keys.append(key)
+
+    deleted = collection.delete_one({"_id": sid, "doc_type": "study_session"})
+    if deleted.deleted_count == 0:
+        raise LookupError("Session not found")
+
+    return {
+        "message": "Session deleted from app data. Recording files in S3 were kept.",
+        "session_id": sid,
+        "user_id": (doc.get("user_id") or "").strip(),
+        "date": (doc.get("date") or "").strip(),
+        "retained_s3_keys": retained_s3_keys,
+    }
+
+
 def update_session_status_payload(session_id_value: str, payload) -> Dict[str, Any]:
     if payload.status not in {"started", "paused", "resumed", "stopped"}:
         raise ValueError("Invalid status")
@@ -138,7 +173,34 @@ def update_session_status_payload(session_id_value: str, payload) -> Dict[str, A
             }
         )
         if other_active:
-            raise ValueError("Only one active session is allowed per user. Stop the current active session first.")
+            other_date = str(other_active.get("date") or "").strip()
+            current_date = str(doc.get("date") or "").strip()
+            # Auto-close stale active sessions from a different date so they don't block new starts forever.
+            if other_date and current_date and other_date != current_date:
+                stale_elapsed = max(0, int(other_active.get("elapsed_seconds") or 0))
+                now_iso = datetime.now(timezone.utc).isoformat()
+                collection.update_one(
+                    {"_id": other_active.get("_id"), "doc_type": "study_session"},
+                    {
+                        "$set": {
+                            "status": "stopped",
+                            "elapsed_seconds": stale_elapsed,
+                            "stopped_at": now_iso,
+                            "total_time_minutes": max(1, (stale_elapsed + 59) // 60) if stale_elapsed > 0 else 0,
+                            "updated_at": now_iso,
+                        },
+                        "$push": {
+                            "events": {
+                                "status": "stopped",
+                                "elapsed_seconds": stale_elapsed,
+                                "at": now_iso,
+                                "meta": "auto_stopped_stale_session",
+                            }
+                        },
+                    },
+                )
+            else:
+                raise ValueError("Only one active session is allowed per user. Stop the current active session first.")
 
     elapsed_seconds = max(0, payload.elapsed_seconds)
     event = {

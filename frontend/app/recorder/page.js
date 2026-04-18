@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import ActivityInternalMenu from "../components/ActivityInternalMenu";
-import { AGENT_PENDING_RECORDER_ACTION_KEY, AGENT_RECORDER_EVENT } from "../lib/agent/constants";
+import { AGENT_PENDING_RECORDER_ACTION_KEY, AGENT_RECORDER_EVENT, AGENT_RECORDER_STATUS_EVENT } from "../lib/agent/constants";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -112,6 +112,29 @@ function createEmptyMultipartState() {
   };
 }
 
+function resolveSessionId(session) {
+  return String(session?._id || session?.id || session?.session_id || "").trim();
+}
+
+function normalizeSessionDoc(session) {
+  if (!session || typeof session !== "object") return null;
+  const sid = resolveSessionId(session);
+  return {
+    ...session,
+    _id: sid,
+  };
+}
+
+function broadcastRecorderStatus(status) {
+  if (typeof window === "undefined") return;
+  const value = String(status || "").trim().toLowerCase();
+  const payload = { status: value, at: Date.now() };
+  try {
+    window.sessionStorage.setItem("agent_v2_recorder_status", JSON.stringify(payload));
+  } catch (_) {}
+  window.dispatchEvent(new CustomEvent(AGENT_RECORDER_STATUS_EVENT, { detail: payload }));
+}
+
 export default function RecorderPage() {
   const defaultSubject = "";
   const defaultTopic = "";
@@ -159,6 +182,8 @@ export default function RecorderPage() {
   const [sessionList, setSessionList] = useState([]);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionError, setSessionError] = useState("");
+  const [deletingSessionIds, setDeletingSessionIds] = useState({});
+  const [openSessionMenuId, setOpenSessionMenuId] = useState("");
   const [pendingFinalizeModes, setPendingFinalizeModes] = useState([]);
   const [finalizeRetrying, setFinalizeRetrying] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
@@ -244,6 +269,18 @@ export default function RecorderPage() {
     const id = setTimeout(() => setSessionError(""), NOTICE_TTL_MS);
     return () => clearTimeout(id);
   }, [sessionError]);
+
+  useEffect(() => {
+    if (!selectedSession?.status) return;
+    broadcastRecorderStatus(selectedSession.status);
+  }, [selectedSession?.status]);
+
+  useEffect(() => {
+    if (!openSessionMenuId || typeof document === "undefined") return undefined;
+    const onDocClick = () => setOpenSessionMenuId("");
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [openSessionMenuId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -448,10 +485,13 @@ export default function RecorderPage() {
         throw new Error(`Sessions API failed: ${res.status} ${txt}`);
       }
       const data = await res.json();
-      const sessions = data.sessions || [];
+      const sessions = (Array.isArray(data.sessions) ? data.sessions : [])
+        .map((row) => normalizeSessionDoc(row))
+        .filter((row) => Boolean(row?._id));
       setSessionList(sessions);
       if (selectedSession) {
-        const refreshed = sessions.find((s) => s._id === selectedSession._id);
+        const selectedId = resolveSessionId(selectedSession);
+        const refreshed = sessions.find((s) => s._id === selectedId);
         if (refreshed) setSelectedSession(refreshed);
       }
       return sessions;
@@ -497,9 +537,13 @@ export default function RecorderPage() {
         throw new Error(`Create session failed: ${res.status} ${txt}`);
       }
       const data = await res.json();
-      setSelectedSession(data.session);
+      const normalized = normalizeSessionDoc(data.session);
+      if (!normalized?._id) {
+        throw new Error("Create session failed: session id missing in response");
+      }
+      setSelectedSession(normalized);
       setPendingFinalizeModes([]);
-      setTimerState({ running: false, startedAt: 0, baseElapsed: data.session?.elapsed_seconds || 0 });
+      setTimerState({ running: false, startedAt: 0, baseElapsed: normalized?.elapsed_seconds || 0 });
       setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
       await fetchSessions(sessionForm.user_id);
     } catch (err) {
@@ -508,6 +552,9 @@ export default function RecorderPage() {
   };
 
   const selectSession = (session) => {
+    const normalized = normalizeSessionDoc(session);
+    if (!normalized?._id) return;
+    setOpenSessionMenuId("");
     stopAndReleaseStreams();
     recorderRefs.current = {};
     multipartUploadsRef.current = {
@@ -516,10 +563,48 @@ export default function RecorderPage() {
       screen: createEmptyMultipartState(),
       attachment: createEmptyMultipartState()
     };
-    setSelectedSession(session);
+    setSelectedSession(normalized);
     setPendingFinalizeModes([]);
-    setTimerState({ running: false, startedAt: 0, baseElapsed: session?.elapsed_seconds || 0 });
+    setTimerState({ running: false, startedAt: 0, baseElapsed: normalized?.elapsed_seconds || 0 });
     setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
+  };
+
+  const deleteSession = async (session) => {
+    const sid = resolveSessionId(session);
+    if (!API_BASE_URL || !sid) return;
+    setOpenSessionMenuId("");
+    if (["started", "resumed", "paused"].includes(session?.status)) {
+      setSessionError("Stop this recording session before deleting it.");
+      return;
+    }
+    const confirmed = window.confirm("Delete this recording session from app history? Recording files in S3 will be kept.");
+    if (!confirmed) return;
+
+    setSessionError("");
+    setDeletingSessionIds((prev) => ({ ...prev, [sid]: true }));
+    try {
+      const res = await fetch(`${API_BASE_URL}/sessions/${sid}/delete`, { method: "POST" });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Delete session failed: ${res.status} ${txt}`);
+      }
+      if (resolveSessionId(selectedSession) === sid) {
+        setSelectedSession(null);
+        setPendingFinalizeModes([]);
+        setTimerState({ running: false, startedAt: 0, baseElapsed: 0 });
+        setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
+        broadcastRecorderStatus("idle");
+      }
+      await fetchSessions(session?.user_id || sessionForm.user_id);
+    } catch (err) {
+      setSessionError(String(err.message || err));
+    } finally {
+      setDeletingSessionIds((prev) => {
+        const next = { ...prev };
+        delete next[sid];
+        return next;
+      });
+    }
   };
 
   const stopAndReleaseStreams = () => {
@@ -569,7 +654,39 @@ export default function RecorderPage() {
     })));
   };
 
-  const getMimeForMode = (mode) => (mode === "audio" ? "audio/webm" : "video/webm");
+  const pickSupportedMime = (candidates = []) => {
+    if (typeof window === "undefined" || typeof MediaRecorder === "undefined") return "";
+    const list = Array.isArray(candidates) ? candidates : [];
+    for (const mime of list) {
+      const value = String(mime || "").trim();
+      if (!value) continue;
+      try {
+        if (MediaRecorder.isTypeSupported(value)) return value;
+      } catch (_) {}
+    }
+    return "";
+  };
+
+  const getMimeForMode = (mode) => {
+    if (mode === "audio") {
+      return (
+        pickSupportedMime([
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/ogg;codecs=opus",
+          "audio/mp4",
+        ]) || "audio/webm"
+      );
+    }
+    return (
+      pickSupportedMime([
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+        "video/mp4",
+      ]) || "video/webm"
+    );
+  };
 
   const isCompositeMode = (modes = []) => modes.includes("video") && modes.includes("screen");
 
@@ -763,12 +880,13 @@ export default function RecorderPage() {
   const createRecorderForMode = (mode, stream) => {
     if (!stream) return;
     resetMultipartStateForMode(mode);
-    const rec = new MediaRecorder(stream, { mimeType: getMimeForMode(mode) });
+    const mimeType = getMimeForMode(mode);
+    const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
     rec.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) handleRecorderChunk(mode, e.data);
     };
     recorderRefs.current[mode] = rec;
-    rec.start(1000);
+    rec.start();
   };
 
   const connectStreamAudioToComposite = (stream) => {
@@ -958,12 +1076,13 @@ export default function RecorderPage() {
 
   const pushSessionStatus = async (status, sessionOverride = null) => {
     const activeSession = sessionOverride || selectedSession;
-    if (!API_BASE_URL || !activeSession?._id) return;
+    const sid = resolveSessionId(activeSession);
+    if (!API_BASE_URL || !sid) return;
     const elapsed = timerState.running
       ? timerState.baseElapsed + Math.floor((Date.now() - timerState.startedAt) / 1000)
       : timerState.baseElapsed;
     try {
-      const res = await fetch(`${API_BASE_URL}/sessions/${activeSession._id}/status`, {
+      const res = await fetch(`${API_BASE_URL}/sessions/${sid}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, elapsed_seconds: elapsed })
@@ -973,7 +1092,8 @@ export default function RecorderPage() {
         throw new Error(`Status update failed: ${res.status} ${txt}`);
       }
       const data = await res.json();
-      setSelectedSession(data.session);
+      setSelectedSession(normalizeSessionDoc(data.session));
+      broadcastRecorderStatus(data?.session?.status || status);
       setTimerState({ running: false, startedAt: 0, baseElapsed: data.session?.elapsed_seconds || elapsed });
       await fetchSessions(activeSession?.user_id || sessionForm.user_id);
     } catch (err) {
@@ -982,7 +1102,7 @@ export default function RecorderPage() {
   };
 
   const startSession = async (sessionOverride = null) => {
-    const activeSession = sessionOverride || selectedSession;
+    let activeSession = sessionOverride || selectedSession;
     if (!activeSession) {
       setSessionError("No active session selected. Create/select a session first.");
       return;
@@ -992,10 +1112,28 @@ export default function RecorderPage() {
       return;
     }
     setSessionError("");
-    if (!activeSession.subject?.trim() || !activeSession.topic?.trim()) {
-      setSessionError("Subject and topic are required to start a session.");
+    const activeSessionId = resolveSessionId(activeSession);
+    if (!activeSessionId) {
+      setSessionError("Session id is missing. Please reselect or recreate session.");
       return;
     }
+
+    // Trust persisted session data for start flow; creation already validates subject/topic.
+    // Refresh once to avoid stale local state, but do not hard-block on local text fields.
+    if (API_BASE_URL) {
+      try {
+        const oneRes = await fetch(`${API_BASE_URL}/sessions/${activeSessionId}`);
+        if (oneRes.ok) {
+          const oneData = await oneRes.json();
+          const latest = normalizeSessionDoc(oneData?.session);
+          if (latest?._id) {
+            activeSession = latest;
+            setSelectedSession(latest);
+          }
+        }
+      } catch (_) {}
+    }
+
     try {
       await initRecorders(activeSession.modes || []);
     } catch (err) {
@@ -1307,19 +1445,20 @@ export default function RecorderPage() {
       explainerRecorderStreamRef.current = mic;
       explainerRecorderChunksRef.current = [];
       setExplainerRecordedBlob(null);
-      const rec = new MediaRecorder(mic, { mimeType: "audio/webm" });
+      const explainerMime = getMimeForMode("audio");
+      const rec = explainerMime ? new MediaRecorder(mic, { mimeType: explainerMime }) : new MediaRecorder(mic);
       rec.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) explainerRecorderChunksRef.current.push(e.data);
       };
       rec.onstop = () => {
-        const blob = new Blob(explainerRecorderChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(explainerRecorderChunksRef.current, { type: explainerMime || "audio/webm" });
         setExplainerRecordedBlob(blob.size > 0 ? blob : null);
         (explainerRecorderStreamRef.current?.getTracks?.() || []).forEach((t) => t.stop());
         explainerRecorderStreamRef.current = null;
         setExplainerRecorderStatus("stopped");
       };
       explainerRecorderRef.current = rec;
-      rec.start(500);
+      rec.start();
       setExplainerRecorderStatus("recording");
       setSessionError("");
     } catch (err) {
@@ -1402,7 +1541,7 @@ export default function RecorderPage() {
         throw new Error(`Create session failed: ${createRes.status} ${txt}`);
       }
       const createData = await createRes.json();
-      const sessionId = createData.session?._id;
+      const sessionId = resolveSessionId(createData.session);
       if (!sessionId) throw new Error("Session id missing in create response");
       await uploadMediaForSession(sessionId, "attachment", uploadFiles.explainerAttachment, uploadFiles.explainerAttachment.name);
       if (hasUploadAudio) {
@@ -1414,9 +1553,9 @@ export default function RecorderPage() {
       const oneRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}`);
       if (oneRes.ok) {
         const oneData = await oneRes.json();
-        setSelectedSession(oneData.session || createData.session);
+        setSelectedSession(normalizeSessionDoc(oneData.session || createData.session));
       } else {
-        setSelectedSession(createData.session);
+        setSelectedSession(normalizeSessionDoc(createData.session));
       }
       setTimerState({ running: false, startedAt: 0, baseElapsed: createData.session?.elapsed_seconds || 0 });
       await fetchSessions(sessionForm.user_id);
@@ -1761,7 +1900,7 @@ export default function RecorderPage() {
                   </p>
                 ) : (
                   <div className="task-modal-actions">
-                    {canStart ? <button className="btn-day" onClick={startSession}>Start</button> : null}
+                    {canStart ? <button className="btn-day" onClick={() => startSession()}>Start</button> : null}
                     {canPause ? <button className="btn-day secondary" onClick={pauseSession}>Pause</button> : null}
                     {canResume ? <button className="btn-day" onClick={resumeSession}>Resume</button> : null}
                     {canStop ? <button className="btn-ticket" onClick={stopSession}>Stop</button> : null}
@@ -1961,13 +2100,39 @@ export default function RecorderPage() {
 
             <div className="session-list">
               {orderedSessionList.map((session) => (
-                <button
+                <div
                   key={session._id}
-                  className={`session-item ${selectedSession?._id === session._id ? "active" : ""} ${["started", "resumed", "paused"].includes(session.status) ? "running" : ""}`}
-                  onClick={() => selectSession(session)}
+                  className="session-item-row"
                 >
-                  <strong>{session.subject}</strong> - {session.topic} ({session.session_type}, {capitalize(getRecorderType(session)).replace("_", " ")}) [{session.user_id || "user"} | {session.date}]
-                </button>
+                  <button
+                    className={`session-item ${selectedSession?._id === session._id ? "active" : ""} ${["started", "resumed", "paused"].includes(session.status) ? "running" : ""}`}
+                    onClick={() => selectSession(session)}
+                  >
+                    <strong>{session.subject}</strong> - {session.topic} ({session.session_type}, {capitalize(getRecorderType(session)).replace("_", " ")}) [{session.user_id || "user"} | {session.date}]
+                  </button>
+                  <div className="session-actions" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className="ellipsis-btn session-ellipsis-btn"
+                      onClick={() => setOpenSessionMenuId((prev) => (prev === session._id ? "" : session._id))}
+                      aria-label="Open session actions"
+                      title="Session actions"
+                    >
+                      ⋮
+                    </button>
+                    {openSessionMenuId === session._id ? (
+                      <div className="menu-dropdown session-actions-menu">
+                        <button
+                          className="menu-item session-menu-delete"
+                          onClick={() => deleteSession(session)}
+                          disabled={Boolean(deletingSessionIds[session._id]) || ["started", "resumed", "paused"].includes(session.status)}
+                          title={["started", "resumed", "paused"].includes(session.status) ? "Stop session before deleting" : "Delete session from app data (keeps S3 file)"}
+                        >
+                          {deletingSessionIds[session._id] ? "Deleting..." : "Delete Session"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               ))}
             </div>
           </>

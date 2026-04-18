@@ -10,6 +10,10 @@ class AddPointsRequest(BaseModel):
     detail: str = ""
 
 
+class DeletePointsEventRequest(BaseModel):
+    event_id: str
+
+
 class CreateSessionRequest(BaseModel):
     user_id: str
     subject: str

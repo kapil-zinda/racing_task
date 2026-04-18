@@ -9,6 +9,10 @@ function readUser() {
   return raw === "divya" ? "divya" : "kapil";
 }
 
+export function getCurrentAgentUserId() {
+  return readUser();
+}
+
 function readSessionMap() {
   if (typeof window === "undefined") return {};
   try {
@@ -100,6 +104,115 @@ export async function getAgentRealtimeToken({ pageContext = "", voice = "" } = {
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`Realtime token failed: ${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+export async function readMissionOptions() {
+  const userId = readUser();
+  if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
+  const res = await fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(userId)}`);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Mission options failed: ${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+export async function prepareAgentEntry(input = {}) {
+  const userId = readUser();
+  if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
+  const res = await fetch(`${API_BASE_URL}/agent-v2/entries/prepare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: userId,
+      entry_type: input.entry_type || "",
+      exam: input.exam || "",
+      course: input.course || "",
+      book_name: input.book_name || "",
+      source: input.source || "",
+      subject: input.subject || "",
+      topic: input.topic || "",
+      test_name: input.test_name || "",
+      test_number: input.test_number || "",
+      stage: input.stage || "",
+      org: input.org || "",
+      note: input.note || "",
+      work_type: input.work_type || "study",
+      confirm: false,
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Prepare entry failed: ${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+export async function logAgentEntry(input = {}) {
+  const userId = readUser();
+  if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
+  const res = await fetch(`${API_BASE_URL}/agent-v2/entries/log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_id: userId,
+      entry_type: input.entry_type || "",
+      exam: input.exam || "",
+      course: input.course || "",
+      book_name: input.book_name || "",
+      source: input.source || "",
+      subject: input.subject || "",
+      topic: input.topic || "",
+      test_name: input.test_name || "",
+      test_number: input.test_number || "",
+      stage: input.stage || "",
+      org: input.org || "",
+      note: input.note || "",
+      work_type: input.work_type || "study",
+      confirm: input.confirm !== false,
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Log entry failed: ${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+export async function readAgentContext(input = {}) {
+  const userId = readUser();
+  if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
+  const params = new URLSearchParams();
+  params.set("user_id", userId);
+  if (input.date) params.set("date", String(input.date));
+  if (input.lookback_days != null) params.set("lookback_days", String(input.lookback_days));
+  if (input.x_days != null) params.set("x_days", String(input.x_days));
+  if (input.y_days != null) params.set("y_days", String(input.y_days));
+  const res = await fetch(`${API_BASE_URL}/agent-v2/context?${params.toString()}`);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Agent context failed: ${res.status} ${txt}`);
+  }
+  return res.json();
+}
+
+export async function searchUnified(input = {}) {
+  const userId = readUser();
+  if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
+  const q = String(input.q || "").trim();
+  if (!q) throw new Error("search_unified requires q");
+  const params = new URLSearchParams();
+  params.set("user_id", userId);
+  params.set("q", q);
+  if (input.course) params.set("course", String(input.course));
+  if (input.types) params.set("types", String(input.types));
+  if (input.limit != null) params.set("limit", String(input.limit));
+  const res = await fetch(`${API_BASE_URL}/agent-v2/search/unified?${params.toString()}`);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Search unified failed: ${res.status} ${txt}`);
   }
   return res.json();
 }

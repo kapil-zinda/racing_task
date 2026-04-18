@@ -4,6 +4,7 @@ import base64
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 import tempfile
 from urllib import error as url_error
 from urllib import request as url_request
@@ -422,6 +423,10 @@ Your role is not just to chat. You must:
 
 Behavior rules:
 - Be caring, direct, and useful.
+- Language policy:
+  - Reply only in English, Hindi, or natural Hinglish (mix of Hindi+English).
+  - Mirror the user's language style in the current turn.
+  - Never switch to or include any third language.
 - The assistant tone/mode is auto-selected from each incoming user message.
 - Default to supportive when intent is unclear.
 - Infer intent semantically from the full user message and context, not by hardcoded keyword matching.
@@ -434,6 +439,11 @@ Behavior rules:
   - Syllabus data = execution/history layer (what is already done): class/revision/test progress with dates and counts.
   - Do not treat mission planned items as completed unless syllabus/history proves completion.
 - Logging guidance by entry type:
+  - Logging must align with mission selector options exactly like UI flow.
+  - Resolve and use canonical mission exam labels/paths (examples: `PMP Level Up`, `Book: Spectrum`, `Random: Newspaper`) instead of generic shortcuts.
+  - For class/revision/test entries, select exam -> subject -> topic/test fields from mission-backed options before final log.
+  - For test revisions (example: "SFG Level 1 test 1 revised"), log as test stage `revision` using source/test number; do not ask subject/topic.
+  - For test/test-revision logging, if exam is omitted, default exam to `Tests`; do not block on exam prompt.
   - For `ticket_resolved` entries, primary fields are user/player, org, and note.
   - Do not require subject/course for ticket entries unless user explicitly wants to attach them.
   - Date is server-side by default in this system unless the user asks for a backdated/manual flow.
@@ -489,6 +499,34 @@ No markdown fences. No extra text.
 
 
 def _realtime_instructions(user_id: str, page_context: str = "") -> str:
+    options = mission_selector_options(user_id)
+    exam_options = options.get("exam_options") if isinstance(options.get("exam_options"), list) else []
+    exam_labels = [str(row.get("label") or "").strip() for row in exam_options if isinstance(row, dict) and str(row.get("label") or "").strip()]
+    catalog = options.get("catalog") if isinstance(options.get("catalog"), dict) else {}
+    plan = options.get("plan") if isinstance(options.get("plan"), dict) else {}
+    tests = plan.get("tests") if isinstance(plan.get("tests"), list) else []
+    test_sources = sorted(
+        {
+            str(row.get("source") or "").strip()
+            for row in tests
+            if isinstance(row, dict) and str(row.get("source") or "").strip()
+        }
+    )
+    capability_summary = {
+        "mission_exam_options": exam_labels,
+        "test_sources": test_sources,
+        "catalog_keys": sorted([str(k) for k in catalog.keys()])[:30],
+        "tools": [
+            "switch_page",
+            "start_recording_session",
+            "pause_recording_session",
+            "resume_recording_session",
+            "end_recording_session",
+            "read_mission_options",
+            "prepare_log_entry",
+            "log_entry",
+        ],
+    }
     page = (page_context or "").strip() or "unknown"
     return f"""
 You are an always-on voice study companion for user `{user_id}`.
@@ -497,11 +535,35 @@ Core behavior:
 - Default tone is supportive; adapt tone semantically from user intent.
 - Keep responses short, action-oriented, and natural for speech.
 - Do not ask for unnecessary confirmations.
+- Language policy:
+  - Speak only in English, Hindi, or natural Hinglish.
+  - Match the user's current language style.
+  - Never use any third language.
+- For class/revision/test logging, always use mission-backed selector options (same as UI flow).
+- Never ask user for points; points are determined by platform rules.
+- If user gives enough fields, log immediately.
+- If fields are missing, ask only missing fields and then log.
+- Logging procedure:
+  1) call `prepare_log_entry` first.
+  2) if `can_log` is true, call `log_entry` with `confirm=true` immediately.
+  3) if `can_log` is false, ask only `missing_fields`, then retry.
+- Completion-intent rule:
+  - If user says they completed/finished/done a class, revision, or test (for example: "PMP level up, EMAC class 8 complete"), treat it as a logging command, not a generic chat message.
+  - Attempt tool-based logging in the same turn before responding.
+  - After successful log, respond with a short confirmation that it is saved.
 - If user asks to open a page, call function tool immediately, then confirm briefly.
 - If user asks to start recording, collect only missing required details, then call start function.
 - Once recording is started, stay mostly silent unless user asks something or there is a critical issue.
 - If user asks to stop recording, call stop function and confirm briefly.
 - If user is idle for a long stretch, offer a gentle check-in.
+- Before answering questions about what the user has (books/courses/tests/topics) or where to log something,
+  use `read_mission_options` and rely on returned mission data.
+- If user mentions a known mission item (example: Spectrum), treat it as mission context, not unknown.
+- Never say you do not see/find an item without checking mission options first in this turn.
+- For "what have I done in X till now" questions, call `read_agent_context` and/or `search_unified` first, then answer with facts.
+
+Known mission context snapshot:
+{json.dumps(capability_summary, ensure_ascii=True)}
 
 Current page context: {page}
 """.strip()
@@ -555,6 +617,94 @@ def _realtime_tools_schema() -> List[Dict[str, Any]]:
             "name": "end_recording_session",
             "description": "Stop active recording session.",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+        {
+            "type": "function",
+            "name": "read_mission_options",
+            "description": "Read mission-backed exam/subject/topic and test options for deterministic entry logging.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+        {
+            "type": "function",
+            "name": "prepare_log_entry",
+            "description": "Validate and normalize class/revision/test/ticket entry. Returns missing fields and canonical mission-aligned values.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entry_type": {"type": "string"},
+                    "exam": {"type": "string"},
+                    "course": {"type": "string"},
+                    "book_name": {"type": "string"},
+                    "source": {"type": "string"},
+                    "subject": {"type": "string"},
+                    "topic": {"type": "string"},
+                    "test_name": {"type": "string"},
+                    "test_number": {"type": "string"},
+                    "stage": {"type": "string"},
+                    "org": {"type": "string"},
+                    "note": {"type": "string"},
+                    "work_type": {"type": "string"},
+                },
+                "required": ["entry_type"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": "log_entry",
+            "description": "Write entry into race/syllabus using mission-aligned normalization. Set confirm=true when ready.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entry_type": {"type": "string"},
+                    "confirm": {"type": "boolean"},
+                    "exam": {"type": "string"},
+                    "course": {"type": "string"},
+                    "book_name": {"type": "string"},
+                    "source": {"type": "string"},
+                    "subject": {"type": "string"},
+                    "topic": {"type": "string"},
+                    "test_name": {"type": "string"},
+                    "test_number": {"type": "string"},
+                    "stage": {"type": "string"},
+                    "org": {"type": "string"},
+                    "note": {"type": "string"},
+                    "work_type": {"type": "string"},
+                },
+                "required": ["entry_type"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": "read_agent_context",
+            "description": "Get user study context snapshot including syllabus progress and recent activity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lookback_days": {"type": "integer"},
+                    "x_days": {"type": "integer"},
+                    "y_days": {"type": "integer"},
+                    "date": {"type": "string"},
+                },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": "search_unified",
+            "description": "Search syllabus/mission/tests/content for a query (example: Spectrum).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "q": {"type": "string"},
+                    "course": {"type": "string"},
+                    "types": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+                "required": ["q"],
+                "additionalProperties": False,
+            },
         },
     ]
 
@@ -630,6 +780,235 @@ def _normalize_entry_type(value: str) -> str:
     return alias.get(raw, raw)
 
 
+def _norm_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").strip().lower()).strip()
+
+
+def _tokenize(value: str) -> List[str]:
+    text = _norm_text(value)
+    return [part for part in text.split(" ") if part]
+
+
+def _text_match_score(needle: str, hay: str) -> int:
+    n = _norm_text(needle)
+    h = _norm_text(hay)
+    if not n or not h:
+        return 0
+    if n == h:
+        return 100
+    if n in h or h in n:
+        return 85
+    n_tokens = set(_tokenize(n))
+    h_tokens = set(_tokenize(h))
+    if not n_tokens or not h_tokens:
+        return 0
+    overlap = len(n_tokens & h_tokens)
+    if overlap == 0:
+        return 0
+    return int((overlap / max(len(n_tokens), len(h_tokens))) * 70)
+
+
+def _extract_topic_index(value: str) -> int:
+    text = _norm_text(value)
+    if not text:
+        return 0
+    digits = re.findall(r"\d+", text)
+    if digits:
+        try:
+            return int(digits[0])
+        except Exception:  # noqa: BLE001
+            return 0
+    words = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+        "eleven": 11,
+        "twelve": 12,
+        "thirteen": 13,
+        "fourteen": 14,
+        "fifteen": 15,
+        "sixteen": 16,
+        "seventeen": 17,
+        "eighteen": 18,
+        "nineteen": 19,
+        "twenty": 20,
+    }
+    for token in _tokenize(text):
+        if token in words:
+            return words[token]
+    return 0
+
+
+def _extract_first_int(value: str) -> int:
+    text = _norm_text(value)
+    if not text:
+        return 0
+    found = re.findall(r"\d+", text)
+    if not found:
+        return 0
+    try:
+        return int(found[0])
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _infer_test_number(raw_number: str, test_name: str, note: str) -> str:
+    direct = str(raw_number or "").strip()
+    if direct:
+        return direct
+    idx = _extract_first_int(test_name)
+    if idx <= 0:
+        idx = _extract_first_int(note)
+    return str(idx if idx > 0 else 1)
+
+
+def _infer_test_stage(raw_stage: str, test_name: str, note: str, is_test_revision: bool) -> str:
+    stage = (raw_stage or "").strip().lower().replace(" ", "_")
+    if stage in {"test_given", "analysis_done", "revision", "second_revision"}:
+        return stage
+    hint = _norm_text(f"{test_name} {note}")
+    if "second revision" in hint or "2nd revision" in hint or "revision 2" in hint:
+        return "second_revision"
+    if "analysis" in hint or "analysed" in hint or "analyzed" in hint:
+        return "analysis_done"
+    if "revise" in hint or "revision" in hint or is_test_revision:
+        return "revision"
+    return "test_given"
+
+
+def _resolve_by_options(raw_value: str, options: List[str]) -> str:
+    value = (raw_value or "").strip()
+    if not value or not options:
+        return ""
+    scored: List[tuple[int, str]] = []
+    for opt in options:
+        score = _text_match_score(value, opt)
+        if score > 0:
+            scored.append((score, opt))
+    if not scored:
+        return ""
+    scored.sort(key=lambda row: row[0], reverse=True)
+    return scored[0][1] if scored[0][0] >= 60 else ""
+
+
+def _resolve_exam_from_mission(user_id: str, entry_type: str, exam: str, course: str, book_name: str, source: str) -> Dict[str, str]:
+    options_payload = mission_selector_options(user_id)
+    exam_options = options_payload.get("exam_options") if isinstance(options_payload.get("exam_options"), list) else []
+    if not exam_options:
+        return {"exam_key": (exam or "").strip(), "exam_label": (exam or "").strip(), "mission_options_available": "0"}
+
+    # Build searchable candidates across key + label.
+    candidates: List[Dict[str, str]] = []
+    for row in exam_options:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("value") or "").strip()
+        label = str(row.get("label") or "").strip()
+        if not key or not label:
+            continue
+        candidates.append({"key": key, "label": label})
+    if not candidates:
+        return {"exam_key": (exam or "").strip(), "exam_label": (exam or "").strip(), "mission_options_available": "0"}
+
+    kind = _normalize_entry_type(entry_type)
+    hints: List[str] = []
+    for item in [exam, course]:
+        if (item or "").strip():
+            hints.append(str(item).strip())
+    if kind == "book" and (book_name or "").strip():
+        hints.append(f"Book: {book_name.strip()}")
+        hints.append(book_name.strip())
+    if kind == "random" and (source or "").strip():
+        hints.append(f"Random: {source.strip()}")
+        hints.append(source.strip())
+
+    best: Dict[str, str] | None = None
+    best_score = 0
+    for hint in hints:
+        for cand in candidates:
+            score = max(_text_match_score(hint, cand["label"]), _text_match_score(hint, cand["key"]))
+            if score > best_score:
+                best_score = score
+                best = cand
+
+    if best and best_score >= 60:
+        return {"exam_key": best["key"], "exam_label": best["label"], "mission_options_available": "1"}
+
+    # fallback to first mission option when hint missing
+    if not hints:
+        return {"exam_key": candidates[0]["key"], "exam_label": candidates[0]["label"], "mission_options_available": "1"}
+    return {"exam_key": "", "exam_label": "", "mission_options_available": "1"}
+
+
+def _resolve_subject_topic_from_catalog(user_id: str, exam_key: str, subject: str, topic: str) -> Dict[str, Any]:
+    payload = mission_selector_options(user_id)
+    catalog = payload.get("catalog") if isinstance(payload.get("catalog"), dict) else {}
+    entries = catalog.get(exam_key) if isinstance(catalog.get(exam_key), list) else []
+    if not entries:
+        return {
+            "subject": (subject or "").strip(),
+            "topic": (topic or "").strip(),
+            "subject_matched": False,
+            "topic_matched": False,
+        }
+
+    available_subjects = [str(row.get("subject") or "").strip() for row in entries if isinstance(row, dict)]
+    available_subjects = [s for s in available_subjects if s]
+    resolved_subject = _resolve_by_options(subject, available_subjects) if subject else ""
+    if not resolved_subject and len(available_subjects) == 1:
+        resolved_subject = available_subjects[0]
+
+    chosen_subject = resolved_subject or (subject or "").strip()
+    topic_options: List[str] = []
+    for row in entries:
+        if not isinstance(row, dict):
+            continue
+        row_subject = str(row.get("subject") or "").strip()
+        if chosen_subject and row_subject != chosen_subject:
+            continue
+        topics = row.get("topics") if isinstance(row.get("topics"), list) else []
+        topic_options.extend([str(t).strip() for t in topics if str(t).strip()])
+
+    resolved_topic = _resolve_by_options(topic, topic_options) if topic else ""
+    if not resolved_topic and topic:
+        idx = _extract_topic_index(topic)
+        if idx > 0:
+            for opt in topic_options:
+                opt_idx = _extract_topic_index(opt)
+                if opt_idx == idx:
+                    resolved_topic = opt
+                    break
+
+    return {
+        "subject": resolved_subject or (subject or "").strip(),
+        "topic": resolved_topic or (topic or "").strip(),
+        "subject_matched": bool(resolved_subject),
+        "topic_matched": bool(resolved_topic),
+    }
+
+
+def _resolve_test_source_from_mission(user_id: str, source: str) -> str:
+    payload = mission_selector_options(user_id)
+    plan = payload.get("plan") if isinstance(payload.get("plan"), dict) else {}
+    tests = plan.get("tests") if isinstance(plan.get("tests"), list) else []
+    options = sorted({str(row.get("source") or "").strip() for row in tests if isinstance(row, dict) and str(row.get("source") or "").strip()})
+    if not options:
+        return (source or "").strip()
+    resolved = _resolve_by_options(source, options) if source else ""
+    if resolved:
+        return resolved
+    if len(options) == 1:
+        return options[0]
+    return (source or "").strip()
+
+
 def prepare_entry_payload(
     user_id: str,
     entry_type: str,
@@ -671,6 +1050,17 @@ def prepare_entry_payload(
     detail_parts: List[str] = []
     test_type = ""
 
+    resolved_exam = _resolve_exam_from_mission(uid, kind, exam_v, course_v, book_v, source_v)
+    resolved_exam_key = resolved_exam.get("exam_key", "").strip()
+    resolved_exam_label = resolved_exam.get("exam_label", "").strip()
+    mission_options_available = resolved_exam.get("mission_options_available", "0") == "1"
+    is_test_revision = kind == "revision" and (
+        bool(source_v)
+        or bool(test_number_v)
+        or bool(test_name_v)
+        or stage_v in {"test_given", "analysis_done", "revision", "second_revision"}
+    )
+
     if kind == "ticket":
         action_type = "ticket_resolved"
         if not org_v:
@@ -678,57 +1068,96 @@ def prepare_entry_payload(
         if not note_v:
             missing.append("note")
         detail_parts = [f"org:{org_v}", f"note:{note_v}"]
-    elif kind == "test":
+    elif kind == "test" or is_test_revision:
         action_type = "test_completed"
-        chosen_exam = exam_v or "tests"
-        if not source_v:
+        # Tests in UI are logged under a stable "Tests" exam bucket.
+        # Keep this fixed to avoid drift like "SFG", "PMP Level Up", etc.
+        chosen_exam = "Tests"
+        if not chosen_exam:
+            missing.append("exam")
+        resolved_source = _resolve_test_source_from_mission(uid, source_v)
+        if not resolved_source:
             missing.append("source")
-        if not test_number_v:
-            test_number_v = "1"
-        if stage_v not in {"test_given", "analysis_done", "revision", "second_revision"}:
-            stage_v = "test_given"
+        test_number_v = _infer_test_number(test_number_v, test_name_v, note_v)
+        stage_v = _infer_test_stage(stage_v, test_name_v, note_v, is_test_revision)
         detail_parts = [
-            f"exam:{chosen_exam}",
-            f"source:{source_v}",
-            f"test:{test_name_v}",
-            f"test number:{test_number_v}",
-            f"stage:{stage_v}",
-            f"note:{note_v}",
+            f"Exam: {chosen_exam}",
+            f"Source: {resolved_source}",
+            f"Test: {test_name_v}",
+            f"Test Number: {test_number_v}",
+            f"Stage: {stage_v}",
+            f"Note: {note_v}",
         ]
-        test_type = (test_name_v or "Test Completed").strip()
+        # Keep action label consistent in timeline (UI shows "Test Completed").
+        test_type = "Test Completed"
     else:
         action_type = "revision" if kind == "revision" else "new_class"
-        chosen_exam = exam_v
+        chosen_exam = resolved_exam_label or (exam_v if not mission_options_available else "")
         chosen_subject = subject_v
         chosen_topic = topic_v
+        subject_matched = False
+        topic_matched = False
 
-        if kind == "course" and not chosen_exam:
-            chosen_exam = course_v
+        if kind == "course" and not chosen_exam and course_v:
+            chosen_exam = course_v if not mission_options_available else ""
         if kind == "book":
             if not chosen_exam:
                 if not book_v:
                     missing.append("book_name")
-                chosen_exam = f"book:{book_v}" if book_v else ""
-            if not chosen_subject:
-                missing.append("subject")
-            if not chosen_topic:
-                missing.append("topic")
+                chosen_exam = resolved_exam_label or (f"Book: {book_v}" if book_v else "")
+            resolved = _resolve_subject_topic_from_catalog(uid, resolved_exam_key, chosen_subject, chosen_topic) if resolved_exam_key else {
+                "subject": chosen_subject,
+                "topic": chosen_topic,
+                "subject_matched": False,
+                "topic_matched": False,
+            }
+            chosen_subject = resolved.get("subject", chosen_subject)
+            chosen_topic = resolved.get("topic", chosen_topic)
+            subject_matched = bool(resolved.get("subject_matched"))
+            topic_matched = bool(resolved.get("topic_matched"))
         elif kind == "random":
-            if not source_v:
+            if not source_v and not chosen_subject:
                 missing.append("source")
             if not chosen_exam:
-                chosen_exam = f"random:{source_v}" if source_v else ""
+                chosen_exam = resolved_exam_label or (f"Random: {source_v}" if source_v else "")
             if not chosen_subject:
                 chosen_subject = source_v
-            if not chosen_topic:
-                missing.append("topic")
+            resolved = _resolve_subject_topic_from_catalog(uid, resolved_exam_key, chosen_subject, chosen_topic) if resolved_exam_key else {
+                "subject": chosen_subject,
+                "topic": chosen_topic,
+                "subject_matched": False,
+                "topic_matched": False,
+            }
+            chosen_subject = resolved.get("subject", chosen_subject)
+            chosen_topic = resolved.get("topic", chosen_topic)
+            subject_matched = bool(resolved.get("subject_matched"))
+            topic_matched = bool(resolved.get("topic_matched"))
         else:
-            if not chosen_exam:
-                missing.append("exam")
-            if not chosen_subject:
-                missing.append("subject")
-            if not chosen_topic:
-                missing.append("topic")
+            resolved = _resolve_subject_topic_from_catalog(uid, resolved_exam_key, chosen_subject, chosen_topic) if resolved_exam_key else {
+                "subject": chosen_subject,
+                "topic": chosen_topic,
+                "subject_matched": False,
+                "topic_matched": False,
+            }
+            chosen_subject = resolved.get("subject", chosen_subject)
+            chosen_topic = resolved.get("topic", chosen_topic)
+            subject_matched = bool(resolved.get("subject_matched"))
+            topic_matched = bool(resolved.get("topic_matched"))
+
+        # When mission options are available, do not allow cross-bucket free-text
+        # subject/topic under a resolved exam key; ask user to choose valid values.
+        if mission_options_available and resolved_exam_key:
+            if not subject_matched:
+                chosen_subject = ""
+            if not topic_matched:
+                chosen_topic = ""
+
+        if not chosen_exam:
+            missing.append("exam")
+        if not chosen_subject:
+            missing.append("subject")
+        if not chosen_topic:
+            missing.append("topic")
 
         detail_parts = [
             f"exam:{chosen_exam}",
@@ -738,7 +1167,18 @@ def prepare_entry_payload(
             f"note:{note_v}",
         ]
 
-    detail = "|".join([part for part in detail_parts if part and not part.endswith(":")])
+    detail = " | ".join([part for part in detail_parts if part and not part.rstrip().endswith(":")])
+    options: Dict[str, Any] = {}
+    if missing:
+        selector = mission_selector_options(uid)
+        plan = selector.get("plan") if isinstance(selector.get("plan"), dict) else {}
+        tests = plan.get("tests") if isinstance(plan.get("tests"), list) else []
+        test_sources = sorted({str(row.get("source") or "").strip() for row in tests if isinstance(row, dict) and str(row.get("source") or "").strip()})
+        options = {
+            "exam_options": selector.get("exam_options", []),
+            "catalog": selector.get("catalog", {}),
+            "test_sources": test_sources,
+        }
     return {
         "user_id": uid,
         "entry_type": kind,
@@ -747,6 +1187,7 @@ def prepare_entry_payload(
         "detail": detail,
         "missing_fields": missing,
         "can_log": len(missing) == 0,
+        "options": options,
         "normalized": {
             "exam": exam_v,
             "course": course_v,
@@ -754,6 +1195,8 @@ def prepare_entry_payload(
             "source": source_v,
             "subject": subject_v,
             "topic": topic_v,
+            "resolved_exam_key": resolved_exam_key,
+            "resolved_exam_label": resolved_exam_label,
             "test_name": test_name_v,
             "test_number": test_number_v,
             "stage": stage_v,

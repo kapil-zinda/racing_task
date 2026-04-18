@@ -48,6 +48,7 @@ const TEST_STAGE_OPTIONS = [
   { value: "analysis_done", label: "Analysis Done" },
   { value: "revision", label: "Revision" },
 ];
+const TEST_EXAM_OPTIONS = [{ value: "tests", label: "Tests" }];
 const TICKET_ORG_OPTIONS = ["uchhal", "elucidata", "divya"];
 const OTHER_VALUE = "__other__";
 const EXAM_CATALOG = {
@@ -247,7 +248,7 @@ export default function HomePage() {
     note: ""
   });
   const [taskTestMeta, setTaskTestMeta] = useState({
-    exam_type: defaultExam,
+    exam_type: TEST_EXAM_OPTIONS[0].value,
     exam_type_other: "",
     source: defaultTestSource,
     source_other: "",
@@ -261,6 +262,7 @@ export default function HomePage() {
     note: "",
   });
   const [historyOpen, setHistoryOpen] = useState({ kapil: false, divya: false });
+  const [deletingHistoryEventId, setDeletingHistoryEventId] = useState("");
   const [todayDate, setTodayDate] = useState("");
   const [availableDates, setAvailableDates] = useState([]);
   const [winnerCounts, setWinnerCounts] = useState({ kapil: 0, divya: 0, tie: 0 });
@@ -676,6 +678,46 @@ export default function HomePage() {
     return true;
   };
 
+  const deleteHistoryEntry = async (eventId) => {
+    const id = String(eventId || "").trim();
+    if (!id) return;
+    if (!isEditable) {
+      setApiError("Only today's race can be edited.");
+      return;
+    }
+    if (!API_BASE_URL) {
+      setApiError("Delete entry requires backend API.");
+      return;
+    }
+    setDeletingHistoryEventId(id);
+    try {
+      const res = await fetch(`${API_BASE_URL}/points/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event_id: id }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Delete entry failed: ${res.status} ${txt}`);
+      }
+      const data = await res.json();
+      setPlayers((prev) =>
+        prev.map((p) => ({
+          ...p,
+          points: data.points?.[p.key] || 0,
+          reached: data.reached?.[p.key] || [],
+          history: data.history?.[p.key] || [],
+        }))
+      );
+      setWinnerCounts(data.winner_counts || winnerCounts);
+      setApiError("");
+    } catch (err) {
+      setApiError(String(err.message || err));
+    } finally {
+      setDeletingHistoryEventId("");
+    }
+  };
+
   const openTaskModal = async (playerId, actionType) => {
     if (!isEditable) return;
     setTaskModal({ open: true, playerId, actionType });
@@ -721,7 +763,7 @@ export default function HomePage() {
       note: ""
     });
     setTaskTestMeta({
-      exam_type: firstExam,
+      exam_type: TEST_EXAM_OPTIONS[0].value,
       exam_type_other: "",
       source: defaultSource,
       source_other: "",
@@ -1227,7 +1269,19 @@ export default function HomePage() {
                       <div key={`${selectedPlayer.key}-${item.created_at}-${idx}`} className="history-item">
                         <div className="history-top">
                           <span className="history-action">{item.action_label || ACTION_LABELS[item.action_type] || "Task"}</span>
-                          <span className="history-points">+{item.points}</span>
+                          <div className="history-actions">
+                            <span className="history-points">+{item.points}</span>
+                            {API_BASE_URL && isEditable && item.event_id ? (
+                              <button
+                                className="history-delete-btn"
+                                onClick={() => deleteHistoryEntry(item.event_id)}
+                                disabled={deletingHistoryEventId === item.event_id}
+                                title="Delete this entry"
+                              >
+                                {deletingHistoryEventId === item.event_id ? "Deleting..." : "Delete"}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="history-detail">{item.detail}</div>
                         <div className="history-time">{formatTime(item.created_at)}</div>
@@ -1394,7 +1448,7 @@ export default function HomePage() {
                       }));
                     }}
                   >
-                    {activeExamOptions.map((opt) => (
+                    {TEST_EXAM_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                     <option value={OTHER_VALUE}>Other</option>
