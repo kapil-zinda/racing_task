@@ -1,8 +1,8 @@
 "use client";
+import { apiFetch } from "../lib/auth";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
-import ResourceInternalMenu from "../components/ResourceInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -52,7 +52,7 @@ export default function PdfSearchPage() {
     try {
       const params = new URLSearchParams({ q, limit: "30" });
       if (searchCourse) params.set("course", searchCourse);
-      const res = await fetch(`${API_BASE_URL}/pdf-search/query?${params.toString()}`);
+      const res = await apiFetch(`${API_BASE_URL}/pdf-search/query?${params.toString()}`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Search failed: ${res.status} ${txt}`);
@@ -102,7 +102,6 @@ export default function PdfSearchPage() {
 
       <header className="hero">
         <MainMenu active="search" />
-        <ResourceInternalMenu active="search" />
         <h1>Knowledge Finder</h1>
         <p className="subtext">Search indexed PDFs and open directly on matched page.</p>
       </header>

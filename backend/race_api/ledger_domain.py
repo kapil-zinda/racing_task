@@ -36,8 +36,8 @@ def log_activity(
     meta: Dict[str, Any] | None = None,
     created_at: str | None = None,
 ) -> None:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         return
     at = (created_at or "").strip() or _now()
     date_value = at[:10] if len(at) >= 10 else current_date_str()
@@ -60,8 +60,8 @@ def log_activity(
 
 
 def mission_window_summary(user_id: str, mission_id: str, lookback_days: int = 90) -> Dict[str, Any]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     ensure_ledger_indexes()
     days = max(14, min(int(lookback_days or 90), 365))

@@ -1,18 +1,11 @@
 "use client";
+import { apiFetch } from "../lib/auth";
 
 import { useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
-import ResourceInternalMenu from "../components/ResourceInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
-const GLOBAL_USER_STORAGE_KEY = "global_user_id";
-
-function readGlobalUser() {
-  if (typeof window === "undefined") return "kapil";
-  const raw = (window.localStorage.getItem(GLOBAL_USER_STORAGE_KEY) || "kapil").toLowerCase().trim();
-  return raw === "divya" ? "divya" : "kapil";
-}
 
 function renderAnswerWithInlineCitations(text, sources, onOpenSource) {
   const raw = String(text || "");
@@ -51,7 +44,6 @@ function renderAnswerWithInlineCitations(text, sources, onOpenSource) {
 }
 
 export default function QnaPage() {
-  const [selectedUserId, setSelectedUserId] = useState("kapil");
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [question, setQuestion] = useState("");
@@ -79,7 +71,7 @@ export default function QnaPage() {
     setLoadingMessages(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/qna/sessions/${encodeURIComponent(sessionId)}/messages`);
+      const res = await apiFetch(`${API_BASE_URL}/qna/sessions/${encodeURIComponent(sessionId)}/messages`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Load messages failed: ${res.status} ${txt}`);
@@ -96,12 +88,12 @@ export default function QnaPage() {
     }
   };
 
-  const createSession = async (userId, title = "") => {
+  const createSession = async (title = "") => {
     if (!API_BASE_URL) return null;
-    const res = await fetch(`${API_BASE_URL}/qna/sessions`, {
+    const res = await apiFetch(`${API_BASE_URL}/qna/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, title }),
+      body: JSON.stringify({ title }),
     });
     if (!res.ok) {
       const txt = await res.text();
@@ -111,12 +103,12 @@ export default function QnaPage() {
     return data.session || null;
   };
 
-  const loadSessions = async (userId) => {
+  const loadSessions = async () => {
     if (!API_BASE_URL) return;
     setLoadingSessions(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/qna/sessions?user_id=${encodeURIComponent(userId)}`);
+      const res = await apiFetch(`${API_BASE_URL}/qna/sessions`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Load sessions failed: ${res.status} ${txt}`);
@@ -124,7 +116,7 @@ export default function QnaPage() {
       const data = await res.json();
       let rows = data.sessions || [];
       if (!rows.length) {
-        const created = await createSession(userId, "New Chat");
+        const created = await createSession("New Chat");
         rows = created ? [created] : [];
       }
       setSessions(rows);
@@ -142,23 +134,12 @@ export default function QnaPage() {
     }
   };
 
-  useEffect(() => {
-    const user = readGlobalUser();
-    setSelectedUserId(user);
-    loadSessions(user);
-    const handler = () => {
-      const next = readGlobalUser();
-      setSelectedUserId(next);
-      loadSessions(next);
-    };
-    window.addEventListener("global-user-change", handler);
-    return () => window.removeEventListener("global-user-change", handler);
-  }, []);
+  useEffect(() => { loadSessions(); }, []);
 
   const onCreateNewChat = async () => {
     if (!API_BASE_URL) return;
     try {
-      const created = await createSession(selectedUserId, "New Chat");
+      const created = await createSession("New Chat");
       if (!created?._id) return;
       const nextSessions = [created, ...sessions];
       setSessions(nextSessions);
@@ -192,7 +173,7 @@ export default function QnaPage() {
     setAsking(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/qna/ask`, {
+      const res = await apiFetch(`${API_BASE_URL}/qna/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -218,7 +199,7 @@ export default function QnaPage() {
           return [session, ...others];
         });
       } else {
-        await loadSessions(selectedUserId);
+        await loadSessions();
       }
     } catch (err) {
       setError(String(err.message || err));
@@ -257,7 +238,6 @@ export default function QnaPage() {
 
       <header className="hero">
         <MainMenu active="qna" />
-        <ResourceInternalMenu active="qna" />
       </header>
 
       <section className="pdf-search-single">
@@ -267,7 +247,7 @@ export default function QnaPage() {
           <div className="qna-layout">
             <aside className="qna-sessions">
               <div className="qna-sessions-head">
-                <h3>Chats • {selectedUserId.toUpperCase()}</h3>
+                <h3>Chats</h3>
                 <button className="btn-day secondary" onClick={onCreateNewChat}>New</button>
               </div>
               {loadingSessions ? <p className="day-state">Loading sessions...</p> : null}

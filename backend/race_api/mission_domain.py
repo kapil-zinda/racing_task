@@ -65,8 +65,8 @@ def ensure_mission_indexes() -> None:
 
 
 def _normalize_user(user_id: str) -> str:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     return uid
 

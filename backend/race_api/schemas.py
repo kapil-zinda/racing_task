@@ -15,13 +15,14 @@ class DeletePointsEventRequest(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     subject: str
     topic: str
     session_type: str  # study | revision | analysis
     recorder_type: str = "call"
     modes: List[str] = []  # audio | video | screen
     notes: str
+    simple_record: bool = False
     test_source: str = ""
     test_name: str = ""
     test_number: str = ""
@@ -149,7 +150,7 @@ class ExtraRowInput(BaseModel):
 
 
 class ExtrasUpsertRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     date: str = ""
     rows: List[ExtraRowInput] = []
 
@@ -162,12 +163,12 @@ class QnaAskRequest(BaseModel):
 
 
 class QnaSessionCreateRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     title: str = ""
 
 
 class MissionUpsertRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     title: str = ""
     target_date: str = ""
     status: str = "active"
@@ -177,21 +178,21 @@ class MissionUpsertRequest(BaseModel):
 
 
 class AgentV2CreateRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     mode: str = "supportive"
     page_context: str = ""
     current_session_id: str = ""
 
 
 class AgentV2RealtimeTokenRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     page_context: str = ""
     voice: str = ""
 
 
 class AgentV2ChatRequest(BaseModel):
     session_id: str
-    user_id: str
+    user_id: str = ""
     message: str = ""
     input_audio_base64: str = ""
     input_audio_mime_type: str = "audio/webm"
@@ -204,7 +205,7 @@ class AgentV2ChatRequest(BaseModel):
 
 
 class AgentV2MemoryUpsertRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     key: str
     value: dict
     importance: int = 1
@@ -212,7 +213,7 @@ class AgentV2MemoryUpsertRequest(BaseModel):
 
 
 class AgentV2EntryRequest(BaseModel):
-    user_id: str
+    user_id: str = ""
     entry_type: str
     exam: str = ""
     course: str = ""

@@ -1,9 +1,9 @@
 "use client";
+import { apiFetch } from "../lib/auth";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import MainMenu from "../components/MainMenu";
-import ResourceInternalMenu from "../components/ResourceInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -166,7 +166,7 @@ export default function ContentPage() {
     if (!API_BASE_URL) return;
     setTreeLoadingByParent((prev) => ({ ...prev, [parentId]: true }));
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${API_BASE_URL}/content/tree?parent_id=${encodeURIComponent(parentId)}&view_mode=${encodeURIComponent(scope)}`,
       );
       if (!res.ok) {
@@ -192,7 +192,7 @@ export default function ContentPage() {
         view_mode: scope,
       });
       if (q.trim()) params.set("q", q.trim());
-      const res = await fetch(`${API_BASE_URL}/content/list?${params.toString()}`);
+      const res = await apiFetch(`${API_BASE_URL}/content/list?${params.toString()}`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`List API failed: ${res.status} ${txt}`);
@@ -302,7 +302,7 @@ export default function ContentPage() {
     // Navigate by walking from root level on demand.
     let currentParent = "content_root";
     for (const part of targetParts) {
-      const treeRes = await fetch(
+      const treeRes = await apiFetch(
         `${API_BASE_URL}/content/tree?parent_id=${encodeURIComponent(currentParent)}&view_mode=${encodeURIComponent(contentScope)}`,
       );
       if (!treeRes.ok) return;
@@ -386,7 +386,7 @@ export default function ContentPage() {
     setError("");
     setMessage("");
     try {
-      const res = await fetch(`${API_BASE_URL}/content/folder`, {
+      const res = await apiFetch(`${API_BASE_URL}/content/folder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ parent_id: folderId, name: newFolderName.trim() }),
@@ -417,7 +417,7 @@ export default function ContentPage() {
     if (!nextName || nextName.trim() === item.name) return;
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/content/rename`, {
+      const res = await apiFetch(`${API_BASE_URL}/content/rename`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: item.id, item_type: item.type, new_name: nextName.trim() }),
@@ -443,7 +443,7 @@ export default function ContentPage() {
     if (!ok) return;
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/content/delete`, {
+      const res = await apiFetch(`${API_BASE_URL}/content/delete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -474,7 +474,7 @@ export default function ContentPage() {
     setMessage("");
     setDestinationPicker((prev) => ({ ...prev, submitting: true }));
     try {
-      const res = await fetch(`${API_BASE_URL}/content/${mode}`, {
+      const res = await apiFetch(`${API_BASE_URL}/content/${mode}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -507,7 +507,7 @@ export default function ContentPage() {
     setError("");
     setMessage("");
     try {
-      const res = await fetch(`${API_BASE_URL}/content/download`, {
+      const res = await apiFetch(`${API_BASE_URL}/content/download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -560,7 +560,7 @@ export default function ContentPage() {
     setError("");
     setMessage("");
     try {
-      const res = await fetch(`${API_BASE_URL}/content/make-searchable`, {
+      const res = await apiFetch(`${API_BASE_URL}/content/make-searchable`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -592,7 +592,7 @@ export default function ContentPage() {
     setShowPreviewModal(true);
     setPreview({ loading: true, data: null, error: "", text: "" });
     try {
-      const res = await fetch(`${API_BASE_URL}/content/preview-url?file_id=${encodeURIComponent(file.id)}`);
+      const res = await apiFetch(`${API_BASE_URL}/content/preview-url?file_id=${encodeURIComponent(file.id)}`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Preview failed: ${res.status} ${txt}`);
@@ -603,7 +603,7 @@ export default function ContentPage() {
       const kind = detectType(f);
       if (kind === "text" && data.preview_url) {
         try {
-          const txtRes = await fetch(data.preview_url);
+          const txtRes = await apiFetch(data.preview_url);
           const txt = await txtRes.text();
           p.text = txt;
         } catch {
@@ -626,7 +626,7 @@ export default function ContentPage() {
         parent = cache[ck];
         continue;
       }
-      const res = await fetch(`${API_BASE_URL}/content/folder`, {
+      const res = await apiFetch(`${API_BASE_URL}/content/folder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ parent_id: parent, name: part }),
@@ -665,7 +665,7 @@ export default function ContentPage() {
         const relDir = parts.slice(0, -1).join("/");
         const targetFolderId = await ensurePathFolders(folderId, relDir, cache);
 
-        const presignRes = await fetch(`${API_BASE_URL}/content/presign-upload`, {
+        const presignRes = await apiFetch(`${API_BASE_URL}/content/presign-upload`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -693,7 +693,7 @@ export default function ContentPage() {
           },
         );
 
-        const completeRes = await fetch(`${API_BASE_URL}/content/complete-upload`, {
+        const completeRes = await apiFetch(`${API_BASE_URL}/content/complete-upload`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ file_id: taskId, etag, size: file.size || 0 }),
@@ -819,7 +819,6 @@ export default function ContentPage() {
 
       <header className="hero">
         <MainMenu active="content" />
-        <ResourceInternalMenu active="content" />
         <h1>Content Drive</h1>
         <p className="subtext">Google Drive-style manager with folders, uploads, previews, search, sort, and context actions.</p>
       </header>

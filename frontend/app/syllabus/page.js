@@ -1,12 +1,11 @@
 "use client";
+import { apiFetch } from "../lib/auth";
 
 import { useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
-import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
-const GLOBAL_USER_STORAGE_KEY = "global_user_id";
 const REVISION_HEADERS = [
   "First Revision Date",
   "Second Revision Date",
@@ -37,7 +36,6 @@ function norm(value) {
 }
 
 export default function SyllabusPage() {
-  const [userId, setUserId] = useState("kapil");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState({ exams: [] });
@@ -139,12 +137,12 @@ export default function SyllabusPage() {
       .sort((a, b) => a.source.localeCompare(b.source));
   }, [data]);
 
-  const loadSyllabus = async (nextUser = userId) => {
+  const loadSyllabus = async () => {
     if (!API_BASE_URL) return;
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/syllabus?user_id=${encodeURIComponent(nextUser)}`);
+      const res = await apiFetch(`${API_BASE_URL}/syllabus`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Syllabus API failed: ${res.status} ${txt}`);
@@ -159,22 +157,7 @@ export default function SyllabusPage() {
     }
   };
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      loadSyllabus("kapil");
-      return;
-    }
-    const initialUser = (window.localStorage.getItem(GLOBAL_USER_STORAGE_KEY) || "kapil").toLowerCase() === "divya" ? "divya" : "kapil";
-    setUserId(initialUser);
-    loadSyllabus(initialUser);
-    const onGlobalUser = (e) => {
-      const nextUser = e?.detail?.userId === "divya" ? "divya" : "kapil";
-      setUserId(nextUser);
-      loadSyllabus(nextUser);
-    };
-    window.addEventListener("global-user-change", onGlobalUser);
-    return () => window.removeEventListener("global-user-change", onGlobalUser);
-  }, []);
+  useEffect(() => { loadSyllabus(); }, []);
 
   useEffect(() => {
     if (!error) return;
@@ -187,7 +170,7 @@ export default function SyllabusPage() {
     setPlaybackLoadingKey(rec.key);
     setError("");
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${API_BASE_URL}/sessions/${encodeURIComponent(rec.session_id)}/playback-url?media_type=${encodeURIComponent(rec.default_media_type)}`
       );
       if (!res.ok) {
@@ -216,7 +199,6 @@ export default function SyllabusPage() {
 
       <header className="hero">
         <MainMenu active="syllabus" />
-        <ActivityInternalMenu active="syllabus" />
         <h1>Syllabus Tracker</h1>
         <p className="subtext">Expandable progress map for classes, revisions, recordings, and tests.</p>
       </header>
@@ -227,7 +209,7 @@ export default function SyllabusPage() {
         ) : (
           <>
             <div className="session-form-grid">
-              <button className="btn-day" onClick={() => loadSyllabus(userId)}>Refresh</button>
+              <button className="btn-day" onClick={() => loadSyllabus()}>Refresh</button>
             </div>
             {error ? <p className="api-state error">{error}</p> : null}
             {loading ? <p className="day-state">Loading syllabus...</p> : null}
@@ -329,13 +311,10 @@ export default function SyllabusPage() {
                       })}
                     </div>
 
-                    {userId === "kapil" ? (
+                    {(exam.tickets || []).length > 0 ? (
                       <details className="syllabus-tests">
                         <summary>Tickets</summary>
-                        {(exam.tickets || []).length === 0 ? (
-                          <p className="day-state">No tickets logged for this exam yet.</p>
-                        ) : (
-                          (exam.tickets || []).map((org) => (
+                        {(exam.tickets || []).map((org) => (
                             <details key={`${exam.exam}-org-${org.org}`} className="syllabus-source">
                               <summary>Org: {org.org}</summary>
                               <div className="syllabus-table-wrap">
@@ -364,7 +343,7 @@ export default function SyllabusPage() {
                               </div>
                             </details>
                           ))
-                        )}
+                        }
                       </details>
                     ) : null}
                   </details>
@@ -372,12 +351,10 @@ export default function SyllabusPage() {
               )}
             </div>
 
-            {userId === "divya" ? (
+            {globalTestsBySource.length > 0 ? (
               <details className="syllabus-tests" open>
                 <summary>Tests</summary>
-                {globalTestsBySource.length === 0 ? (
-                  <p className="day-state">No tests logged yet.</p>
-                ) : (
+                {(
                   globalTestsBySource.map((source) => (
                     <details key={`global-tests-${source.source}`} className="syllabus-source">
                       <summary>Source: {source.source}</summary>
