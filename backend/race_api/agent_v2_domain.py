@@ -84,8 +84,8 @@ def _aggregate_id(user_id: str, date_str: str) -> str:
 
 
 def compute_user_daily_aggregate(user_id: str, date_str: str) -> Dict[str, Any]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     d = _parse_date(date_str)
 
@@ -171,10 +171,7 @@ def rebuild_daily_aggregates_payload(
     today = current_date_str()
     end = _parse_date(to_date, fallback=today)
     start = _parse_date(from_date, fallback=end)
-    users = [user_id.strip().lower()] if (user_id or "").strip() else list(PLAYERS)
-    if users and users[0] and users[0] not in PLAYERS:
-        raise ValueError("Invalid user_id")
-    users = [u for u in users if u in PLAYERS]
+    users = [user_id.strip()] if (user_id or "").strip() else list(PLAYERS)
     if not users:
         users = list(PLAYERS)
 
@@ -196,8 +193,8 @@ def rebuild_daily_aggregates_payload(
 
 
 def _load_aggregate_docs(user_id: str, from_date: str, to_date: str) -> List[Dict[str, Any]]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     ensure_agent_v2_indexes()
     dates = _date_range(from_date, to_date)
@@ -214,8 +211,8 @@ def _load_aggregate_docs(user_id: str, from_date: str, to_date: str) -> List[Dic
 
 
 def _revision_gaps_raw(user_id: str, x_days: int = 7, y_days: int = 15, reference_date: str | None = None) -> Dict[str, Any]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     x = max(1, int(x_days or 7))
     y = max(1, int(y_days or 15))
@@ -301,8 +298,8 @@ def report_period_payload(
     x_days: int = 7,
     y_days: int = 15,
 ) -> Dict[str, Any]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     start = _parse_date(from_date)
     end = _parse_date(to_date)
@@ -411,8 +408,8 @@ def recommendations_next_actions_payload(
     x_days: int = 7,
     y_days: int = 15,
 ) -> Dict[str, Any]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     duration = max(15, min(int(duration_min or 60), 720))
     lim = max(1, min(int(limit or 5), 20))
@@ -516,8 +513,8 @@ def agent_context_payload(
     x_days: int = 7,
     y_days: int = 15,
 ) -> Dict[str, Any]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     target_date = _parse_date(date_value, fallback=current_date_str())
     days = max(1, min(int(lookback_days or 14), 365))
@@ -571,8 +568,8 @@ def search_unified_payload(
     query = (q or "").strip()
     if not query:
         raise ValueError("q is required")
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     lim = max(1, min(int(limit or 20), 100))
     ql = query.lower()
@@ -746,8 +743,8 @@ def search_unified_payload(
 
 
 def search_suggest_payload(user_id: str, q: str | None = None, limit: int = 12) -> Dict[str, Any]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     query = (q or "").strip().lower()
     lim = max(1, min(int(limit or 12), 50))
@@ -810,9 +807,7 @@ def state_range_payload(
     start = _parse_date(from_date)
     end = _parse_date(to_date)
     dates = _date_range(start, end)
-    uid = (user_id or "").strip().lower()
-    if uid and uid not in PLAYERS:
-        raise ValueError("Invalid user_id")
+    uid = (user_id or "").strip()
 
     if uid:
         rows = _load_aggregate_docs(uid, start, end)

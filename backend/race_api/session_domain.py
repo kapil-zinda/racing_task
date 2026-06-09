@@ -35,7 +35,7 @@ def _normalize_modes(recorder_type: str, modes: List[str]) -> tuple[str, List[st
 
 
 def create_session_payload(payload) -> Dict[str, Any]:
-    if payload.user_id not in PLAYERS:
+    if not (payload.user_id or "").strip():
         raise ValueError("Invalid user_id")
     if payload.session_type not in {"study", "revision", "analysis", "test"}:
         raise ValueError("session_type must be study, revision or analysis")
@@ -66,6 +66,7 @@ def create_session_payload(payload) -> Dict[str, Any]:
         "recorder_type": recorder_type,
         "modes": modes,
         "notes": notes,
+        "is_simple_record": bool(getattr(payload, "simple_record", False)),
         "timer_only": len(modes) == 0,
         "status": "created",
         "elapsed_seconds": 0,
@@ -87,10 +88,15 @@ def create_session_payload(payload) -> Dict[str, Any]:
     return {"message": "Session created", "session": doc}
 
 
-def list_sessions_payload(date: str | None, user_id: str | None) -> Dict[str, Any]:
-    query: Dict[str, Any] = {"doc_type": "study_session", "date": date or current_date_str()}
-    if user_id in PLAYERS:
+def list_sessions_payload(date: str | None, user_id: str | None, scope: str | None = None) -> Dict[str, Any]:
+    query: Dict[str, Any] = {"doc_type": "study_session"}
+    if (user_id or "").strip():
         query["user_id"] = user_id
+    if (scope or "").strip().lower() == "simple":
+        # Simple Records span every day, so do not filter by date.
+        query["is_simple_record"] = True
+    else:
+        query["date"] = date or current_date_str()
     docs = list(sessions_collection().find(query).sort("created_at", -1))
     return {"sessions": docs}
 

@@ -71,6 +71,11 @@ def settings() -> Dict[str, Any]:
         "textract_enabled": os.getenv("TEXTRACT_ENABLED", "1"),
         "textract_poll_seconds": os.getenv("TEXTRACT_POLL_SECONDS", "2"),
         "textract_timeout_seconds": os.getenv("TEXTRACT_TIMEOUT_SECONDS", "900"),
+        "mongodb_users_collection": os.getenv("MONGODB_USERS_COLLECTION", "users"),
+        "mongodb_otps_collection": os.getenv("MONGODB_OTPS_COLLECTION", "otps"),
+        "auth_required": os.getenv("AUTH_REQUIRED", "false").lower() == "true",
+        "mailjet_api_key": os.getenv("MAILJET_API_KEY", ""),
+        "mailjet_secret_key": os.getenv("MAILJET_SECRET_KEY", ""),
     }
 
 
@@ -176,6 +181,16 @@ def agent_v2_memory_collection():
 def agent_v2_nudges_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_agent_v2_nudges_collection"]]
+
+
+def users_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_users_collection"]]
+
+
+def otps_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_otps_collection"]]
 
 
 def s3_client():

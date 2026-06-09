@@ -1,17 +1,7 @@
 import { AGENT_SESSION_STORAGE_KEY } from "./constants";
+import { apiFetch } from "../auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-const GLOBAL_USER_STORAGE_KEY = "global_user_id";
-
-function readUser() {
-  if (typeof window === "undefined") return "kapil";
-  const raw = (window.localStorage.getItem(GLOBAL_USER_STORAGE_KEY) || "kapil").trim().toLowerCase();
-  return raw === "divya" ? "divya" : "kapil";
-}
-
-export function getCurrentAgentUserId() {
-  return readUser();
-}
 
 function readSessionMap() {
   if (typeof window === "undefined") return {};
@@ -31,14 +21,16 @@ function writeSessionMap(map) {
   } catch (_) {}
 }
 
-async function ensureSession(userId) {
+const SESSION_KEY = "_";
+
+async function ensureSession() {
   if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
   const map = readSessionMap();
-  if (map[userId]) return map[userId];
-  const res = await fetch(`${API_BASE_URL}/agent-v2/create-agent`, {
+  if (map[SESSION_KEY]) return map[SESSION_KEY];
+  const res = await apiFetch(`${API_BASE_URL}/agent-v2/create-agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, mode: "supportive" }),
+    body: JSON.stringify({ mode: "supportive" }),
   });
   if (!res.ok) {
     const txt = await res.text();
@@ -47,7 +39,7 @@ async function ensureSession(userId) {
   const data = await res.json();
   const sessionId = data?.session?._id;
   if (!sessionId) throw new Error("Create agent returned no session id");
-  const next = { ...map, [userId]: sessionId };
+  const next = { ...map, [SESSION_KEY]: sessionId };
   writeSessionMap(next);
   return sessionId;
 }
@@ -63,14 +55,12 @@ export async function sendAgentChat({
   responseAudioFormat = "mp3",
   responseVoice = "alloy",
 }) {
-  const userId = readUser();
-  const sessionId = await ensureSession(userId);
-  const res = await fetch(`${API_BASE_URL}/agent-v2/chat`, {
+  const sessionId = await ensureSession();
+  const res = await apiFetch(`${API_BASE_URL}/agent-v2/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       session_id: sessionId,
-      user_id: userId,
       message,
       input_audio_base64: inputAudioBase64,
       input_audio_mime_type: inputAudioMimeType,
@@ -90,13 +80,11 @@ export async function sendAgentChat({
 }
 
 export async function getAgentRealtimeToken({ pageContext = "", voice = "" } = {}) {
-  const userId = readUser();
   if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
-  const res = await fetch(`${API_BASE_URL}/agent-v2/realtime/token`, {
+  const res = await apiFetch(`${API_BASE_URL}/agent-v2/realtime/token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      user_id: userId,
       page_context: pageContext,
       voice,
     }),
@@ -109,9 +97,8 @@ export async function getAgentRealtimeToken({ pageContext = "", voice = "" } = {
 }
 
 export async function readMissionOptions() {
-  const userId = readUser();
   if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
-  const res = await fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(userId)}`);
+  const res = await apiFetch(`${API_BASE_URL}/mission/options`);
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`Mission options failed: ${res.status} ${txt}`);
@@ -120,13 +107,11 @@ export async function readMissionOptions() {
 }
 
 export async function prepareAgentEntry(input = {}) {
-  const userId = readUser();
   if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
-  const res = await fetch(`${API_BASE_URL}/agent-v2/entries/prepare`, {
+  const res = await apiFetch(`${API_BASE_URL}/agent-v2/entries/prepare`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      user_id: userId,
       entry_type: input.entry_type || "",
       exam: input.exam || "",
       course: input.course || "",
@@ -151,13 +136,11 @@ export async function prepareAgentEntry(input = {}) {
 }
 
 export async function logAgentEntry(input = {}) {
-  const userId = readUser();
   if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
-  const res = await fetch(`${API_BASE_URL}/agent-v2/entries/log`, {
+  const res = await apiFetch(`${API_BASE_URL}/agent-v2/entries/log`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      user_id: userId,
       entry_type: input.entry_type || "",
       exam: input.exam || "",
       course: input.course || "",
@@ -182,15 +165,13 @@ export async function logAgentEntry(input = {}) {
 }
 
 export async function readAgentContext(input = {}) {
-  const userId = readUser();
   if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
   const params = new URLSearchParams();
-  params.set("user_id", userId);
   if (input.date) params.set("date", String(input.date));
   if (input.lookback_days != null) params.set("lookback_days", String(input.lookback_days));
   if (input.x_days != null) params.set("x_days", String(input.x_days));
   if (input.y_days != null) params.set("y_days", String(input.y_days));
-  const res = await fetch(`${API_BASE_URL}/agent-v2/context?${params.toString()}`);
+  const res = await apiFetch(`${API_BASE_URL}/agent-v2/context?${params.toString()}`);
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`Agent context failed: ${res.status} ${txt}`);
@@ -199,17 +180,15 @@ export async function readAgentContext(input = {}) {
 }
 
 export async function searchUnified(input = {}) {
-  const userId = readUser();
   if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
   const q = String(input.q || "").trim();
   if (!q) throw new Error("search_unified requires q");
   const params = new URLSearchParams();
-  params.set("user_id", userId);
   params.set("q", q);
   if (input.course) params.set("course", String(input.course));
   if (input.types) params.set("types", String(input.types));
   if (input.limit != null) params.set("limit", String(input.limit));
-  const res = await fetch(`${API_BASE_URL}/agent-v2/search/unified?${params.toString()}`);
+  const res = await apiFetch(`${API_BASE_URL}/agent-v2/search/unified?${params.toString()}`);
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`Search unified failed: ${res.status} ${txt}`);

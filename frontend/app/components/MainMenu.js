@@ -1,21 +1,99 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../lib/auth";
 
-function isActive(groupActive, values) {
-  return values.includes(groupActive);
-}
+const NAV_ITEMS = [
+  { key: "home", label: "Home", href: "/", icon: "🏠" },
+  { key: "recorder", label: "Recorder", href: "/recorder", icon: "🎙️" },
+  { key: "syllabus", label: "Syllabus", href: "/syllabus", icon: "📘" },
+  { key: "mission", label: "Mission", href: "/mission", icon: "🎯" },
+  { key: "qna", label: "QnA", href: "/qna", icon: "💬" },
+  { key: "search", label: "Search", href: "/search", icon: "🔍" },
+  { key: "content", label: "Content", href: "/content", icon: "📂" },
+];
 
 export default function MainMenu({ active = "" }) {
-  const activityActive = isActive(active, ["recorder", "syllabus", "mission"]);
-  const resourcesActive = isActive(active, ["content", "search", "qna"]);
+  const [open, setOpen] = useState(false);
+  const { auth, signOut } = useAuth();
+  const router = useRouter();
+
+  const handleSignOut = () => {
+    signOut();
+    setOpen(false);
+    router.push("/auth/signin");
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [open]);
 
   return (
-    <div className="main-menu">
-      <Link href="/" className={`menu-pill ${active === "home" ? "active" : ""}`}>Home</Link>
+    <>
+      <button
+        className={`nav-hamburger ${open ? "is-open" : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-label={open ? "Close menu" : "Open menu"}
+        aria-expanded={open}
+      >
+        <span className="nav-bar-line" />
+        <span className="nav-bar-line" />
+        <span className="nav-bar-line" />
+      </button>
 
-      <Link href="/recorder" className={`menu-pill ${activityActive ? "active" : ""}`}>Activities</Link>
-      <Link href="/search" className={`menu-pill ${resourcesActive ? "active" : ""}`}>Resources</Link>
-    </div>
+      {/* Reserves the header space the old inline menu used, so page layout is unchanged. */}
+      <div className="main-menu-spacer" aria-hidden="true" />
+
+      <div
+        className={`nav-backdrop ${open ? "show" : ""}`}
+        onClick={() => setOpen(false)}
+        aria-hidden="true"
+      />
+
+      <aside className={`side-drawer ${open ? "open" : ""}`} aria-label="Main menu">
+        <div className="side-drawer-brand">
+          <span className="brand-mark">KD</span>
+          <span className="brand-text">Race Hub</span>
+        </div>
+        <nav className="side-nav">
+          {NAV_ITEMS.map((item, i) => (
+            <Link
+              key={item.key}
+              href={item.href}
+              className={`side-nav-item ${active === item.key ? "active" : ""}`}
+              style={{ transitionDelay: open ? `${90 + i * 45}ms` : "0ms" }}
+              onClick={() => setOpen(false)}
+            >
+              <span className="side-nav-icon" aria-hidden="true">{item.icon}</span>
+              <span className="side-nav-label">{item.label}</span>
+              <span className="side-nav-arrow" aria-hidden="true">›</span>
+            </Link>
+          ))}
+        </nav>
+        <div className="side-drawer-foot">
+          {auth ? (
+            <div className="side-auth-row">
+              <span className="side-auth-email">{auth.name || auth.email}</span>
+              <button className="side-signout-btn" onClick={handleSignOut}>Sign out</button>
+            </div>
+          ) : (
+            <Link href="/auth/signin" className="side-signin-link" onClick={() => setOpen(false)}>
+              Sign in
+            </Link>
+          )}
+        </div>
+      </aside>
+    </>
   );
 }

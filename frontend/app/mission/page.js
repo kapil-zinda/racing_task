@@ -1,12 +1,12 @@
 "use client";
+import { apiFetch } from "../lib/auth";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
-import ActivityInternalMenu from "../components/ActivityInternalMenu";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
-const GLOBAL_USER_STORAGE_KEY = "global_user_id";
+
 function sanitizeMissionTestRows(rows) {
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => ({
@@ -599,7 +599,7 @@ function radarPoints(values, radius, cx, cy) {
     .join(" ");
 }
 
-function buildMissionModel(planExecution, userId) {
+function buildMissionModel(planExecution) {
   const topics = Array.isArray(planExecution?.missionTopics) ? planExecution.missionTopics : [];
   const tests = Array.isArray(planExecution?.missionTestSlots) ? planExecution.missionTestSlots : [];
   const activityByDate = {};
@@ -711,7 +711,7 @@ function buildMissionModel(planExecution, userId) {
 
   const oldestLeak = leaks[0];
   battleTasks.push({ type: "Revise", text: oldestLeak ? `Revise ${oldestLeak.title} today to stop memory decay.` : "Revise one old topic and close a pending cycle." });
-  battleTasks.push({ type: "Test / Recall", text: userId === "divya" ? "Attempt 25 MCQs + 1 short test review." : "Close 1 ticket-style recall sprint + self-quiz." });
+  battleTasks.push({ type: "Test / Recall", text: "Close 1 ticket-style recall sprint + self-quiz." });
 
   const timeline = topics
     .map((t) => {
@@ -799,7 +799,6 @@ export default function MissionControlPage() {
     courseGroupIdRef.current += 1;
     return `course_group_${Date.now()}_${courseGroupIdRef.current}`;
   };
-  const [userId, setUserId] = useState("kapil");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [syllabus, setSyllabus] = useState({ exams: [] });
@@ -834,14 +833,12 @@ export default function MissionControlPage() {
   });
   const [battleDone, setBattleDone] = useState([false, false, false]);
 
-  const loadMission = async (nextUser = userId) => {
+  const loadMission = async () => {
     if (!API_BASE_URL) return;
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/mission-control?user_id=${encodeURIComponent(nextUser)}&lookback_days=90`
-      );
+      const res = await apiFetch(`${API_BASE_URL}/mission-control?lookback_days=90`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Mission API failed: ${res.status} ${txt}`);
@@ -859,20 +856,7 @@ export default function MissionControlPage() {
   };
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      loadMission("kapil");
-      return;
-    }
-    const initialUser = (window.localStorage.getItem(GLOBAL_USER_STORAGE_KEY) || "kapil").toLowerCase() === "divya" ? "divya" : "kapil";
-    setUserId(initialUser);
-    loadMission(initialUser);
-    const onGlobalUser = (e) => {
-      const nextUser = e?.detail?.userId === "divya" ? "divya" : "kapil";
-      setUserId(nextUser);
-      loadMission(nextUser);
-    };
-    window.addEventListener("global-user-change", onGlobalUser);
-    return () => window.removeEventListener("global-user-change", onGlobalUser);
+    loadMission();
   }, []);
 
   useEffect(() => {
@@ -930,11 +914,10 @@ export default function MissionControlPage() {
     setMissionSaving(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/mission`, {
+      const res = await apiFetch(`${API_BASE_URL}/mission`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: userId,
           title: missionDraft.title,
           target_date: missionDraft.target_date,
           status: missionDraft.status,
@@ -964,7 +947,7 @@ export default function MissionControlPage() {
     () => buildMissionExecution(missionConfig?.plan, syllabus),
     [missionConfig?.plan, syllabus],
   );
-  const mission = useMemo(() => buildMissionModel(planExecution, userId), [planExecution, userId]);
+  const mission = useMemo(() => buildMissionModel(planExecution), [planExecution]);
   const wheelAxes = mission.axes?.length ? mission.axes : ["No Mission Dimension"];
   const radarValuesCoverage = wheelAxes.map((axis) => mission.axisStats[axis]?.coverage || 0);
   const radarValuesRetention = wheelAxes.map((axis) => mission.axisStats[axis]?.retention || 0);
@@ -1118,7 +1101,6 @@ export default function MissionControlPage() {
 
       <header className="hero mission-hero">
         <MainMenu active="mission" />
-        <ActivityInternalMenu active="mission" />
         <h1>UPSC Mission Control</h1>
         <p className="subtext">Distance to selection, leakage, daily battle and trajectory in one view.</p>
 
@@ -1128,7 +1110,7 @@ export default function MissionControlPage() {
 
       <section className="milestone-panel mission-controls">
         <div className="session-form-grid">
-          <button className="btn-day" onClick={() => loadMission(userId)} disabled={loading}>
+          <button className="btn-day" onClick={() => loadMission()} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh Mission"}
           </button>
           <button className="btn-day secondary" onClick={() => setMissionModalOpen(true)} disabled={loading}>

@@ -94,8 +94,8 @@ def _duration_to_minutes(raw: str) -> int:
 
 
 def get_extras_payload(user_id: str, date_value: str | None = None) -> Dict[str, Any]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     day = _normalize_date(date_value)
     _ensure_indexes()
@@ -107,8 +107,8 @@ def get_extras_payload(user_id: str, date_value: str | None = None) -> Dict[str,
 
 
 def save_extras_payload(user_id: str, rows: List[Dict[str, Any]], date_value: str | None = None) -> Dict[str, Any]:
-    uid = (user_id or "").strip().lower()
-    if uid not in PLAYERS:
+    uid = (user_id or "").strip()
+    if not uid:
         raise ValueError("Invalid user_id")
     day = _normalize_date(date_value)
     _ensure_indexes()

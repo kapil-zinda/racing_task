@@ -1,8 +1,13 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from mangum import Mangum
 
 from .constants import PLAYERS, POINTS_MAP
+from . import auth_service as _auth_service
+from .auth_router import router as auth_router
+from .context import settings as _settings
 from .content_domain import (
     copy_item,
     complete_upload,
@@ -103,6 +108,34 @@ from .session_domain import (
 )
 
 
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
+
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        cfg = _settings()
+        auth_required = cfg.get("auth_required", False)
+        path = request.url.path
+        is_public = path in _PUBLIC_PATHS or path.startswith("/auth/")
+        api_key = request.headers.get("X-API-Key", "")
+        if api_key:
+            user = _auth_service.get_user_by_api_key(api_key)
+            if user:
+                request.state.user = user
+            elif auth_required and not is_public:
+                return JSONResponse({"detail": "Invalid API key"}, status_code=401)
+        elif auth_required and not is_public:
+            return JSONResponse({"detail": "Missing X-API-Key header"}, status_code=401)
+        return await call_next(request)
+
+
+def _req_user_id(request: Request) -> str:
+    user = getattr(request.state, "user", None)
+    if isinstance(user, dict):
+        return user.get("user_id") or ""
+    return ""
+
+
 def _raise_as_http(err: Exception, endpoint_name: str) -> None:
     if isinstance(err, HTTPException):
         raise err
@@ -119,6 +152,7 @@ def _raise_as_http(err: Exception, endpoint_name: str) -> None:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Kapil vs Divya Race API", version="2.0.0")
+    app.add_middleware(APIKeyMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -126,6 +160,18 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(auth_router)
+
+    @app.on_event("startup")
+    def _startup():
+        _auth_service.init_auth_service()
+
+    @app.get("/user/me")
+    def user_me(request: Request):
+        user = getattr(request.state, "user", None)
+        if not user:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        return user
 
     @app.get("/state")
     def get_state(date: str | None = Query(default=None)):
@@ -142,11 +188,9 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "GET /days")
 
     @app.get("/syllabus")
-    def get_syllabus(user_id: str = Query(default="kapil")):
+    def get_syllabus(request: Request):
         try:
-            if user_id not in PLAYERS:
-                raise HTTPException(status_code=400, detail="Invalid user_id")
-            return build_syllabus_payload(user_id)
+            return build_syllabus_payload(_req_user_id(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /syllabus")
 
@@ -269,16 +313,16 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "GET /pdf-search/query")
 
     @app.get("/qna/sessions")
-    def qna_list_sessions(user_id: str = Query(default="kapil")):
+    def qna_list_sessions(request: Request):
         try:
-            return list_qna_sessions(user_id)
+            return list_qna_sessions(_req_user_id(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /qna/sessions")
 
     @app.post("/qna/sessions")
-    def qna_create_session(payload: QnaSessionCreateRequest):
+    def qna_create_session(request: Request, payload: QnaSessionCreateRequest):
         try:
-            return create_qna_session(payload.user_id, payload.title)
+            return create_qna_session(_req_user_id(request) or payload.user_id, payload.title)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /qna/sessions")
 
@@ -298,12 +342,11 @@ def create_app() -> FastAPI:
 
     @app.get("/mission-control")
     def get_mission_control(
-        user_id: str = Query(default="kapil"),
+        request: Request,
         lookback_days: int = Query(default=90, ge=14, le=365),
     ):
         try:
-            if user_id not in PLAYERS:
-                raise HTTPException(status_code=400, detail="Invalid user_id")
+            user_id = _req_user_id(request)
             payload = build_mission_control_payload(user_id, lookback_days)
             payload["mission"] = get_or_create_mission(user_id)
             payload["mission_progress"] = mission_progress_payload(user_id, lookback_days)
@@ -312,10 +355,9 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "GET /mission-control")
 
     @app.get("/mission")
-    def get_mission(user_id: str = Query(default="kapil"), lookback_days: int = Query(default=90, ge=14, le=365)):
+    def get_mission(request: Request, lookback_days: int = Query(default=90, ge=14, le=365)):
         try:
-            if user_id not in PLAYERS:
-                raise HTTPException(status_code=400, detail="Invalid user_id")
+            user_id = _req_user_id(request)
             return {
                 "mission": get_or_create_mission(user_id),
                 "mission_progress": mission_progress_payload(user_id, lookback_days),
@@ -325,12 +367,11 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "GET /mission")
 
     @app.put("/mission")
-    def save_mission(payload: MissionUpsertRequest):
+    def save_mission(request: Request, payload: MissionUpsertRequest):
         try:
-            if payload.user_id not in PLAYERS:
-                raise HTTPException(status_code=400, detail="Invalid user_id")
+            user_id = _req_user_id(request) or payload.user_id
             mission = upsert_mission(
-                payload.user_id,
+                user_id,
                 title=payload.title,
                 target_date=payload.target_date,
                 status=payload.status,
@@ -341,37 +382,35 @@ def create_app() -> FastAPI:
             return {
                 "message": "Mission saved",
                 "mission": mission,
-                "mission_progress": mission_progress_payload(payload.user_id, 90),
-                "selector_options": mission_selector_options(payload.user_id),
+                "mission_progress": mission_progress_payload(user_id, 90),
+                "selector_options": mission_selector_options(user_id),
             }
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "PUT /mission")
 
     @app.get("/mission/options")
-    def get_mission_options(user_id: str = Query(default="kapil")):
+    def get_mission_options(request: Request):
         try:
-            if user_id not in PLAYERS:
-                raise HTTPException(status_code=400, detail="Invalid user_id")
-            return mission_selector_options(user_id)
+            return mission_selector_options(_req_user_id(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /mission/options")
 
     @app.get("/agent-v2/context")
     def agent_v2_context(
-        user_id: str = Query(default="kapil"),
+        request: Request,
         date: str | None = Query(default=None),
         lookback_days: int = Query(default=14, ge=1, le=365),
         x_days: int = Query(default=7, ge=1, le=60),
         y_days: int = Query(default=15, ge=1, le=90),
     ):
         try:
-            return agent_context_payload(user_id, date, lookback_days, x_days, y_days)
+            return agent_context_payload(_req_user_id(request), date, lookback_days, x_days, y_days)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /agent-v2/context")
 
     @app.get("/agent-v2/reports/period")
     def agent_v2_report_period(
-        user_id: str = Query(default="kapil"),
+        request: Request,
         from_date: str = Query(..., alias="from"),
         to_date: str = Query(..., alias="to"),
         group_by: str = Query(default="day"),
@@ -379,26 +418,26 @@ def create_app() -> FastAPI:
         y_days: int = Query(default=15, ge=1, le=90),
     ):
         try:
-            return report_period_payload(user_id, from_date, to_date, group_by, x_days, y_days)
+            return report_period_payload(_req_user_id(request), from_date, to_date, group_by, x_days, y_days)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /agent-v2/reports/period")
 
     @app.get("/agent-v2/reports/revision-gaps")
     def agent_v2_revision_gaps(
-        user_id: str = Query(default="kapil"),
+        request: Request,
         x_days: int = Query(default=7, ge=1, le=60),
         y_days: int = Query(default=15, ge=1, le=90),
         limit: int = Query(default=200, ge=1, le=1000),
         reference_date: str | None = Query(default=None),
     ):
         try:
-            return report_revision_gaps_payload(user_id, x_days, y_days, limit, reference_date)
+            return report_revision_gaps_payload(_req_user_id(request), x_days, y_days, limit, reference_date)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /agent-v2/reports/revision-gaps")
 
     @app.get("/agent-v2/recommendations/next-actions")
     def agent_v2_next_actions(
-        user_id: str = Query(default="kapil"),
+        request: Request,
         duration_min: int = Query(default=60, ge=15, le=720),
         mode: str = Query(default="supportive"),
         limit: int = Query(default=5, ge=1, le=20),
@@ -406,54 +445,54 @@ def create_app() -> FastAPI:
         y_days: int = Query(default=15, ge=1, le=90),
     ):
         try:
-            return recommendations_next_actions_payload(user_id, duration_min, mode, limit, x_days, y_days)
+            return recommendations_next_actions_payload(_req_user_id(request), duration_min, mode, limit, x_days, y_days)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /agent-v2/recommendations/next-actions")
 
     @app.get("/agent-v2/search/unified")
     def agent_v2_search_unified(
+        request: Request,
         q: str = Query(...),
-        user_id: str = Query(default="kapil"),
         course: str | None = Query(default=None),
         types: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
     ):
         try:
-            return search_unified_payload(q, user_id, course, types, limit)
+            return search_unified_payload(q, _req_user_id(request), course, types, limit)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /agent-v2/search/unified")
 
     @app.get("/agent-v2/search/suggest")
     def agent_v2_search_suggest(
-        user_id: str = Query(default="kapil"),
+        request: Request,
         q: str | None = Query(default=None),
         limit: int = Query(default=12, ge=1, le=50),
     ):
         try:
-            return search_suggest_payload(user_id, q, limit)
+            return search_suggest_payload(_req_user_id(request), q, limit)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /agent-v2/search/suggest")
 
     @app.get("/agent-v2/state/range")
     def agent_v2_state_range(
+        request: Request,
         from_date: str = Query(..., alias="from"),
         to_date: str = Query(..., alias="to"),
-        user_id: str | None = Query(default=None),
         include_history: bool = Query(default=False),
     ):
         try:
-            return state_range_payload(from_date, to_date, user_id, include_history)
+            return state_range_payload(from_date, to_date, _req_user_id(request) or None, include_history)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /agent-v2/state/range")
 
     @app.post("/agent-v2/aggregates/rebuild")
     def agent_v2_rebuild_aggregates(
+        request: Request,
         from_date: str | None = Query(default=None, alias="from"),
         to_date: str | None = Query(default=None, alias="to"),
-        user_id: str | None = Query(default=None),
     ):
         try:
-            return rebuild_daily_aggregates_payload(from_date, to_date, user_id)
+            return rebuild_daily_aggregates_payload(from_date, to_date, _req_user_id(request) or None)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /agent-v2/aggregates/rebuild")
 
@@ -465,10 +504,10 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /agent-v2/aggregates/refresh")
 
     @app.post("/agent-v2/create-agent")
-    def agent_v2_create(payload: AgentV2CreateRequest):
+    def agent_v2_create(request: Request, payload: AgentV2CreateRequest):
         try:
             return create_agent_v2_session_payload(
-                payload.user_id,
+                _req_user_id(request) or payload.user_id,
                 mode=payload.mode,
                 page_context=payload.page_context,
                 current_session_id=payload.current_session_id,
@@ -477,10 +516,10 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /agent-v2/create-agent")
 
     @app.post("/agent-v2/realtime/token")
-    def agent_v2_realtime_token(payload: AgentV2RealtimeTokenRequest):
+    def agent_v2_realtime_token(request: Request, payload: AgentV2RealtimeTokenRequest):
         try:
             return create_agent_v2_realtime_token_payload(
-                payload.user_id,
+                _req_user_id(request) or payload.user_id,
                 page_context=payload.page_context,
                 voice=payload.voice,
             )
@@ -488,11 +527,11 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /agent-v2/realtime/token")
 
     @app.post("/agent-v2/chat")
-    def agent_v2_chat(payload: AgentV2ChatRequest):
+    def agent_v2_chat(request: Request, payload: AgentV2ChatRequest):
         try:
             return run_agent_v2_chat_payload(
                 payload.session_id,
-                payload.user_id,
+                _req_user_id(request) or payload.user_id,
                 payload.message,
                 input_audio_base64=payload.input_audio_base64,
                 input_audio_mime_type=payload.input_audio_mime_type,
@@ -514,10 +553,10 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "GET /agent-v2/session/{id}")
 
     @app.post("/agent-v2/memory")
-    def agent_v2_memory(payload: AgentV2MemoryUpsertRequest):
+    def agent_v2_memory(request: Request, payload: AgentV2MemoryUpsertRequest):
         try:
             return upsert_agent_v2_memory_payload(
-                payload.user_id,
+                _req_user_id(request) or payload.user_id,
                 payload.key,
                 payload.value,
                 payload.importance,
@@ -528,21 +567,21 @@ def create_app() -> FastAPI:
 
     @app.get("/agent-v2/suggestions")
     def agent_v2_suggestions(
-        user_id: str = Query(default="kapil"),
+        request: Request,
         duration_min: int = Query(default=60, ge=15, le=720),
         mode: str = Query(default="supportive"),
         limit: int = Query(default=5, ge=1, le=20),
     ):
         try:
-            return agent_v2_suggestions_payload(user_id, duration_min, mode, limit)
+            return agent_v2_suggestions_payload(_req_user_id(request), duration_min, mode, limit)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /agent-v2/suggestions")
 
     @app.post("/agent-v2/entries/prepare")
-    def agent_v2_prepare_entry(payload: AgentV2EntryRequest):
+    def agent_v2_prepare_entry(request: Request, payload: AgentV2EntryRequest):
         try:
             return prepare_entry_payload(
-                payload.user_id,
+                _req_user_id(request) or payload.user_id,
                 payload.entry_type,
                 exam=payload.exam,
                 course=payload.course,
@@ -561,10 +600,10 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /agent-v2/entries/prepare")
 
     @app.post("/agent-v2/entries/log")
-    def agent_v2_log_entry(payload: AgentV2EntryRequest):
+    def agent_v2_log_entry(request: Request, payload: AgentV2EntryRequest):
         try:
             return log_entry_payload(
-                payload.user_id,
+                _req_user_id(request) or payload.user_id,
                 payload.entry_type,
                 confirm=payload.confirm,
                 exam=payload.exam,
@@ -584,19 +623,20 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /agent-v2/entries/log")
 
     @app.get("/extras")
-    def get_extras(user_id: str = Query(default="kapil"), date: str | None = Query(default=None)):
+    def get_extras(request: Request, date: str | None = Query(default=None)):
         try:
-            return get_extras_payload(user_id, date)
+            return get_extras_payload(_req_user_id(request), date)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /extras")
 
     @app.put("/extras")
-    def save_extras(payload: ExtrasUpsertRequest):
+    def save_extras(request: Request, payload: ExtrasUpsertRequest):
         try:
+            user_id = _req_user_id(request) or payload.user_id
             rows = [r.model_dump() for r in payload.rows]
-            result = save_extras_payload(payload.user_id, rows, payload.date)
+            result = save_extras_payload(user_id, rows, payload.date)
             try:
-                refresh_daily_aggregate(payload.user_id, current_date_str())
+                refresh_daily_aggregate(user_id, current_date_str())
             except Exception as agg_err:  # noqa: BLE001
                 logger.warning("agent-v2 aggregate refresh failed after PUT /extras: %s", agg_err)
             return result
@@ -604,15 +644,16 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "PUT /extras")
 
     @app.post("/points")
-    def add_points(payload: AddPointsRequest):
+    def add_points(request: Request, payload: AddPointsRequest):
         try:
-            if payload.player_id not in PLAYERS:
-                raise HTTPException(status_code=400, detail="Unknown player_id")
             if payload.action_type not in POINTS_MAP:
                 raise HTTPException(status_code=400, detail="Unknown action_type")
-            result = add_points_payload(payload.player_id, payload.action_type, payload.test_type, payload.detail)
+            player_id = _req_user_id(request) or payload.player_id
+            if not player_id:
+                raise HTTPException(status_code=400, detail="player_id required")
+            result = add_points_payload(player_id, payload.action_type, payload.test_type, payload.detail)
             try:
-                refresh_daily_aggregate(payload.player_id, result.get("date") or current_date_str())
+                refresh_daily_aggregate(player_id, result.get("date") or current_date_str())
             except Exception as agg_err:  # noqa: BLE001
                 logger.warning("agent-v2 aggregate refresh failed after POST /points: %s", agg_err)
             return result
@@ -649,16 +690,22 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /reset")
 
     @app.post("/sessions")
-    def create_session(payload: CreateSessionRequest):
+    def create_session(request: Request, payload: CreateSessionRequest):
         try:
+            uid = _req_user_id(request) or payload.user_id
+            payload = payload.model_copy(update={"user_id": uid})
             return create_session_payload(payload)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /sessions")
 
     @app.get("/sessions")
-    def list_sessions(date: str | None = Query(default=None), user_id: str | None = Query(default=None)):
+    def list_sessions(
+        request: Request,
+        date: str | None = Query(default=None),
+        scope: str | None = Query(default=None),
+    ):
         try:
-            return list_sessions_payload(date, user_id)
+            return list_sessions_payload(date, _req_user_id(request), scope)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /sessions")
 
@@ -675,9 +722,9 @@ def create_app() -> FastAPI:
             result = update_session_status_payload(session_id, payload)
             try:
                 session = result.get("session", {}) if isinstance(result, dict) else {}
-                uid = (session.get("user_id") or "").strip().lower()
+                uid = (session.get("user_id") or "").strip()
                 d = (session.get("date") or current_date_str()).strip()
-                if uid in PLAYERS and d:
+                if uid and d:
                     refresh_daily_aggregate(uid, d)
             except Exception as agg_err:  # noqa: BLE001
                 logger.warning("agent-v2 aggregate refresh failed after POST /sessions/{id}/status: %s", agg_err)
@@ -690,9 +737,9 @@ def create_app() -> FastAPI:
         try:
             result = delete_session_payload(session_id)
             try:
-                uid = (result.get("user_id") or "").strip().lower()
+                uid = (result.get("user_id") or "").strip()
                 d = (result.get("date") or current_date_str()).strip()
-                if uid in PLAYERS and d:
+                if uid and d:
                     refresh_daily_aggregate(uid, d)
             except Exception as agg_err:  # noqa: BLE001
                 logger.warning("agent-v2 aggregate refresh failed after POST /sessions/{id}/delete: %s", agg_err)

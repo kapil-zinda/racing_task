@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import MainMenu from "../components/MainMenu";
-import ActivityInternalMenu from "../components/ActivityInternalMenu";
 import { AGENT_PENDING_RECORDER_ACTION_KEY, AGENT_RECORDER_EVENT, AGENT_RECORDER_STATUS_EVENT } from "../lib/agent/constants";
+import { apiFetch, useAuth } from "../lib/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -11,8 +12,8 @@ const MULTIPART_COMPLETE_RETRIES = 3;
 const MULTIPART_COMPLETE_RETRY_DELAY_MS = 1200;
 const RECORDER_FLUSH_INTERVAL_MS = 1500;
 const MULTIPART_FILE_PART_BYTES = 6 * 1024 * 1024;
-const GLOBAL_USER_STORAGE_KEY = "global_user_id";
 const SESSION_MEDIA_TYPES = ["audio", "video", "screen", "attachment"];
+
 const RECORDER_TYPES = [
   { value: "time", label: "Time" },
   { value: "audio", label: "Audio" },
@@ -22,6 +23,7 @@ const RECORDER_TYPES = [
   { value: "uploader", label: "Uploader" }
 ];
 const OTHER_VALUE = "__other__";
+const SIMP_RECORD_VALUE = "simp_record";
 const getSubjectsForExam = (examType, catalog = {}) => (catalog[examType] || []).map((entry) => entry.subject);
 
 const getTopicsForSelection = (examType, subject, catalog = {}) => {
@@ -54,12 +56,6 @@ function buildTestsCatalogFromPlan(testPlanRows) {
   return out;
 }
 
-function formatTime(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
 
 function formatDuration(totalSeconds) {
   const sec = Math.max(0, Number(totalSeconds) || 0);
@@ -138,6 +134,7 @@ function broadcastRecorderStatus(status) {
 }
 
 export default function RecorderPage() {
+  const { auth } = useAuth();
   const defaultSubject = "";
   const defaultTopic = "";
   const [missionSelector, setMissionSelector] = useState({ exam_options: [], catalog: {}, plan: {} });
@@ -170,8 +167,7 @@ export default function RecorderPage() {
     [missionSelector.exam_options, activeCatalog],
   );
   const [sessionForm, setSessionForm] = useState({
-    user_id: "kapil",
-    exam_type: "prelims",
+    exam_type: SIMP_RECORD_VALUE,
     subject: defaultSubject,
     topic: defaultTopic,
     exam_type_other: "",
@@ -182,6 +178,15 @@ export default function RecorderPage() {
     notes: "",
   });
   const [sessionList, setSessionList] = useState([]);
+  const [listScope, setListScope] = useState("today"); // "today" | "simple"
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [recordView, setRecordView] = useState("full"); // "full" | "float"
+  const [recorderArming, setRecorderArming] = useState(false); // overlay mounted before streams bind
+  const [floatPos, setFloatPos] = useState(null); // {x, y} when dragged
+  const [playerModal, setPlayerModal] = useState({ open: false, mediaType: "", url: "", title: "", loading: false });
+  const [playerRate, setPlayerRate] = useState(1);
+  const playerMediaRef = useRef(null);
+  const playerWrapRef = useRef(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionError, setSessionError] = useState("");
   const [deletingSessionIds, setDeletingSessionIds] = useState({});
@@ -192,7 +197,6 @@ export default function RecorderPage() {
   const [timerState, setTimerState] = useState({ running: false, startedAt: 0, baseElapsed: 0 });
   const [nowTick, setNowTick] = useState(Date.now());
   const [playbackUrls, setPlaybackUrls] = useState({ audio: "", video: "", screen: "", attachment: "" });
-  const [playbackRates, setPlaybackRates] = useState({ video: 1, screen: 1 });
   const [explainerModalOpen, setExplainerModalOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState({ uploader: null, explainerAttachment: null, explainerAudio: null });
   const [explainerAudioSource, setExplainerAudioSource] = useState("upload");
@@ -215,6 +219,10 @@ export default function RecorderPage() {
     screen: createEmptyMultipartState(),
     attachment: createEmptyMultipartState()
   });
+  const recordingBoxRef = useRef(null);
+  // Always holds the active session, so multipart-upload callbacks created during
+  // initRecorders never read a stale `selectedSession` (e.g. on create-and-start).
+  const selectedSessionRef = useRef(null);
   const cameraPreviewRef = useRef(null);
   const screenPreviewRef = useRef(null);
   const combinedPreviewRef = useRef(null);
@@ -236,29 +244,9 @@ export default function RecorderPage() {
   const explainerRecorderChunksRef = useRef([]);
   const recorderFlushTimersRef = useRef({});
 
-  const applyGlobalUser = async (nextUser) => {
-    const user = nextUser === "divya" ? "divya" : "kapil";
-    setSessionForm((p) => ({ ...p, user_id: user }));
-    if (API_BASE_URL) {
-      setMissionSelectorLoading(true);
-      try {
-        const optionsRes = await fetch(`${API_BASE_URL}/mission/options?user_id=${encodeURIComponent(user)}`);
-        if (optionsRes.ok) {
-          const optionsData = await optionsRes.json();
-          setMissionSelector({ exam_options: optionsData.exam_options || [], catalog: optionsData.catalog || {}, plan: optionsData.plan || {} });
-        } else {
-          setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
-        }
-      } catch (_) {
-        setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
-      } finally {
-        setMissionSelectorLoading(false);
-      }
-    } else {
-      setMissionSelector({ exam_options: [], catalog: {}, plan: {} });
-      setMissionSelectorLoading(false);
-    }
-    await fetchSessions(user);
+  const switchListScope = async (scope) => {
+    setListScope(scope);
+    await fetchSessions(scope);
   };
 
   useEffect(() => {
@@ -286,21 +274,21 @@ export default function RecorderPage() {
   }, [openSessionMenuId]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const initialUser = (window.localStorage.getItem(GLOBAL_USER_STORAGE_KEY) || "kapil").toLowerCase() === "divya" ? "divya" : "kapil";
-    applyGlobalUser(initialUser).catch(() => {});
-    const onGlobalUser = (e) => {
-      const nextUser = e?.detail?.userId;
-      applyGlobalUser(nextUser).catch(() => {});
-    };
-    window.addEventListener("global-user-change", onGlobalUser);
-    return () => window.removeEventListener("global-user-change", onGlobalUser);
-  }, []);
+    if (!API_BASE_URL) return;
+    apiFetch(`${API_BASE_URL}/mission/options`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        setMissionSelector({ exam_options: data.exam_options || [], catalog: data.catalog || {}, plan: data.plan || {} });
+      })
+      .catch(() => {});
+    fetchSessions();
+  }, [API_BASE_URL]);
 
   useEffect(() => {
     if (!activeExamOptions.length) return;
     const validExamValues = new Set(activeExamOptions.map((o) => o.value));
     setSessionForm((prev) => {
+      if (prev.exam_type === SIMP_RECORD_VALUE) return prev;
       const nextExam = validExamValues.has(prev.exam_type) ? prev.exam_type : activeExamOptions[0].value;
       const subjects = getSubjectsForExam(nextExam, activeCatalog);
       const nextSubject = subjects.includes(prev.subject) ? prev.subject : (subjects[0] || OTHER_VALUE);
@@ -404,10 +392,30 @@ export default function RecorderPage() {
   }, []);
 
   useEffect(() => {
+    selectedSessionRef.current = selectedSession;
+  }, [selectedSession]);
+
+  useEffect(() => {
     bindPreview(cameraPreviewRef, streamRefs.current.video || null);
     bindPreview(screenPreviewRef, streamRefs.current.screen || null);
     bindPreview(combinedPreviewRef, compositeStreamRef.current || null);
   }, [selectedSession?.status, selectedSession?._id, timerState.running, liveControls.sharingScreen]);
+
+  // The live preview/visualizer now live inside the recording overlay, which mounts only
+  // once recording is active and remounts its nodes when toggling fullscreen/float — so
+  // rebind streams and restart the audio visualizer whenever that happens.
+  useEffect(() => {
+    const active = ["started", "paused", "resumed"].includes(selectedSession?.status);
+    if (!active) return;
+    bindPreview(cameraPreviewRef, streamRefs.current.video || null);
+    bindPreview(screenPreviewRef, streamRefs.current.screen || null);
+    bindPreview(combinedPreviewRef, compositeStreamRef.current || null);
+    const modes = selectedSession?.modes || [];
+    const audioOnly = modes.includes("audio") && !modes.includes("video") && !modes.includes("screen");
+    if (audioOnly && streamRefs.current.audio && audioVizCanvasRef.current) {
+      startAudioVisualizer(streamRefs.current.audio);
+    }
+  }, [selectedSession?.status, selectedSession?._id, recordView]);
 
   useEffect(() => {
     if (!selectedSession?._id) return;
@@ -492,6 +500,12 @@ export default function RecorderPage() {
   };
 
   const buildSessionSubjectTopic = () => {
+    if (sessionForm.exam_type === SIMP_RECORD_VALUE) {
+      // Simple Record mode: only record_type + record_note are filled, so
+      // auto-fill subject/topic (backend requires them) from the note.
+      const note = (sessionForm.notes || "").trim();
+      return { subject: "Simple Record", topic: note ? note.slice(0, 60) : "Quick Record" };
+    }
     const subject = (selectedSubjectValue || "").trim();
     const topic = (selectedTopicValue || "").trim();
     return { subject, topic };
@@ -513,12 +527,13 @@ export default function RecorderPage() {
     };
   };
 
-  const fetchSessions = async (userValue = sessionForm.user_id) => {
-    if (!API_BASE_URL || !userValue) return [];
+  const fetchSessions = async (scopeValue = listScope) => {
+    if (!API_BASE_URL) return [];
     setSessionLoading(true);
     setSessionError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/sessions?user_id=${encodeURIComponent(userValue)}`);
+      const scopeQuery = scopeValue === "simple" ? "?scope=simple" : "";
+      const res = await apiFetch(`${API_BASE_URL}/sessions${scopeQuery}`);
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Sessions API failed: ${res.status} ${txt}`);
@@ -543,30 +558,30 @@ export default function RecorderPage() {
   };
 
   const createSession = async () => {
-    if (!API_BASE_URL) return;
+    if (!API_BASE_URL) return null;
     if (sessionForm.recorder_type === "pdf_explainer") {
       setSessionError("For PDF Explainer, use the Done button after selecting PDF/image and audio.");
-      return;
+      return null;
     }
     setSessionError("");
     const { subject, topic } = buildSessionSubjectTopic();
     const notes = sessionForm.notes.trim();
     if (!subject || !topic) {
       setSessionError("Subject and topic are required.");
-      return;
+      return null;
     }
     try {
       const testRef = buildSessionTestRef();
       const payload = {
-        user_id: sessionForm.user_id,
         subject,
         topic,
         session_type: sessionForm.session_type,
         recorder_type: sessionForm.recorder_type,
         notes,
+        simple_record: sessionForm.exam_type === SIMP_RECORD_VALUE,
         ...testRef,
       };
-      const res = await fetch(`${API_BASE_URL}/sessions`, {
+      const res = await apiFetch(`${API_BASE_URL}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -584,10 +599,83 @@ export default function RecorderPage() {
       setPendingFinalizeModes([]);
       setTimerState({ running: false, startedAt: 0, baseElapsed: normalized?.elapsed_seconds || 0 });
       setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
-      await fetchSessions(sessionForm.user_id);
+      await fetchSessions();
+      return normalized;
+    } catch (err) {
+      setSessionError(String(err.message || err));
+      return null;
+    }
+  };
+
+  // Create a live session and immediately begin recording (no idle "created" entry).
+  const createAndStart = async () => {
+    const created = await createSession();
+    if (!created?._id) return;
+    setCreateModalOpen(false);
+    setRecordView("full");
+    setFloatPos(null);
+    await startSession(created);
+  };
+
+  // Uploader flow: create the session and upload the chosen file in one step.
+  const createAndUpload = async () => {
+    const file = uploadFiles.uploader;
+    if (!file) {
+      setSessionError("Select an audio/video file to upload first.");
+      return;
+    }
+    const created = await createSession();
+    if (!created?._id) return;
+    try {
+      const mediaType = (file.type || "").startsWith("audio/") ? "audio" : "video";
+      await uploadMediaForSession(created._id, mediaType, file, file.name);
+      setUploadFiles((prev) => ({ ...prev, uploader: null }));
+      await fetchSessions();
+      setCreateModalOpen(false);
     } catch (err) {
       setSessionError(String(err.message || err));
     }
+  };
+
+  const enterPip = async () => {
+    let videoEl = null;
+    if (hasVideoMode && hasScreenMode) videoEl = combinedPreviewRef.current;
+    else if (hasVideoMode) videoEl = cameraPreviewRef.current;
+    else if (hasScreenMode) videoEl = screenPreviewRef.current;
+    if (!videoEl) {
+      setSessionError("Picture-in-Picture is available for video/screen/call recordings.");
+      return;
+    }
+    try {
+      if (typeof document !== "undefined" && document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        await videoEl.requestPictureInPicture();
+      }
+    } catch (err) {
+      setSessionError(`Picture-in-Picture failed: ${String(err.message || err)}`);
+    }
+  };
+
+  // Drag the floating recorder window (pointer capture keeps it smooth across the page).
+  const onFloatPointerDown = (e) => {
+    if (recordView !== "float") return;
+    const box = recordingBoxRef.current;
+    if (!box) return;
+    const rect = box.getBoundingClientRect();
+    const offX = e.clientX - rect.left;
+    const offY = e.clientY - rect.top;
+    const onMove = (ev) => {
+      const x = Math.max(0, Math.min(window.innerWidth - rect.width, ev.clientX - offX));
+      const y = Math.max(0, Math.min(window.innerHeight - rect.height, ev.clientY - offY));
+      setFloatPos({ x, y });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   };
 
   const hasLocalRecordingInThisTab = () => {
@@ -643,7 +731,7 @@ export default function RecorderPage() {
     setSessionError("");
     setDeletingSessionIds((prev) => ({ ...prev, [sid]: true }));
     try {
-      const res = await fetch(`${API_BASE_URL}/sessions/${sid}/delete`, { method: "POST" });
+      const res = await apiFetch(`${API_BASE_URL}/sessions/${sid}/delete`, { method: "POST" });
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Delete session failed: ${res.status} ${txt}`);
@@ -655,7 +743,7 @@ export default function RecorderPage() {
         setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
         broadcastRecorderStatus("idle");
       }
-      await fetchSessions(session?.user_id || sessionForm.user_id);
+      await fetchSessions();
     } catch (err) {
       setSessionError(String(err.message || err));
     } finally {
@@ -806,12 +894,13 @@ export default function RecorderPage() {
   const ensureMultipartInitialized = async (mode, contentType) => {
     const state = multipartUploadsRef.current[mode];
     if (state.initialized) return state;
-    if (!API_BASE_URL || !selectedSession?._id) {
+    const activeId = selectedSessionRef.current?._id || selectedSession?._id;
+    if (!API_BASE_URL || !activeId) {
       throw new Error("Session not ready for multipart upload");
     }
 
     const extension = getExtensionFromContentType(contentType || getMimeForMode(mode));
-    const res = await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/multipart/start`, {
+    const res = await apiFetch(`${API_BASE_URL}/sessions/${activeId}/multipart/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -840,7 +929,8 @@ export default function RecorderPage() {
     await ensureMultipartInitialized(mode, blob.type || getMimeForMode(mode));
     const partNumber = state.nextPartNumber;
 
-    const presignRes = await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/multipart/presign-part`, {
+    const activeId = selectedSessionRef.current?._id || selectedSession?._id;
+    const presignRes = await apiFetch(`${API_BASE_URL}/sessions/${activeId}/multipart/presign-part`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -904,8 +994,9 @@ export default function RecorderPage() {
     if (state.completedParts.length === 0) return;
 
     let lastErr = null;
+    const activeId = selectedSessionRef.current?._id || selectedSession?._id;
     for (let attempt = 1; attempt <= MULTIPART_COMPLETE_RETRIES; attempt += 1) {
-      const completeRes = await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/multipart/complete`, {
+      const completeRes = await apiFetch(`${API_BASE_URL}/sessions/${activeId}/multipart/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -929,8 +1020,9 @@ export default function RecorderPage() {
   const abortMultipartForMode = async (mode) => {
     const state = multipartUploadsRef.current[mode];
     if (!state.initialized || !state.uploadId) return;
+    const activeId = selectedSessionRef.current?._id || selectedSession?._id;
     try {
-      await fetch(`${API_BASE_URL}/sessions/${selectedSession._id}/multipart/abort`, {
+      await apiFetch(`${API_BASE_URL}/sessions/${activeId}/multipart/abort`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1016,7 +1108,7 @@ export default function RecorderPage() {
       const camTrack = camStream?.getVideoTracks?.()[0];
       const hasCamera = Boolean(camTrack);
       const hasCameraActive = Boolean(camTrack?.enabled);
-      const recorderName = capitalize(selectedSession?.user_id || sessionForm.user_id || "Recorder");
+      const recorderName = capitalize(auth?.name || "Recorder");
 
       ctx.fillStyle = "#0b1020";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1164,7 +1256,7 @@ export default function RecorderPage() {
       ? timerState.baseElapsed + Math.floor((Date.now() - timerState.startedAt) / 1000)
       : timerState.baseElapsed;
     try {
-      const res = await fetch(`${API_BASE_URL}/sessions/${sid}/status`, {
+      const res = await apiFetch(`${API_BASE_URL}/sessions/${sid}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1184,7 +1276,7 @@ export default function RecorderPage() {
       }
       broadcastRecorderStatus(updatedSession?.status || status);
       setTimerState({ running: false, startedAt: 0, baseElapsed: updatedSession?.elapsed_seconds || elapsed });
-      await fetchSessions(updatedSession?.user_id || activeSession?.user_id || sessionForm.user_id);
+      await fetchSessions();
     } catch (err) {
       setSessionError(String(err.message || err));
       throw err;
@@ -1212,7 +1304,7 @@ export default function RecorderPage() {
     // Refresh once to avoid stale local state, but do not hard-block on local text fields.
     if (API_BASE_URL) {
       try {
-        const oneRes = await fetch(`${API_BASE_URL}/sessions/${activeSessionId}`);
+        const oneRes = await apiFetch(`${API_BASE_URL}/sessions/${activeSessionId}`);
         if (oneRes.ok) {
           const oneData = await oneRes.json();
           const latest = normalizeSessionDoc(oneData?.session);
@@ -1224,10 +1316,17 @@ export default function RecorderPage() {
       } catch (_) {}
     }
 
+    // Make the active session id available to recorder chunk callbacks synchronously,
+    // before React re-renders (create-and-start runs faster than a render cycle).
+    selectedSessionRef.current = activeSession;
+    // Mount the recording overlay NOW (synchronously) so its preview <video> elements
+    // exist before initRecorders binds the media streams to them.
+    flushSync(() => setRecorderArming(true));
     try {
       await initRecorders(activeSession.modes || []);
     } catch (err) {
       stopAndReleaseStreams();
+      setRecorderArming(false);
       setSessionError(`Recorder permission/device error: ${String(err.message || err)}`);
       return;
     }
@@ -1243,6 +1342,7 @@ export default function RecorderPage() {
         if (!shouldForceStop) {
           stopAndReleaseStreams();
           recorderRefs.current = {};
+          setRecorderArming(false);
           return;
         }
         try {
@@ -1250,14 +1350,17 @@ export default function RecorderPage() {
         } catch (_) {
           stopAndReleaseStreams();
           recorderRefs.current = {};
+          setRecorderArming(false);
           return;
         }
       } else {
         stopAndReleaseStreams();
         recorderRefs.current = {};
+        setRecorderArming(false);
         return;
       }
     }
+    setRecorderArming(false);
     setTimerState({ running: true, startedAt: Date.now(), baseElapsed: activeSession?.elapsed_seconds || 0 });
   };
 
@@ -1344,7 +1447,7 @@ export default function RecorderPage() {
         await selectSession(direct);
         activeSession = direct;
       } else {
-        const fetched = await fetchSessions(sessionForm.user_id);
+        const fetched = await fetchSessions();
         const latest = (fetched || []).find((row) => row?._id === requestedSessionId);
         if (latest) {
           await selectSession(latest);
@@ -1380,14 +1483,13 @@ export default function RecorderPage() {
         }
 
         const payloadBody = {
-          user_id: sessionForm.user_id,
           subject: resolvedSubject,
           topic: resolvedTopic,
           session_type: ["study", "revision", "analysis", "test"].includes(sessionType) ? sessionType : "study",
           recorder_type: recorderType || "audio",
           notes: incomingNotes || `Agent-triggered ${recorderType || "audio"} session`,
         };
-        const res = await fetch(`${API_BASE_URL}/sessions`, {
+        const res = await apiFetch(`${API_BASE_URL}/sessions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payloadBody),
@@ -1402,7 +1504,7 @@ export default function RecorderPage() {
         if (createdSession?._id) {
           activeSession = createdSession;
           setSelectedSession(activeSession);
-          await fetchSessions(sessionForm.user_id);
+          await fetchSessions();
         } else {
           setSessionError("Agent create session failed: session id missing in response.");
           return;
@@ -1435,7 +1537,7 @@ export default function RecorderPage() {
       }
     } catch (_) {}
     return () => window.removeEventListener(AGENT_RECORDER_EVENT, onAgentAction);
-  }, [selectedSession, sessionList, sessionForm.user_id]);
+  }, [selectedSession, sessionList]);
 
   const retryPendingUploads = async () => {
     if (!selectedSession?._id || pendingFinalizeModes.length === 0) return;
@@ -1505,7 +1607,7 @@ export default function RecorderPage() {
   const loadPlayback = async (mediaType) => {
     if (!API_BASE_URL || !selectedSession?._id) return;
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${API_BASE_URL}/sessions/${selectedSession._id}/playback-url?media_type=${encodeURIComponent(mediaType)}`
       );
       if (!res.ok) {
@@ -1519,6 +1621,85 @@ export default function RecorderPage() {
     }
   };
 
+  const fetchPlaybackUrl = async (sessionIdValue, mediaType) => {
+    if (!API_BASE_URL || !sessionIdValue || !mediaType) return "";
+    const res = await apiFetch(
+      `${API_BASE_URL}/sessions/${sessionIdValue}/playback-url?media_type=${encodeURIComponent(mediaType)}`
+    );
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Playback URL failed: ${res.status} ${txt}`);
+    }
+    const data = await res.json();
+    return data.playback_url || "";
+  };
+
+  // Pick the main recording to play for a session (screen/composite first, then video, then audio).
+  const getPrimaryPlaybackType = (session) => {
+    const uploads = session?.uploads || {};
+    for (const m of ["screen", "video", "audio"]) {
+      if (uploads[m]?.key) return m;
+    }
+    if (uploads.attachment?.key) return "attachment";
+    return "";
+  };
+
+  const openPlayer = async (session, forcedType = "") => {
+    const sid = resolveSessionId(session);
+    if (!sid) return;
+    const mediaType = forcedType || getPrimaryPlaybackType(session);
+    if (!mediaType) {
+      setSessionError("No recording available to play for this session yet.");
+      return;
+    }
+    const title = `${session.subject || "Session"}${session.topic ? ` — ${session.topic}` : ""}`;
+    setPlayerRate(1);
+    setPlayerModal({ open: true, mediaType, url: "", title, loading: true });
+    try {
+      const url = await fetchPlaybackUrl(sid, mediaType);
+      setPlayerModal({ open: true, mediaType, url, title, loading: false });
+    } catch (err) {
+      setPlayerModal({ open: false, mediaType: "", url: "", title: "", loading: false });
+      setSessionError(`Playback failed: ${String(err.message || err)}`);
+    }
+  };
+
+  const closePlayer = () => {
+    const el = playerMediaRef.current;
+    if (el) {
+      try { el.pause(); } catch (_) {}
+    }
+    if (typeof document !== "undefined" && document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+    setPlayerModal({ open: false, mediaType: "", url: "", title: "", loading: false });
+  };
+
+  const togglePlayerPlay = () => {
+    const el = playerMediaRef.current;
+    if (!el) return;
+    if (el.paused) el.play?.().catch(() => {});
+    else el.pause?.();
+  };
+
+  const changePlayerSpeed = (rate) => {
+    const el = playerMediaRef.current;
+    if (el) el.playbackRate = rate;
+    setPlayerRate(rate);
+  };
+
+  const togglePlayerFullscreen = () => {
+    const target = playerModal.mediaType === "audio"
+      ? playerWrapRef.current
+      : (playerMediaRef.current || playerWrapRef.current);
+    if (!target) return;
+    if (typeof document !== "undefined" && document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    } else {
+      target.requestFullscreen?.().catch(() => {});
+    }
+  };
+
   const uploadMediaForSession = async (sessionId, mediaType, input, fallbackName = "") => {
     if (!API_BASE_URL || !sessionId || !input) return;
     const inputName = input.name || fallbackName || `${mediaType}.webm`;
@@ -1526,7 +1707,7 @@ export default function RecorderPage() {
     const contentType = input.type || "application/octet-stream";
 
     const uploadMediaMultipart = async () => {
-      const startRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/start`, {
+      const startRes = await apiFetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1553,7 +1734,7 @@ export default function RecorderPage() {
           const nextOffset = Math.min(offset + MULTIPART_FILE_PART_BYTES, size);
           const chunk = input.slice(offset, nextOffset);
 
-          const presignRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/presign-part`, {
+          const presignRes = await apiFetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/presign-part`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1583,7 +1764,7 @@ export default function RecorderPage() {
           offset = nextOffset;
         }
 
-        const completeRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/complete`, {
+        const completeRes = await apiFetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/complete`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1598,7 +1779,7 @@ export default function RecorderPage() {
         }
       } catch (err) {
         try {
-          await fetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/abort`, {
+          await apiFetch(`${API_BASE_URL}/sessions/${sessionId}/multipart/abort`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1616,7 +1797,7 @@ export default function RecorderPage() {
       return;
     }
 
-    const presignRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}/presign`, {
+    const presignRes = await apiFetch(`${API_BASE_URL}/sessions/${sessionId}/presign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1636,27 +1817,6 @@ export default function RecorderPage() {
       body: input
     });
     if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
-  };
-
-  const handleUploaderSubmit = async () => {
-    try {
-      const file = uploadFiles.uploader;
-      if (!file) {
-        setSessionError("Select an audio/video file first.");
-        return;
-      }
-      if (!selectedSession?._id) {
-        setSessionError("Please select a session first.");
-        return;
-      }
-      const mediaType = (file.type || "").startsWith("audio/") ? "audio" : "video";
-      await uploadMediaForSession(selectedSession._id, mediaType, file, file.name);
-      setUploadFiles((prev) => ({ ...prev, uploader: null }));
-      await fetchSessions(selectedSession?.user_id || sessionForm.user_id);
-      await loadPlayback(mediaType);
-    } catch (err) {
-      setSessionError(String(err.message || err));
-    }
   };
 
   const startExplainerAudioRecord = async () => {
@@ -1744,15 +1904,15 @@ export default function RecorderPage() {
       setSessionError("");
       const testRef = buildSessionTestRef();
       const payload = {
-        user_id: sessionForm.user_id,
         subject,
         topic,
         session_type: sessionForm.session_type,
         recorder_type: "pdf_explainer",
         notes,
+        simple_record: sessionForm.exam_type === SIMP_RECORD_VALUE,
         ...testRef,
       };
-      const createRes = await fetch(`${API_BASE_URL}/sessions`, {
+      const createRes = await apiFetch(`${API_BASE_URL}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -1771,7 +1931,7 @@ export default function RecorderPage() {
         await uploadMediaForSession(sessionId, "audio", explainerRecordedBlob, "explainer-audio.webm");
       }
 
-      const oneRes = await fetch(`${API_BASE_URL}/sessions/${sessionId}`);
+      const oneRes = await apiFetch(`${API_BASE_URL}/sessions/${sessionId}`);
       if (oneRes.ok) {
         const oneData = await oneRes.json();
         setSelectedSession(normalizeSessionDoc(oneData.session || createData.session));
@@ -1779,7 +1939,7 @@ export default function RecorderPage() {
         setSelectedSession(normalizeSessionDoc(createData.session));
       }
       setTimerState({ running: false, startedAt: 0, baseElapsed: createData.session?.elapsed_seconds || 0 });
-      await fetchSessions(sessionForm.user_id);
+      await fetchSessions();
       setUploadFiles((prev) => ({ ...prev, explainerAttachment: null, explainerAudio: null }));
       setExplainerRecordedBlob(null);
       setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
@@ -1803,19 +1963,18 @@ export default function RecorderPage() {
     : timerState.baseElapsed;
   const sessionStatus = selectedSession?.status || "created";
   const isClosed = sessionStatus === "stopped";
-  const canStart = sessionStatus === "created";
   const canPause = sessionStatus === "started" || sessionStatus === "resumed";
   const canResume = sessionStatus === "paused";
   const canStop = sessionStatus === "started" || sessionStatus === "paused" || sessionStatus === "resumed";
+  const isRecordingActive = ["started", "paused", "resumed"].includes(sessionStatus);
   const selectedModes = selectedSession?.modes || [];
   const selectedRecorderType = getRecorderType(selectedSession);
   const hasVideoMode = selectedModes.includes("video");
   const hasScreenMode = selectedModes.includes("screen");
   const hasAudioMode = selectedModes.includes("audio") || hasVideoMode || hasScreenMode;
   const canUseLiveControls = canPause || canResume;
-  const recorderLabel = capitalize(selectedSession?.user_id || sessionForm.user_id || "Recorder");
+  const recorderLabel = capitalize(auth?.name || "Recorder");
   const recorderInitial = recorderLabel.charAt(0) || "R";
-  const uploadedMedia = SESSION_MEDIA_TYPES.filter((m) => Boolean((selectedSession?.uploads?.[m] || {}).key));
   const attachmentKey = selectedSession?.uploads?.attachment?.key || "";
   const attachmentKind = getAttachmentKindFromKey(attachmentKey);
   const explainerAttachmentKind = getAttachmentKindFromName(uploadFiles.explainerAttachment?.name || "");
@@ -1824,15 +1983,22 @@ export default function RecorderPage() {
     ? Boolean(uploadFiles.explainerAudio)
     : Boolean(explainerRecordedBlob);
   const explainerDoneReady = explainerAttachmentReady && explainerAudioReady;
+  const isSimpRecord = sessionForm.exam_type === SIMP_RECORD_VALUE;
   const effectiveExamType = sessionForm.exam_type === OTHER_VALUE ? sessionForm.exam_type_other.trim().toLowerCase() : sessionForm.exam_type;
   const currentSubjectOptions = effectiveExamType ? getSubjectsForExam(effectiveExamType, activeCatalog) : [];
   const effectiveSubject = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other.trim() : sessionForm.subject;
   const currentTopicOptions = effectiveExamType && effectiveSubject ? getTopicsForSelection(effectiveExamType, effectiveSubject, activeCatalog) : [];
   const selectedSubjectValue = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other : sessionForm.subject;
   const selectedTopicValue = sessionForm.topic === OTHER_VALUE ? sessionForm.topic_other : sessionForm.topic;
-  // Keep list order stable as returned by backend (created_at desc),
-  // so selecting a session in viewer does not reshuffle the list.
-  const orderedSessionList = sessionList;
+  // Always present newest-first by created_at, deterministically, so selecting or
+  // running a previous session never reshuffles the list.
+  const orderedSessionList = useMemo(() => {
+    return [...sessionList].sort((a, b) => {
+      const ta = Date.parse(a?.created_at || "") || 0;
+      const tb = Date.parse(b?.created_at || "") || 0;
+      return tb - ta;
+    });
+  }, [sessionList]);
 
   return (
     <main className="app-shell">
@@ -1840,7 +2006,6 @@ export default function RecorderPage() {
       <div className="bg-orb orb-2" />
       <header className="hero">
         <MainMenu active="recorder" />
-        <ActivityInternalMenu active="recorder" />
         <h1>Session Recorder</h1>
         <p className="subtext">Create, run, and upload study recording sessions.</p>
       </header>
@@ -1850,12 +2015,42 @@ export default function RecorderPage() {
           <p className="api-state warn">Backend URL needed for session recorder APIs.</p>
         ) : (
           <>
-            {missionSelectorLoading ? (
-              <p className="day-state">Loading mission options...</p>
-            ) : activeExamOptions.length === 0 ? (
-              <p className="api-state warn">Mission options not available for this user yet.</p>
-            ) : (
-              <>
+            <div className="session-toolbar">
+              <div className="session-tabs">
+                <button
+                  className={`session-tab ${listScope === "today" ? "active" : ""}`}
+                  onClick={() => switchListScope("today")}
+                >
+                  Today
+                </button>
+                <button
+                  className={`session-tab ${listScope === "simple" ? "active" : ""}`}
+                  onClick={() => switchListScope("simple")}
+                >
+                  Simple Records
+                </button>
+              </div>
+              <button className="btn-ticket record-btn" onClick={() => setCreateModalOpen(true)}>
+                <span className="record-dot" aria-hidden="true" /> Record
+              </button>
+            </div>
+            {sessionError ? <p className="api-state error">{sessionError}</p> : null}
+            {sessionLoading ? <p className="day-state">Loading sessions...</p> : null}
+            {pendingFinalizeModes.length > 0 ? (
+              <div className="task-modal-actions" style={{ justifyContent: "flex-start" }}>
+                <button className="btn-day" onClick={retryPendingUploads} disabled={finalizeRetrying}>
+                  {finalizeRetrying ? "Retrying..." : `Retry Pending Uploads (${pendingFinalizeModes.join(", ")})`}
+                </button>
+              </div>
+            ) : null}
+            {createModalOpen ? (
+            <div className="task-modal-overlay" onClick={() => setCreateModalOpen(false)}>
+            <div className="task-modal create-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="recording-player-head media-modal-head">
+              <h3>New Recording</h3>
+              <button className="btn-cancel" onClick={() => setCreateModalOpen(false)}>Close</button>
+            </div>
+            {missionSelectorLoading ? <p className="day-state">Loading mission options...</p> : null}
             <div className="session-form-grid">
               <select
                 className="task-select"
@@ -1888,6 +2083,7 @@ export default function RecorderPage() {
                   });
                 }}
               >
+                <option value={SIMP_RECORD_VALUE}>Simple Record</option>
                 {activeExamOptions.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
@@ -1901,6 +2097,8 @@ export default function RecorderPage() {
                   onChange={(e) => setSessionForm((p) => ({ ...p, exam_type_other: e.target.value, subject: OTHER_VALUE, topic: OTHER_VALUE }))}
                 />
               ) : null}
+              {!isSimpRecord ? (
+              <>
               <select
                 className="task-select"
                 value={sessionForm.subject}
@@ -1957,6 +2155,8 @@ export default function RecorderPage() {
                 <option value="revision">Revision</option>
                 <option value="analysis">Analysis</option>
               </select>
+              </>
+              ) : null}
               <select className="task-select" value={sessionForm.recorder_type} onChange={(e) => setSessionForm((p) => ({ ...p, recorder_type: e.target.value }))}>
                 {RECORDER_TYPES.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -2072,78 +2272,64 @@ export default function RecorderPage() {
                 </div>
               </div>
             ) : null}
-            <textarea className="task-textarea" placeholder="Notes" value={sessionForm.notes} onChange={(e) => setSessionForm((p) => ({ ...p, notes: e.target.value }))} />
+            {sessionForm.recorder_type === "uploader" ? (
+              <div className="upload-inline-grid">
+                <div className="upload-inline-item">
+                  <label>Upload Audio/Video</label>
+                  <input
+                    className="task-select"
+                    type="file"
+                    accept="audio/*,video/*"
+                    onChange={(e) => setUploadFiles((prev) => ({ ...prev, uploader: e.target.files?.[0] || null }))}
+                  />
+                </div>
+              </div>
+            ) : null}
+            <textarea className="task-textarea" placeholder={isSimpRecord ? "Record note" : "Notes"} value={sessionForm.notes} onChange={(e) => setSessionForm((p) => ({ ...p, notes: e.target.value }))} />
             <div className="task-modal-actions">
               {sessionForm.recorder_type === "pdf_explainer" ? (
-                <button className="btn-day" disabled={!explainerDoneReady || explainerDoneLoading} onClick={createExplainerSessionWithUploads}>
+                <button className="btn-day" disabled={!explainerDoneReady || explainerDoneLoading} onClick={async () => { await createExplainerSessionWithUploads(); setCreateModalOpen(false); }}>
                   {explainerDoneLoading ? "Saving..." : "Done"}
                 </button>
+              ) : sessionForm.recorder_type === "uploader" ? (
+                <button className="btn-day" onClick={createAndUpload}>Create &amp; Upload</button>
               ) : (
-                <button className="btn-day" onClick={createSession}>Create Session</button>
+                <button className="btn-ticket" onClick={createAndStart}>● Create &amp; Record</button>
               )}
-              <button className="btn-day secondary" onClick={() => fetchSessions(sessionForm.user_id)}>Load Sessions</button>
             </div>
-              </>
-            )}
-            {sessionError ? <p className="api-state error">{sessionError}</p> : null}
-            {sessionLoading ? <p className="day-state">Loading sessions...</p> : null}
+            </div>
+            </div>
+            ) : null}
 
-            {selectedSession ? (
-              <div className="session-detail">
-                <h3>Selected Session</h3>
-                <p>
-                  {(selectedSession.user_id || "user").toUpperCase()} | {selectedSession.subject} | {selectedSession.topic} | {selectedSession.date}
-                  {" | Start: "}
-                  {selectedSession.start_time ? formatTime(selectedSession.start_time) : "Auto on Start"}
-                </p>
-                <p>Recorder: {capitalize(selectedRecorderType).replace("_", " ")}</p>
-                <p>Status: {selectedSession.status} | Elapsed: {formatDuration(elapsedDisplay)}</p>
-                <p>Total Minutes: {selectedSession.total_time_minutes || 0}</p>
-                {selectedModes.length === 0 ? (
-                  <div className="timer-only-display">
-                    <span className="timer-only-label">Study Timer</span>
-                    <strong className="timer-only-time">{formatDuration(elapsedDisplay)}</strong>
-                  </div>
-                ) : null}
-                {isClosed || selectedRecorderType === "pdf_explainer" ? (
-                  <p className="day-state">
-                    {selectedRecorderType === "pdf_explainer"
-                      ? "Explainer session is already prepared. Use the Explainer Player below."
-                      : "This session is closed. Create a new session to record again."}
-                  </p>
-                ) : (
-                  <div className="task-modal-actions">
-                    {canStart ? <button className="btn-day" onClick={() => startSession()}>Start</button> : null}
-                    {canPause ? <button className="btn-day secondary" onClick={pauseSession}>Pause</button> : null}
-                    {canResume ? <button className="btn-day" onClick={resumeSession}>Resume</button> : null}
-                    {canStop ? (
-                      <button className="btn-ticket" onClick={stopSession}>
-                        {selectedRecorderType === "audio" ? "End" : "Stop"}
-                      </button>
+            {isRecordingActive || recorderArming ? (
+              <div
+                className={`recording-overlay recording-${recordView}`}
+                ref={recordingBoxRef}
+                style={recordView === "float" && floatPos ? { left: floatPos.x, top: floatPos.y, right: "auto", bottom: "auto" } : undefined}
+              >
+                <div className="recording-bar" onPointerDown={onFloatPointerDown}>
+                  <span className="record-dot live" aria-hidden="true" />
+                  <span className="recording-title">
+                    {recorderLabel} · {capitalize(selectedRecorderType).replace("_", " ")} · {formatDuration(elapsedDisplay)} · {capitalize(selectedSession?.status || "")}
+                  </span>
+                  <div className="recording-bar-actions" onPointerDown={(e) => e.stopPropagation()}>
+                    {hasVideoMode || hasScreenMode ? (
+                      <button className="rec-icon-btn" onClick={enterPip} title="Pop out (Picture-in-Picture)" aria-label="Picture-in-Picture">📺</button>
                     ) : null}
+                    {recordView === "full" ? (
+                      <button className="rec-icon-btn" onClick={() => setRecordView("float")} title="Floating window" aria-label="Floating window">🗗</button>
+                    ) : (
+                      <button className="rec-icon-btn" onClick={() => setRecordView("full")} title="Fullscreen" aria-label="Fullscreen">⛶</button>
+                    )}
                   </div>
-                )}
-                {pendingFinalizeModes.length > 0 ? (
-                  <div className="task-modal-actions">
-                    <button className="btn-day" onClick={retryPendingUploads} disabled={finalizeRetrying}>
-                      {finalizeRetrying ? "Retrying..." : `Retry Pending Uploads (${pendingFinalizeModes.join(", ")})`}
-                    </button>
-                  </div>
-                ) : null}
-                {selectedRecorderType === "uploader" ? (
-                  <div className="upload-inline-grid">
-                    <div className="upload-inline-item">
-                      <label>Upload Audio/Video</label>
-                      <input
-                        className="task-select"
-                        type="file"
-                        accept="audio/*,video/*"
-                        onChange={(e) => setUploadFiles((prev) => ({ ...prev, uploader: e.target.files?.[0] || null }))}
-                      />
-                      <button className="btn-day secondary" onClick={handleUploaderSubmit}>Upload Media</button>
+                </div>
+                <div className="recording-stage">
+                  {selectedModes.length === 0 ? (
+                    <div className="timer-only-display">
+                      <span className="timer-only-label">Study Timer</span>
+                      <strong className="timer-only-time">{formatDuration(elapsedDisplay)}</strong>
                     </div>
-                  </div>
-                ) : null}
+                  ) : null}
                 {!isClosed && selectedRecorderType !== "pdf_explainer" && (hasVideoMode || hasScreenMode) ? (
                   hasVideoMode && hasScreenMode ? (
                     <div className="preview-grid">
@@ -2189,6 +2375,8 @@ export default function RecorderPage() {
                     </div>
                   </div>
                 ) : null}
+                </div>
+                <div className="recording-controls">
                 {canUseLiveControls && selectedRecorderType !== "pdf_explainer" ? (
                   <div className="icon-controls-row">
                     {hasAudioMode ? (
@@ -2226,135 +2414,144 @@ export default function RecorderPage() {
                     ) : null}
                   </div>
                 ) : null}
-                {uploadedMedia.length > 0 ? (
-                  <div className="recording-players">
-                    <h4>Session Recordings</h4>
-                    <div className="recording-player-list">
-                      {selectedRecorderType === "pdf_explainer" ? (
-                        <div className="recording-player-item">
-                          <div className="recording-player-head">
-                            <strong>EXPLAINER PLAYER</strong>
-                          </div>
-                          <div className="explainer-viewer">
-                            {attachmentKind === "pdf" && playbackUrls.attachment ? (
-                              <iframe title="Explainer PDF" src={playbackUrls.attachment} className="explainer-asset" />
-                            ) : null}
-                            {attachmentKind === "image" && playbackUrls.attachment ? (
-                              <img src={playbackUrls.attachment} alt="Explainer" className="explainer-asset" />
-                            ) : null}
-                            {!playbackUrls.attachment ? (
-                              <p className="day-state">Loading explainer file...</p>
-                            ) : null}
-                          </div>
-                          <div className="explainer-audio-wrap">
-                            {playbackUrls.audio ? (
-                              <audio className="session-player" controls preload="metadata" src={playbackUrls.audio} />
-                            ) : (
-                              <p className="day-state">Loading explainer audio...</p>
-                            )}
-                          </div>
-                        </div>
-                      ) : null}
-                      {uploadedMedia.map((m) => (
-                        selectedRecorderType === "pdf_explainer" ? null : (
-                        <div className="recording-player-item" key={m}>
-                          <div className="recording-player-head">
-                            <strong>{m.toUpperCase()}</strong>
-                            {!playbackUrls[m] ? (
-                              <button className="btn-day secondary" onClick={() => loadPlayback(m)}>
-                                Load
-                              </button>
-                            ) : null}
-                          </div>
-                          {playbackUrls[m] ? (
-                            m === "audio" ? (
-                              <audio className="session-player" controls preload="metadata" src={playbackUrls[m]} />
-                            ) : m === "attachment" ? (
-                              <a className="btn-day secondary" href={playbackUrls[m]} target="_blank" rel="noreferrer">Open Attachment</a>
-                            ) : (
-                              <>
-                                <video
-                                  id={`player-${m}`}
-                                  className="session-player"
-                                  controls
-                                  preload="metadata"
-                                  playsInline
-                                  src={playbackUrls[m]}
-                                />
-                                <div className="player-tools">
-                                  <label>
-                                    Speed:
-                                    <select
-                                      className="task-select speed-select"
-                                      value={String(playbackRates[m] || 1)}
-                                      onChange={(e) => {
-                                        const rate = Number(e.target.value);
-                                        const el = document.getElementById(`player-${m}`);
-                                        if (el) el.playbackRate = rate;
-                                        setPlaybackRates((prev) => ({ ...prev, [m]: rate }));
-                                      }}
-                                    >
-                                      <option value="0.5">0.5x</option>
-                                      <option value="0.75">0.75x</option>
-                                      <option value="1">1x</option>
-                                      <option value="1.25">1.25x</option>
-                                      <option value="1.5">1.5x</option>
-                                      <option value="2">2x</option>
-                                    </select>
-                                  </label>
-                                </div>
-                              </>
-                            )
-                          ) : null}
-                        </div>
-                        )
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="session-list">
-              {orderedSessionList.map((session) => (
-                <div
-                  key={session._id}
-                  className="session-item-row"
-                >
-                  <button
-                    className={`session-item ${selectedSession?._id === session._id ? "active" : ""} ${["started", "resumed", "paused"].includes(session.status) ? "running" : ""}`}
-                    onClick={() => selectSession(session)}
-                  >
-                    <strong>{session.subject}</strong> - {session.topic} ({session.session_type}, {capitalize(getRecorderType(session)).replace("_", " ")}) [{session.user_id || "user"} | {session.date}]
-                  </button>
-                  <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      className="ellipsis-btn session-ellipsis-btn"
-                      onClick={() => setOpenSessionMenuId((prev) => (prev === session._id ? "" : session._id))}
-                      aria-label="Open session actions"
-                      title="Session actions"
-                    >
-                      ⋮
-                    </button>
-                    {openSessionMenuId === session._id ? (
-                      <div className="menu-dropdown session-actions-menu">
-                        <button
-                          className="menu-item session-menu-delete"
-                          onClick={() => deleteSession(session)}
-                          disabled={Boolean(deletingSessionIds[session._id]) || ["started", "resumed", "paused"].includes(session.status)}
-                          title={["started", "resumed", "paused"].includes(session.status) ? "Stop session before deleting" : "Delete session from app data (keeps S3 file)"}
-                        >
-                          {deletingSessionIds[session._id] ? "Deleting..." : "Delete Session"}
-                        </button>
-                      </div>
+                  <div className="recording-session-controls">
+                    {canPause ? <button className="btn-day secondary" onClick={pauseSession}>Pause</button> : null}
+                    {canResume ? <button className="btn-day" onClick={resumeSession}>Resume</button> : null}
+                    {canStop ? (
+                      <button className="btn-ticket" onClick={stopSession}>
+                        {selectedRecorderType === "audio" ? "End" : "Stop"}
+                      </button>
                     ) : null}
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : null}
+            {orderedSessionList.length === 0 ? (
+              <p className="day-state">
+                {listScope === "simple" ? "No simple records yet." : "No sessions recorded today."}
+              </p>
+            ) : (
+              <div className="session-grid">
+                {orderedSessionList.map((session) => {
+                  const running = ["started", "resumed", "paused"].includes(session.status);
+                  const canPlay = Boolean(getPrimaryPlaybackType(session));
+                  return (
+                    <div
+                      key={session._id}
+                      className={`session-card ${selectedSession?._id === session._id ? "active" : ""} ${running ? "running" : ""}`}
+                      onClick={() => selectSession(session)}
+                    >
+                      <div className="session-card-head">
+                        <strong className="session-card-title">{session.subject}</strong>
+                        <div className="session-actions" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="ellipsis-btn session-ellipsis-btn"
+                            onClick={() => setOpenSessionMenuId((prev) => (prev === session._id ? "" : session._id))}
+                            aria-label="Open session actions"
+                            title="Session actions"
+                          >
+                            ⋮
+                          </button>
+                          {openSessionMenuId === session._id ? (
+                            <div className="menu-dropdown session-actions-menu">
+                              <button
+                                className="menu-item session-menu-delete"
+                                onClick={() => deleteSession(session)}
+                                disabled={Boolean(deletingSessionIds[session._id]) || running}
+                                title={running ? "Stop session before deleting" : "Delete session from app data (keeps S3 file)"}
+                              >
+                                {deletingSessionIds[session._id] ? "Deleting..." : "Delete Session"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                      <p className="session-card-topic">{session.topic}</p>
+                      <div className="session-card-meta">
+                        <span className="session-chip">{capitalize(getRecorderType(session)).replace("_", " ")}</span>
+                        <span className="session-chip">{session.session_type}</span>
+                        <span className="session-chip">{session.user_id || "user"}</span>
+                        <span className="session-chip">{session.date}</span>
+                        <span className={`session-chip status-chip status-${session.status}`}>{session.status}</span>
+                      </div>
+                      <div className="session-card-actions" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="btn-day"
+                          onClick={() => openPlayer(session)}
+                          disabled={!canPlay}
+                          title={canPlay ? "Play recording" : "No recording uploaded yet"}
+                        >
+                          ▶ Play
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </section>
+      {playerModal.open ? (
+        <div className="task-modal-overlay" onClick={closePlayer}>
+          <div className="task-modal media-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="recording-player-head media-modal-head">
+              <h3>{playerModal.title || "Player"}</h3>
+              <button className="btn-cancel" onClick={closePlayer}>Close</button>
+            </div>
+            <div className="media-player-wrap" ref={playerWrapRef}>
+              {playerModal.loading ? (
+                <p className="day-state">Loading recording…</p>
+              ) : playerModal.url ? (
+                playerModal.mediaType === "audio" ? (
+                  <audio
+                    ref={playerMediaRef}
+                    className="media-player-el media-player-audio"
+                    controls
+                    autoPlay
+                    preload="metadata"
+                    src={playerModal.url}
+                  />
+                ) : (
+                  <video
+                    ref={playerMediaRef}
+                    className="media-player-el"
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    src={playerModal.url}
+                  />
+                )
+              ) : (
+                <p className="day-state">No playable media.</p>
+              )}
+            </div>
+            {!playerModal.loading && playerModal.url ? (
+              <div className="media-controls">
+                <button className="btn-day secondary" onClick={togglePlayerPlay}>Play / Pause</button>
+                <label className="media-speed">
+                  <span>Speed</span>
+                  <select
+                    className="task-select speed-select"
+                    value={String(playerRate)}
+                    onChange={(e) => changePlayerSpeed(Number(e.target.value))}
+                  >
+                    <option value="0.5">0.5x</option>
+                    <option value="0.75">0.75x</option>
+                    <option value="1">1x</option>
+                    <option value="1.25">1.25x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2x</option>
+                  </select>
+                </label>
+                <button className="btn-day secondary" onClick={togglePlayerFullscreen}>Fullscreen</button>
+                <a className="btn-day secondary" href={playerModal.url} download target="_blank" rel="noreferrer">Download</a>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {explainerModalOpen ? (
         <div className="task-modal-overlay" onClick={() => setExplainerModalOpen(false)}>
           <div className="task-modal explainer-modal" onClick={(e) => e.stopPropagation()}>
