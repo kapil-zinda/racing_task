@@ -586,8 +586,11 @@ def search_unified_payload(
 
     if "content" in requested:
         rx = re.compile(re.escape(query), re.IGNORECASE)
+        content_filter: Dict[str, Any] = {"status": {"$in": ["ready", "uploading"]}, "name": {"$regex": rx}}
+        if uid:
+            content_filter["user_id"] = uid
         for row in content_files_collection().find(
-            {"status": {"$in": ["ready", "uploading"]}, "name": {"$regex": rx}},
+            content_filter,
             {"name": 1, "content_type": 1, "updated_at": 1, "searchable": 1, "searchable_course": 1},
         ).sort("updated_at", DESCENDING).limit(lim):
             name = str(row.get("name", "") or "")
@@ -607,7 +610,7 @@ def search_unified_payload(
                 }
             )
         try:
-            pdf = search_pdf(query, min(10, lim), course)
+            pdf = search_pdf(query, min(10, lim), course, user_id=uid)
             for row in pdf.get("results", []):
                 add_result(
                     {
@@ -790,7 +793,10 @@ def search_suggest_payload(user_id: str, q: str | None = None, limit: int = 12) 
             for topic in row.get("topics", []) if isinstance(row.get("topics"), list) else []:
                 add(str(topic), "topic", 1)
 
-    for row in content_files_collection().find({"status": "ready"}, {"name": 1}).sort("updated_at", -1).limit(200):
+    content_suggest_filter: Dict[str, Any] = {"status": "ready"}
+    if uid:
+        content_suggest_filter["user_id"] = uid
+    for row in content_files_collection().find(content_suggest_filter, {"name": 1}).sort("updated_at", -1).limit(200):
         add(str(row.get("name", "") or ""), "content", 1)
 
     items = list(suggestions.values())

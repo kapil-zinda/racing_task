@@ -23,6 +23,15 @@ from .content_domain import (
     rename_item,
 )
 from .extras_domain import get_extras_payload, save_extras_payload
+from .activity_tracker_domain import (
+    create_activity,
+    create_category,
+    delete_activity,
+    delete_category,
+    get_activities,
+    get_categories,
+    update_activity,
+)
 from .context import current_date_str, logger
 from .race_domain import (
     add_points_payload,
@@ -63,6 +72,8 @@ from .pdf_search_domain import (
 from .qna_domain import ask_qna_in_session, create_qna_session, get_qna_messages, list_qna_sessions
 from .mission_domain import get_or_create_mission, mission_progress_payload, mission_selector_options, upsert_mission
 from .schemas import (
+    ActivityCategoryRequest,
+    ActivityUpsertRequest,
     AddPointsRequest,
     DeletePointsEventRequest,
     ContentCreateFolderRequest,
@@ -136,6 +147,13 @@ def _req_user_id(request: Request) -> str:
     return ""
 
 
+def _require_auth(request: Request) -> str:
+    uid = _req_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return uid
+
+
 def _raise_as_http(err: Exception, endpoint_name: str) -> None:
     if isinstance(err, HTTPException):
         raise err
@@ -196,6 +214,7 @@ def create_app() -> FastAPI:
 
     @app.get("/content/list")
     def content_list(
+        request: Request,
         folder_id: str | None = Query(default=None),
         q: str | None = Query(default=None),
         sort_by: str | None = Query(default="name"),
@@ -203,38 +222,39 @@ def create_app() -> FastAPI:
         view_mode: str | None = Query(default="all"),
     ):
         try:
-            return list_content(folder_id, q, sort_by, sort_dir, view_mode)
+            return list_content(folder_id, q, sort_by, sort_dir, view_mode, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /content/list")
 
     @app.get("/content/tree")
     def content_tree(
+        request: Request,
         parent_id: str | None = Query(default=None),
         view_mode: str | None = Query(default="all"),
     ):
         try:
-            return list_folder_tree(parent_id, view_mode)
+            return list_folder_tree(parent_id, view_mode, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /content/tree")
 
     @app.post("/content/folder")
-    def content_create_folder(payload: ContentCreateFolderRequest):
+    def content_create_folder(request: Request, payload: ContentCreateFolderRequest):
         try:
-            return create_folder(payload.parent_id, payload.name)
+            return create_folder(payload.parent_id, payload.name, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/folder")
 
     @app.post("/content/rename")
-    def content_rename(payload: ContentRenameRequest):
+    def content_rename(request: Request, payload: ContentRenameRequest):
         try:
-            return rename_item(payload.id, payload.item_type, payload.new_name)
+            return rename_item(payload.id, payload.item_type, payload.new_name, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/rename")
 
     @app.post("/content/presign-upload")
-    def content_presign_upload(payload: ContentPresignUploadRequest):
+    def content_presign_upload(request: Request, payload: ContentPresignUploadRequest):
         try:
-            return create_upload_url(payload.folder_id, payload.file_name, payload.content_type, payload.size)
+            return create_upload_url(payload.folder_id, payload.file_name, payload.content_type, payload.size, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/presign-upload")
 
@@ -246,51 +266,51 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /content/complete-upload")
 
     @app.post("/content/delete")
-    def content_delete(payload: ContentDeleteRequest):
+    def content_delete(request: Request, payload: ContentDeleteRequest):
         try:
-            return delete_item(payload.id, payload.item_type, payload.recursive, payload.scope)
+            return delete_item(payload.id, payload.item_type, payload.recursive, payload.scope, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/delete")
 
     @app.post("/content/copy")
-    def content_copy(payload: ContentCopyRequest):
+    def content_copy(request: Request, payload: ContentCopyRequest):
         try:
-            return copy_item(payload.id, payload.item_type, payload.destination_folder_id, payload.scope)
+            return copy_item(payload.id, payload.item_type, payload.destination_folder_id, payload.scope, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/copy")
 
     @app.post("/content/move")
-    def content_move(payload: ContentMoveRequest):
+    def content_move(request: Request, payload: ContentMoveRequest):
         try:
-            return move_item(payload.id, payload.item_type, payload.destination_folder_id, payload.scope)
+            return move_item(payload.id, payload.item_type, payload.destination_folder_id, payload.scope, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/move")
 
     @app.post("/content/download")
-    def content_download(payload: ContentDownloadRequest):
+    def content_download(request: Request, payload: ContentDownloadRequest):
         try:
-            return download_item(payload.id, payload.item_type, payload.recursive)
+            return download_item(payload.id, payload.item_type, payload.recursive, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/download")
 
     @app.get("/content/preview-url")
-    def content_preview(file_id: str = Query(...)):
+    def content_preview(request: Request, file_id: str = Query(...)):
         try:
-            return preview_by_id(file_id)
+            return preview_by_id(file_id, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /content/preview-url")
 
     @app.post("/content/make-searchable")
-    def content_make_searchable(payload: ContentMakeSearchableRequest):
+    def content_make_searchable(request: Request, payload: ContentMakeSearchableRequest):
         try:
-            return make_item_searchable(payload.id, payload.item_type, payload.course)
+            return make_item_searchable(payload.id, payload.item_type, payload.course, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /content/make-searchable")
 
     @app.post("/pdf-search/presign-upload")
-    def pdf_presign_upload(payload: PdfPresignUploadRequest):
+    def pdf_presign_upload(request: Request, payload: PdfPresignUploadRequest):
         try:
-            return create_pdf_presigned_upload(payload)
+            return create_pdf_presigned_upload(payload, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /pdf-search/presign-upload")
 
@@ -303,39 +323,42 @@ def create_app() -> FastAPI:
 
     @app.get("/pdf-search/query")
     def pdf_query(
+        request: Request,
         q: str = Query(...),
         limit: int = Query(default=20, ge=1, le=100),
         course: str | None = Query(default=None),
     ):
         try:
-            return search_pdf(q, limit, course)
+            return search_pdf(q, limit, course, user_id=_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /pdf-search/query")
 
     @app.get("/qna/sessions")
     def qna_list_sessions(request: Request):
         try:
-            return list_qna_sessions(_req_user_id(request))
+            return list_qna_sessions(_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /qna/sessions")
 
     @app.post("/qna/sessions")
     def qna_create_session(request: Request, payload: QnaSessionCreateRequest):
         try:
-            return create_qna_session(_req_user_id(request) or payload.user_id, payload.title)
+            return create_qna_session(_require_auth(request), payload.title)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /qna/sessions")
 
     @app.get("/qna/sessions/{session_id}/messages")
-    def qna_get_messages(session_id: str):
+    def qna_get_messages(request: Request, session_id: str):
         try:
+            _require_auth(request)
             return get_qna_messages(session_id)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /qna/sessions/{id}/messages")
 
     @app.post("/qna/ask")
-    def qna_ask(payload: QnaAskRequest):
+    def qna_ask(request: Request, payload: QnaAskRequest):
         try:
+            _require_auth(request)
             return ask_qna_in_session(payload.session_id, payload.question, payload.course, payload.limit)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /qna/ask")
@@ -788,6 +811,56 @@ def create_app() -> FastAPI:
             return create_presigned_playback_url_payload(session_id, media_type)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /sessions/{id}/playback-url")
+
+    # ── Day Activity Tracker ──────────────────────────────────────────────
+    @app.get("/tracker/activities")
+    def tracker_get_activities(request: Request, date: str | None = Query(default=None)):
+        try:
+            return {"activities": get_activities(_req_user_id(request), date or "")}
+        except Exception as err:
+            _raise_as_http(err, "GET /tracker/activities")
+
+    @app.post("/tracker/activities")
+    def tracker_create_activity(request: Request, payload: ActivityUpsertRequest):
+        try:
+            return create_activity(_req_user_id(request), payload.model_dump())
+        except Exception as err:
+            _raise_as_http(err, "POST /tracker/activities")
+
+    @app.put("/tracker/activities/{activity_id}")
+    def tracker_update_activity(activity_id: str, request: Request, payload: ActivityUpsertRequest):
+        try:
+            return update_activity(_req_user_id(request), activity_id, payload.model_dump(exclude_none=True))
+        except Exception as err:
+            _raise_as_http(err, "PUT /tracker/activities/{id}")
+
+    @app.delete("/tracker/activities/{activity_id}")
+    def tracker_delete_activity(activity_id: str, request: Request):
+        try:
+            return delete_activity(_req_user_id(request), activity_id)
+        except Exception as err:
+            _raise_as_http(err, "DELETE /tracker/activities/{id}")
+
+    @app.get("/tracker/categories")
+    def tracker_get_categories(request: Request):
+        try:
+            return {"categories": get_categories(_req_user_id(request))}
+        except Exception as err:
+            _raise_as_http(err, "GET /tracker/categories")
+
+    @app.post("/tracker/categories")
+    def tracker_create_category(request: Request, payload: ActivityCategoryRequest):
+        try:
+            return create_category(_req_user_id(request), payload.name, payload.color)
+        except Exception as err:
+            _raise_as_http(err, "POST /tracker/categories")
+
+    @app.delete("/tracker/categories/{name}")
+    def tracker_delete_category(name: str, request: Request):
+        try:
+            return delete_category(_req_user_id(request), name)
+        except Exception as err:
+            _raise_as_http(err, "DELETE /tracker/categories/{name}")
 
     @app.get("/")
     def health():

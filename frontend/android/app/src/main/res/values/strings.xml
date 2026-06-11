@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Kapil vs Divya Race</string>
-    <string name="title_activity_main">Kapil vs Divya Race</string>
+    <string name="app_name">Uchhal</string>
+    <string name="title_activity_main">Uchhal</string>
     <string name="package_name">com.kapildivya.race</string>
     <string name="custom_url_scheme">com.kapildivya.race</string>
 </resources>

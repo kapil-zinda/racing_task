@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import MainMenu from "../components/MainMenu";
+import ExplainerCanvas from "./ExplainerCanvas";
 import { AGENT_PENDING_RECORDER_ACTION_KEY, AGENT_RECORDER_EVENT, AGENT_RECORDER_STATUS_EVENT } from "../lib/agent/constants";
 import { apiFetch, useAuth } from "../lib/auth";
+
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -63,6 +65,11 @@ function formatDuration(totalSeconds) {
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
   return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
+}
+
+function fmtSecs(s) {
+  const t = Math.floor(s || 0);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
 
 function capitalize(value) {
@@ -185,6 +192,10 @@ export default function RecorderPage() {
   const [floatPos, setFloatPos] = useState(null); // {x, y} when dragged
   const [playerModal, setPlayerModal] = useState({ open: false, mediaType: "", url: "", title: "", loading: false });
   const [playerRate, setPlayerRate] = useState(1);
+  const [playerPlaying, setPlayerPlaying] = useState(false);
+  const [playerCurrentTime, setPlayerCurrentTime] = useState(0);
+  const [playerDuration, setPlayerDuration] = useState(0);
+  const [playerVolume, setPlayerVolume] = useState(1);
   const playerMediaRef = useRef(null);
   const playerWrapRef = useRef(null);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -199,13 +210,15 @@ export default function RecorderPage() {
   const [playbackUrls, setPlaybackUrls] = useState({ audio: "", video: "", screen: "", attachment: "" });
   const [explainerModalOpen, setExplainerModalOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState({ uploader: null, explainerAttachment: null, explainerAudio: null });
-  const [explainerAudioSource, setExplainerAudioSource] = useState("upload");
-  const [explainerRecorderStatus, setExplainerRecorderStatus] = useState("idle");
-  const [explainerRecordedBlob, setExplainerRecordedBlob] = useState(null);
   const [explainerDoneLoading, setExplainerDoneLoading] = useState(false);
-  const [explainerAttachmentPreviewUrl, setExplainerAttachmentPreviewUrl] = useState("");
-  const [explainerUploadedAudioPreviewUrl, setExplainerUploadedAudioPreviewUrl] = useState("");
-  const [explainerRecordedAudioPreviewUrl, setExplainerRecordedAudioPreviewUrl] = useState("");
+  const [explainerFiles, setExplainerFiles] = useState([]);
+  const [explainerFileIdx, setExplainerFileIdx] = useState(0);
+  const [explainerZoom, setExplainerZoom] = useState(1);
+  const [explainerVideoBlob, setExplainerVideoBlob] = useState(null);
+  const [explainerFrameOpen, setExplainerFrameOpen] = useState(false);
+  const [explainerRecording, setExplainerRecording] = useState(false);
+  const explainerCanvasRef = useRef(null);
+  const explainerFileInputRef = useRef(null);
   const [liveControls, setLiveControls] = useState({
     micMuted: false,
     cameraOff: false,
@@ -239,9 +252,6 @@ export default function RecorderPage() {
   const audioVizSourceRef = useRef(null);
   const audioVizDataRef = useRef(null);
   const audioVizDrawRef = useRef(0);
-  const explainerRecorderRef = useRef(null);
-  const explainerRecorderStreamRef = useRef(null);
-  const explainerRecorderChunksRef = useRef([]);
   const recorderFlushTimersRef = useRef({});
 
   const switchListScope = async (scope) => {
@@ -352,44 +362,8 @@ export default function RecorderPage() {
     stopAndReleaseStreams();
   }, []);
 
-  useEffect(() => {
-    if (!uploadFiles.explainerAttachment) {
-      setExplainerAttachmentPreviewUrl("");
-      return;
-    }
-    const url = URL.createObjectURL(uploadFiles.explainerAttachment);
-    setExplainerAttachmentPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [uploadFiles.explainerAttachment]);
 
-  useEffect(() => {
-    if (!uploadFiles.explainerAudio) {
-      setExplainerUploadedAudioPreviewUrl("");
-      return;
-    }
-    const url = URL.createObjectURL(uploadFiles.explainerAudio);
-    setExplainerUploadedAudioPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [uploadFiles.explainerAudio]);
 
-  useEffect(() => {
-    if (!explainerRecordedBlob) {
-      setExplainerRecordedAudioPreviewUrl("");
-      return;
-    }
-    const url = URL.createObjectURL(explainerRecordedBlob);
-    setExplainerRecordedAudioPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [explainerRecordedBlob]);
-
-  useEffect(() => () => {
-    if (explainerRecorderRef.current && explainerRecorderRef.current.state !== "inactive") {
-      try {
-        explainerRecorderRef.current.stop();
-      } catch (_) {}
-    }
-    (explainerRecorderStreamRef.current?.getTracks?.() || []).forEach((t) => t.stop());
-  }, []);
 
   useEffect(() => {
     selectedSessionRef.current = selectedSession;
@@ -615,6 +589,16 @@ export default function RecorderPage() {
     setRecordView("full");
     setFloatPos(null);
     await startSession(created);
+  };
+
+  const openExplainerFrame = () => {
+    const { subject, topic } = buildSessionSubjectTopic();
+    if (!subject || !topic) {
+      setSessionError("Subject and topic are required.");
+      return;
+    }
+    setCreateModalOpen(false);
+    setExplainerFrameOpen(true);
   };
 
   // Uploader flow: create the session and upload the chosen file in one step.
@@ -1666,20 +1650,40 @@ export default function RecorderPage() {
 
   const closePlayer = () => {
     const el = playerMediaRef.current;
-    if (el) {
-      try { el.pause(); } catch (_) {}
-    }
+    if (el) { try { el.pause(); } catch (_) {} }
     if (typeof document !== "undefined" && document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
     }
     setPlayerModal({ open: false, mediaType: "", url: "", title: "", loading: false });
+    setPlayerPlaying(false);
+    setPlayerCurrentTime(0);
+    setPlayerDuration(0);
   };
 
   const togglePlayerPlay = () => {
     const el = playerMediaRef.current;
     if (!el) return;
-    if (el.paused) el.play?.().catch(() => {});
-    else el.pause?.();
+    if (el.paused) { el.play?.().catch(() => {}); setPlayerPlaying(true); }
+    else { el.pause?.(); setPlayerPlaying(false); }
+  };
+
+  const onPlayerTimeUpdate = () => {
+    const el = playerMediaRef.current;
+    if (el) setPlayerCurrentTime(el.currentTime);
+  };
+  const onPlayerDurationChange = () => {
+    const el = playerMediaRef.current;
+    if (el) setPlayerDuration(isFinite(el.duration) ? el.duration : 0);
+  };
+  const onPlayerSeek = (e) => {
+    const el = playerMediaRef.current;
+    if (el) el.currentTime = Number(e.target.value);
+    setPlayerCurrentTime(Number(e.target.value));
+  };
+  const onPlayerVolume = (e) => {
+    const v = Number(e.target.value);
+    setPlayerVolume(v);
+    if (playerMediaRef.current) playerMediaRef.current.volume = v;
   };
 
   const changePlayerSpeed = (rate) => {
@@ -1819,67 +1823,6 @@ export default function RecorderPage() {
     if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
   };
 
-  const startExplainerAudioRecord = async () => {
-    try {
-      if (explainerRecorderStatus === "recording" || explainerRecorderStatus === "paused") return;
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      explainerRecorderStreamRef.current = mic;
-      explainerRecorderChunksRef.current = [];
-      setExplainerRecordedBlob(null);
-      const explainerMime = getMimeForMode("audio");
-      const rec = explainerMime ? new MediaRecorder(mic, { mimeType: explainerMime }) : new MediaRecorder(mic);
-      rec.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) explainerRecorderChunksRef.current.push(e.data);
-      };
-      rec.onstop = () => {
-        const blob = new Blob(explainerRecorderChunksRef.current, { type: explainerMime || "audio/webm" });
-        setExplainerRecordedBlob(blob.size > 0 ? blob : null);
-        (explainerRecorderStreamRef.current?.getTracks?.() || []).forEach((t) => t.stop());
-        explainerRecorderStreamRef.current = null;
-        setExplainerRecorderStatus("stopped");
-      };
-      explainerRecorderRef.current = rec;
-      rec.start();
-      setExplainerRecorderStatus("recording");
-      setSessionError("");
-    } catch (err) {
-      setSessionError(`Audio record failed: ${String(err.message || err)}`);
-    }
-  };
-
-  const pauseExplainerAudioRecord = () => {
-    const rec = explainerRecorderRef.current;
-    if (!rec || rec.state !== "recording") return;
-    try {
-      rec.pause();
-      setExplainerRecorderStatus("paused");
-    } catch (_) {}
-  };
-
-  const resumeExplainerAudioRecord = () => {
-    const rec = explainerRecorderRef.current;
-    if (!rec || rec.state !== "paused") return;
-    try {
-      rec.resume();
-      setExplainerRecorderStatus("recording");
-    } catch (_) {}
-  };
-
-  const stopExplainerAudioRecord = async () => {
-    const rec = explainerRecorderRef.current;
-    if (!rec || rec.state === "inactive") {
-      setExplainerRecorderStatus("stopped");
-      return;
-    }
-    await new Promise((resolve) => {
-      rec.addEventListener("stop", () => resolve(), { once: true });
-      try {
-        rec.stop();
-      } catch (_) {
-        resolve();
-      }
-    });
-  };
 
   const createExplainerSessionWithUploads = async () => {
     if (!API_BASE_URL) return;
@@ -1889,14 +1832,12 @@ export default function RecorderPage() {
       setSessionError("Subject and topic are required.");
       return;
     }
-    if (!uploadFiles.explainerAttachment) {
-      setSessionError("Please select PDF/image for explainer.");
+    if (explainerFiles.length === 0) {
+      setSessionError("Please add at least one PDF/image for explainer.");
       return;
     }
-    const hasUploadAudio = explainerAudioSource === "upload" && uploadFiles.explainerAudio;
-    const hasRecordedAudio = explainerAudioSource === "record" && explainerRecordedBlob;
-    if (!hasUploadAudio && !hasRecordedAudio) {
-      setSessionError("Please upload audio or record audio for explainer.");
+    if (!explainerVideoBlob) {
+      setSessionError("Please record your explanation first (⏺ Record button on the canvas).");
       return;
     }
     try {
@@ -1924,13 +1865,13 @@ export default function RecorderPage() {
       const createData = await createRes.json();
       const sessionId = resolveSessionId(createData.session);
       if (!sessionId) throw new Error("Session id missing in create response");
-      await uploadMediaForSession(sessionId, "attachment", uploadFiles.explainerAttachment, uploadFiles.explainerAttachment.name);
-      if (hasUploadAudio) {
-        await uploadMediaForSession(sessionId, "audio", uploadFiles.explainerAudio, uploadFiles.explainerAudio.name);
-      } else if (hasRecordedAudio) {
-        await uploadMediaForSession(sessionId, "audio", explainerRecordedBlob, "explainer-audio.webm");
+      // Upload the canvas video recording (contains both video + audio)
+      await uploadMediaForSession(sessionId, "screen", explainerVideoBlob, "explainer-recording.webm");
+      // Upload the current PDF/image as the attachment for reference
+      const currentFile = explainerFiles[explainerFileIdx];
+      if (currentFile?.file) {
+        await uploadMediaForSession(sessionId, "attachment", currentFile.file, currentFile.name);
       }
-
       const oneRes = await apiFetch(`${API_BASE_URL}/sessions/${sessionId}`);
       if (oneRes.ok) {
         const oneData = await oneRes.json();
@@ -1940,8 +1881,10 @@ export default function RecorderPage() {
       }
       setTimerState({ running: false, startedAt: 0, baseElapsed: createData.session?.elapsed_seconds || 0 });
       await fetchSessions();
+      setExplainerFiles([]);
+      setExplainerFileIdx(0);
+      setExplainerVideoBlob(null);
       setUploadFiles((prev) => ({ ...prev, explainerAttachment: null, explainerAudio: null }));
-      setExplainerRecordedBlob(null);
       setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
     } catch (err) {
       setSessionError(String(err.message || err));
@@ -1977,12 +1920,8 @@ export default function RecorderPage() {
   const recorderInitial = recorderLabel.charAt(0) || "R";
   const attachmentKey = selectedSession?.uploads?.attachment?.key || "";
   const attachmentKind = getAttachmentKindFromKey(attachmentKey);
-  const explainerAttachmentKind = getAttachmentKindFromName(uploadFiles.explainerAttachment?.name || "");
-  const explainerAttachmentReady = Boolean(uploadFiles.explainerAttachment);
-  const explainerAudioReady = explainerAudioSource === "upload"
-    ? Boolean(uploadFiles.explainerAudio)
-    : Boolean(explainerRecordedBlob);
-  const explainerDoneReady = explainerAttachmentReady && explainerAudioReady;
+  const explainerAttachmentReady = explainerFiles.length > 0;
+  const explainerDoneReady = explainerAttachmentReady && Boolean(explainerVideoBlob);
   const isSimpRecord = sessionForm.exam_type === SIMP_RECORD_VALUE;
   const effectiveExamType = sessionForm.exam_type === OTHER_VALUE ? sessionForm.exam_type_other.trim().toLowerCase() : sessionForm.exam_type;
   const currentSubjectOptions = effectiveExamType ? getSubjectsForExam(effectiveExamType, activeCatalog) : [];
@@ -2164,113 +2103,9 @@ export default function RecorderPage() {
               </select>
             </div>
             {sessionForm.recorder_type === "pdf_explainer" ? (
-              <div className="explainer-setup-card">
-                <h4>Explainer Setup</h4>
-                <div className="recording-player-item explainer-live-preview-card">
-                  <div className="recording-player-head">
-                    <strong>LIVE EXPLAINER PREVIEW</strong>
-                  </div>
-                  <div className="explainer-viewer">
-                    {explainerAttachmentKind === "pdf" && explainerAttachmentPreviewUrl ? (
-                      <iframe title="Selected PDF Preview" src={explainerAttachmentPreviewUrl} className="explainer-asset" />
-                    ) : null}
-                    {explainerAttachmentKind === "image" && explainerAttachmentPreviewUrl ? (
-                      <img src={explainerAttachmentPreviewUrl} alt="Selected explainer" className="explainer-asset" />
-                    ) : null}
-                    {!explainerAttachmentPreviewUrl ? (
-                      <p className="day-state">Select PDF/image to preview here.</p>
-                    ) : null}
-                  </div>
-                  <div className="explainer-audio-wrap">
-                    {explainerAudioSource === "upload" && explainerUploadedAudioPreviewUrl ? (
-                      <audio className="session-player" controls src={explainerUploadedAudioPreviewUrl} />
-                    ) : null}
-                    {explainerAudioSource === "record" && explainerRecordedAudioPreviewUrl ? (
-                      <audio className="session-player" controls src={explainerRecordedAudioPreviewUrl} />
-                    ) : null}
-                    {!explainerAudioReady ? (
-                      <p className="day-state">Add/upload voice to preview audio here.</p>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="upload-inline-grid">
-                  <div className="upload-inline-item">
-                    <label>Select PDF / Image</label>
-                    <input
-                      className="task-select"
-                      type="file"
-                      accept="application/pdf,image/*"
-                      onChange={(e) => {
-                        setUploadFiles((prev) => ({ ...prev, explainerAttachment: e.target.files?.[0] || null }));
-                      }}
-                    />
-                  </div>
-                  <div className="upload-inline-item">
-                    <label>Audio Source</label>
-                    <div className="mode-row">
-                      <button
-                        className={`btn-day secondary ${explainerAudioSource === "upload" ? "selected-chip" : ""}`}
-                        onClick={async () => {
-                          if (["recording", "paused"].includes(explainerRecorderStatus)) {
-                            await stopExplainerAudioRecord();
-                          }
-                          setExplainerAudioSource("upload");
-                          setExplainerRecorderStatus("idle");
-                        }}
-                      >
-                        Upload Audio
-                      </button>
-                      <button
-                        className={`btn-day secondary ${explainerAudioSource === "record" ? "selected-chip" : ""}`}
-                        onClick={() => {
-                          setExplainerAudioSource("record");
-                          setUploadFiles((prev) => ({ ...prev, explainerAudio: null }));
-                        }}
-                      >
-                        Record Audio
-                      </button>
-                    </div>
-                    {explainerAudioSource === "upload" ? (
-                      <input
-                        className="task-select"
-                        type="file"
-                        accept="audio/*"
-                        onChange={(e) => {
-                          setUploadFiles((prev) => ({ ...prev, explainerAudio: e.target.files?.[0] || null }));
-                          setExplainerRecordedBlob(null);
-                          setExplainerRecorderStatus("idle");
-                        }}
-                      />
-                    ) : (
-                      <div className="task-modal-actions explainer-recorder-actions">
-                        <button className="btn-day secondary" onClick={startExplainerAudioRecord} disabled={explainerRecorderStatus === "recording" || explainerRecorderStatus === "paused"}>
-                          Start
-                        </button>
-                        <button className="btn-day secondary" onClick={pauseExplainerAudioRecord} disabled={explainerRecorderStatus !== "recording"}>
-                          Pause
-                        </button>
-                        <button className="btn-day secondary" onClick={resumeExplainerAudioRecord} disabled={explainerRecorderStatus !== "paused"}>
-                          Resume
-                        </button>
-                        <button className="btn-ticket" onClick={stopExplainerAudioRecord} disabled={!["recording", "paused"].includes(explainerRecorderStatus)}>
-                          Stop
-                        </button>
-                      </div>
-                    )}
-                    {explainerAudioSource === "record" ? (
-                      <p className="day-state">Recorder Status: {capitalize(explainerRecorderStatus)}</p>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="explainer-checklist">
-                  <span className={`explainer-check-item ${explainerAttachmentReady ? "done" : "pending"}`}>
-                    {explainerAttachmentReady ? "PDF/Image ✓" : "PDF/Image ✗"}
-                  </span>
-                  <span className={`explainer-check-item ${explainerAudioReady ? "done" : "pending"}`}>
-                    {explainerAudioReady ? "Audio ✓" : "Audio ✗"}
-                  </span>
-                </div>
-              </div>
+              <p className="day-state" style={{ margin: "4px 0" }}>
+                After saving subject &amp; topic, the canvas will open for recording.
+              </p>
             ) : null}
             {sessionForm.recorder_type === "uploader" ? (
               <div className="upload-inline-grid">
@@ -2288,9 +2123,7 @@ export default function RecorderPage() {
             <textarea className="task-textarea" placeholder={isSimpRecord ? "Record note" : "Notes"} value={sessionForm.notes} onChange={(e) => setSessionForm((p) => ({ ...p, notes: e.target.value }))} />
             <div className="task-modal-actions">
               {sessionForm.recorder_type === "pdf_explainer" ? (
-                <button className="btn-day" disabled={!explainerDoneReady || explainerDoneLoading} onClick={async () => { await createExplainerSessionWithUploads(); setCreateModalOpen(false); }}>
-                  {explainerDoneLoading ? "Saving..." : "Done"}
-                </button>
+                <button className="btn-ticket" onClick={openExplainerFrame}>● Open Canvas</button>
               ) : sessionForm.recorder_type === "uploader" ? (
                 <button className="btn-day" onClick={createAndUpload}>Create &amp; Upload</button>
               ) : (
@@ -2303,129 +2136,212 @@ export default function RecorderPage() {
 
             {isRecordingActive || recorderArming ? (
               <div
-                className={`recording-overlay recording-${recordView}`}
+                className={`meet-overlay recording-${recordView}`}
                 ref={recordingBoxRef}
                 style={recordView === "float" && floatPos ? { left: floatPos.x, top: floatPos.y, right: "auto", bottom: "auto" } : undefined}
               >
-                <div className="recording-bar" onPointerDown={onFloatPointerDown}>
-                  <span className="record-dot live" aria-hidden="true" />
-                  <span className="recording-title">
-                    {recorderLabel} · {capitalize(selectedRecorderType).replace("_", " ")} · {formatDuration(elapsedDisplay)} · {capitalize(selectedSession?.status || "")}
-                  </span>
-                  <div className="recording-bar-actions" onPointerDown={(e) => e.stopPropagation()}>
+                {/* Top bar */}
+                <div className="meet-topbar" onPointerDown={recordView === "float" ? onFloatPointerDown : undefined}>
+                  <div className="meet-topbar-left">
+                    <span className="record-dot live" />
+                    <span className="meet-elapsed">{formatDuration(elapsedDisplay)}</span>
+                    <span className="meet-session-name">{recorderLabel}</span>
+                  </div>
+                  <div className="meet-topbar-right" onPointerDown={(e) => e.stopPropagation()}>
                     {hasVideoMode || hasScreenMode ? (
-                      <button className="rec-icon-btn" onClick={enterPip} title="Pop out (Picture-in-Picture)" aria-label="Picture-in-Picture">📺</button>
+                      <button className="meet-icon-sm" onClick={enterPip} title="Picture-in-Picture">⧉</button>
                     ) : null}
                     {recordView === "full" ? (
-                      <button className="rec-icon-btn" onClick={() => setRecordView("float")} title="Floating window" aria-label="Floating window">🗗</button>
+                      <button className="meet-icon-sm" onClick={() => setRecordView("float")} title="Float">🗗</button>
                     ) : (
-                      <button className="rec-icon-btn" onClick={() => setRecordView("full")} title="Fullscreen" aria-label="Fullscreen">⛶</button>
+                      <button className="meet-icon-sm" onClick={() => setRecordView("full")} title="Fullscreen">⛶</button>
                     )}
                   </div>
                 </div>
-                <div className="recording-stage">
+
+                {/* Main stage */}
+                <div className="meet-stage">
+                  {/* Timer-only */}
                   {selectedModes.length === 0 ? (
-                    <div className="timer-only-display">
-                      <span className="timer-only-label">Study Timer</span>
-                      <strong className="timer-only-time">{formatDuration(elapsedDisplay)}</strong>
+                    <div className="meet-timer-stage">
+                      <strong className="meet-big-timer">{formatDuration(elapsedDisplay)}</strong>
+                      <span className="meet-timer-label">Study Timer</span>
                     </div>
                   ) : null}
-                {!isClosed && selectedRecorderType !== "pdf_explainer" && (hasVideoMode || hasScreenMode) ? (
-                  hasVideoMode && hasScreenMode ? (
-                    <div className="preview-grid">
-                      <div className="preview-card">
-                        <h4>Meet Layout Preview (Screen 3:1 Video)</h4>
-                        <video ref={combinedPreviewRef} className="live-preview" muted autoPlay playsInline />
-                        {!canUseLiveControls ? <p className="day-state">Preview starts after you click Start.</p> : null}
+
+                  {/* Audio only */}
+                  {!isClosed && hasAudioMode && !hasVideoMode && !hasScreenMode ? (
+                    <div className="meet-audio-stage">
+                      <canvas ref={audioVizCanvasRef} className="meet-audio-viz" width={900} height={220} />
+                      <div className="meet-audio-name">
+                        <div className="meet-avatar-sm">{recorderInitial}</div>
+                        {recorderLabel}
                       </div>
                     </div>
-                  ) : (
-                    <div className="preview-grid">
-                      {hasVideoMode ? (
-                        <div className="preview-card">
-                          <h4>Camera Preview</h4>
-                          <div className="preview-frame">
-                            <video ref={cameraPreviewRef} className="live-preview" muted autoPlay playsInline />
-                            {liveControls.cameraOff ? (
-                              <div className="camera-off-placeholder">
-                                <div className="camera-off-avatar">{recorderInitial}</div>
-                                <p className="camera-off-name">{recorderLabel}</p>
-                              </div>
-                            ) : null}
+                  ) : null}
+
+                  {/* Video / call stage — camera always stays in DOM to preserve srcObject */}
+                  {!isClosed && hasVideoMode ? (
+                    <div className={`meet-vcall-stage${hasScreenMode && liveControls.sharingScreen ? " screen-active" : ""}`}>
+                      {hasScreenMode ? (
+                        <video ref={screenPreviewRef} className="meet-screen-video" muted autoPlay playsInline />
+                      ) : null}
+                      <div className={`meet-vcam${liveControls.cameraOff ? " cam-off" : ""}`}>
+                        <video ref={cameraPreviewRef} muted autoPlay playsInline />
+                        {liveControls.cameraOff ? (
+                          <div className="meet-vcam-off">
+                            <div className="meet-avatar">{recorderInitial}</div>
+                            <span className="meet-cam-off-name">{recorderLabel}</span>
                           </div>
-                          {!canUseLiveControls ? <p className="day-state">Preview starts after you click Start.</p> : null}
-                        </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Bottom toolbar */}
+                <div className="meet-toolbar">
+                  {canUseLiveControls && selectedRecorderType !== "pdf_explainer" ? (
+                    <>
+                      {hasAudioMode ? (
+                        <button className={`meet-ctrl${liveControls.micMuted ? " ctrl-muted" : ""}`} onClick={toggleMute}
+                          title={liveControls.micMuted ? "Unmute" : "Mute"}>
+                          {liveControls.micMuted ? "🔇" : "🎤"}
+                        </button>
+                      ) : null}
+                      {hasVideoMode ? (
+                        <button className={`meet-ctrl${liveControls.cameraOff ? " ctrl-muted" : ""}`} onClick={toggleCamera}
+                          title={liveControls.cameraOff ? "Turn on camera" : "Turn off camera"}>
+                          📹
+                        </button>
                       ) : null}
                       {hasScreenMode ? (
-                        <div className="preview-card">
-                          <h4>Screen Preview</h4>
-                          <video ref={screenPreviewRef} className="live-preview" muted autoPlay playsInline />
-                          {!canUseLiveControls ? <p className="day-state">Preview starts after you click Start.</p> : null}
-                        </div>
+                        <button className={`meet-ctrl${!liveControls.sharingScreen ? " ctrl-muted" : ""}`} onClick={toggleScreenShare}
+                          title={liveControls.sharingScreen ? "Stop sharing" : "Share screen"}>
+                          🖥️
+                        </button>
                       ) : null}
-                    </div>
-                  )
-                ) : null}
-                {!isClosed && selectedRecorderType !== "pdf_explainer" && hasAudioMode && !hasVideoMode && !hasScreenMode ? (
-                  <div className="preview-grid">
-                    <div className="preview-card">
-                      <h4>Audio Preview</h4>
-                      <canvas ref={audioVizCanvasRef} className="audio-visualizer" width={760} height={180} />
-                      {!canUseLiveControls ? <p className="day-state">Preview starts after you click Start.</p> : null}
-                    </div>
-                  </div>
-                ) : null}
-                </div>
-                <div className="recording-controls">
-                {canUseLiveControls && selectedRecorderType !== "pdf_explainer" ? (
-                  <div className="icon-controls-row">
-                    {hasAudioMode ? (
-                      <button
-                        className={`icon-toggle-btn ${liveControls.micMuted ? "inactive" : "active"}`}
-                        onClick={toggleMute}
-                        title={liveControls.micMuted ? "Unmute" : "Mute"}
-                        aria-label={liveControls.micMuted ? "Unmute" : "Mute"}
-                      >
-                        <span className="icon-symbol" aria-hidden="true">🎤</span>
-                        {liveControls.micMuted ? <span className="icon-cross" aria-hidden="true">✕</span> : null}
-                      </button>
-                    ) : null}
-                    {hasVideoMode ? (
-                      <button
-                        className={`icon-toggle-btn ${liveControls.cameraOff ? "inactive" : "active"}`}
-                        onClick={toggleCamera}
-                        title={liveControls.cameraOff ? "Start Video" : "Stop Video"}
-                        aria-label={liveControls.cameraOff ? "Start Video" : "Stop Video"}
-                      >
-                        <span className="icon-symbol" aria-hidden="true">📹</span>
-                        {liveControls.cameraOff ? <span className="icon-cross" aria-hidden="true">✕</span> : null}
-                      </button>
-                    ) : null}
-                    {hasScreenMode ? (
-                      <button
-                        className={`icon-toggle-btn ${liveControls.sharingScreen ? "active" : "inactive"}`}
-                        onClick={toggleScreenShare}
-                        title={liveControls.sharingScreen ? "Stop Screen Share" : "Share Screen"}
-                        aria-label={liveControls.sharingScreen ? "Stop Screen Share" : "Share Screen"}
-                      >
-                        <span className="icon-symbol" aria-hidden="true">🖥️</span>
-                        {!liveControls.sharingScreen ? <span className="icon-cross" aria-hidden="true">✕</span> : null}
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-                  <div className="recording-session-controls">
-                    {canPause ? <button className="btn-day secondary" onClick={pauseSession}>Pause</button> : null}
-                    {canResume ? <button className="btn-day" onClick={resumeSession}>Resume</button> : null}
-                    {canStop ? (
-                      <button className="btn-ticket" onClick={stopSession}>
-                        {selectedRecorderType === "audio" ? "End" : "Stop"}
-                      </button>
-                    ) : null}
-                  </div>
+                    </>
+                  ) : null}
+                  {canPause  ? <button className="meet-ctrl ctrl-neutral" onClick={pauseSession} title="Pause">⏸</button> : null}
+                  {canResume ? <button className="meet-ctrl ctrl-neutral" onClick={resumeSession} title="Resume">▶</button> : null}
+                  {canStop ? (
+                    <button className="meet-end" onClick={stopSession}>
+                      {selectedRecorderType === "audio" ? "End" : "Stop"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ) : null}
+
+            {/* Explainer meet-frame */}
+            {explainerFrameOpen ? (
+              <div className="meet-overlay recording-full">
+                {/* Top bar */}
+                <div className="meet-topbar">
+                  <div className="meet-topbar-left">
+                    <span className="record-dot live" />
+                    <span className="meet-elapsed">PDF Explainer</span>
+                    {explainerFiles.length > 0 ? (
+                      <div className="meet-exp-chips">
+                        {explainerFiles.map((f, i) => (
+                          <button key={i}
+                            className={`meet-exp-chip${i === explainerFileIdx ? " active" : ""}`}
+                            onClick={() => { setExplainerFileIdx(i); setUploadFiles((p) => ({ ...p, explainerAttachment: f.file })); }}>
+                            {f.name}
+                            <span className="meet-exp-chip-del" onClick={(e) => { e.stopPropagation();
+                              setExplainerFiles((prev) => {
+                                const next = prev.filter((_, j) => j !== i);
+                                const newIdx = Math.min(explainerFileIdx, Math.max(0, next.length - 1));
+                                setExplainerFileIdx(newIdx);
+                                if (next.length > 0) setUploadFiles((p) => ({ ...p, explainerAttachment: next[newIdx]?.file || null }));
+                                else setUploadFiles((p) => ({ ...p, explainerAttachment: null }));
+                                return next;
+                              });
+                            }}>✕</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="meet-topbar-right">
+                    <button className="meet-icon-sm" onClick={() => setExplainerFrameOpen(false)} title="Close">✕</button>
+                  </div>
+                </div>
+
+                {/* Stage */}
+                <div className="meet-stage">
+                  {explainerFiles.length === 0 ? (
+                    <button className="meet-upload-prompt" onClick={() => explainerFileInputRef.current?.click()}>
+                      📄 Upload PDF or Image to begin
+                    </button>
+                  ) : (
+                    <ExplainerCanvas
+                      ref={explainerCanvasRef}
+                      files={explainerFiles}
+                      fileIdx={explainerFileIdx}
+                      zoom={explainerZoom}
+                      onZoomChange={setExplainerZoom}
+                      onRecordingChange={setExplainerRecording}
+                      onRecorded={(blob) => {
+                        setExplainerVideoBlob(blob);
+                        setUploadFiles((p) => ({ ...p, explainerAttachment: explainerFiles[explainerFileIdx]?.file || null }));
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Toolbar */}
+                <div className="meet-toolbar">
+                  <label className="meet-ctrl" title="Upload PDF / Image" style={{ cursor: "pointer" }}>
+                    📄
+                    <input
+                      ref={explainerFileInputRef}
+                      type="file"
+                      accept="application/pdf,image/*"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const url = URL.createObjectURL(file);
+                        const kind = getAttachmentKindFromName(file.name);
+                        setExplainerFiles((prev) => {
+                          const next = [...prev, { file, url, kind, name: file.name }];
+                          setExplainerFileIdx(next.length - 1);
+                          return next;
+                        });
+                        setUploadFiles((prev) => ({ ...prev, explainerAttachment: file }));
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {explainerFiles.length > 0 ? (
+                    !explainerRecording ? (
+                      <button className="meet-ctrl" style={{ background: "rgba(239,68,68,0.18)", fontSize: 18 }}
+                        onClick={() => explainerCanvasRef.current?.startRecord()} title="Start recording">
+                        ⏺
+                      </button>
+                    ) : (
+                      <button className="meet-ctrl ctrl-muted" style={{ fontSize: 18 }}
+                        onClick={() => explainerCanvasRef.current?.stopRecord()} title="Stop recording">
+                        ⏹
+                      </button>
+                    )
+                  ) : null}
+                  {explainerVideoBlob ? (
+                    <span className="meet-exp-ready">✓ {(explainerVideoBlob.size / 1024 / 1024).toFixed(1)} MB</span>
+                  ) : null}
+                  <button
+                    className="meet-end"
+                    disabled={!explainerDoneReady || explainerDoneLoading}
+                    onClick={async () => { await createExplainerSessionWithUploads(); setExplainerFrameOpen(false); }}
+                  >
+                    {explainerDoneLoading ? "Saving…" : "Done"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {orderedSessionList.length === 0 ? (
               <p className="day-state">
                 {listScope === "simple" ? "No simple records yet." : "No sessions recorded today."}
@@ -2470,9 +2386,7 @@ export default function RecorderPage() {
                       <div className="session-card-meta">
                         <span className="session-chip">{capitalize(getRecorderType(session)).replace("_", " ")}</span>
                         <span className="session-chip">{session.session_type}</span>
-                        <span className="session-chip">{session.user_id || "user"}</span>
                         <span className="session-chip">{session.date}</span>
-                        <span className={`session-chip status-chip status-${session.status}`}>{session.status}</span>
                       </div>
                       <div className="session-card-actions" onClick={(e) => e.stopPropagation()}>
                         <button
@@ -2493,60 +2407,88 @@ export default function RecorderPage() {
         )}
       </section>
       {playerModal.open ? (
-        <div className="task-modal-overlay" onClick={closePlayer}>
-          <div className="task-modal media-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="recording-player-head media-modal-head">
-              <h3>{playerModal.title || "Player"}</h3>
-              <button className="btn-cancel" onClick={closePlayer}>Close</button>
+        <div className="vlc-backdrop" onClick={closePlayer}>
+          <div className="vlc-player" onClick={(e) => e.stopPropagation()}>
+            {/* Title bar */}
+            <div className="vlc-titlebar">
+              <span className="vlc-title">{playerModal.title || "Player"}</span>
+              <button className="vlc-close-btn" onClick={closePlayer}>✕</button>
             </div>
-            <div className="media-player-wrap" ref={playerWrapRef}>
+            {/* Media area */}
+            <div className="vlc-media-area" ref={playerWrapRef}>
               {playerModal.loading ? (
-                <p className="day-state">Loading recording…</p>
+                <div className="vlc-placeholder">Loading recording…</div>
               ) : playerModal.url ? (
                 playerModal.mediaType === "audio" ? (
-                  <audio
-                    ref={playerMediaRef}
-                    className="media-player-el media-player-audio"
-                    controls
-                    autoPlay
-                    preload="metadata"
-                    src={playerModal.url}
-                  />
+                  <>
+                    <audio
+                      ref={playerMediaRef}
+                      src={playerModal.url}
+                      autoPlay
+                      preload="metadata"
+                      onTimeUpdate={onPlayerTimeUpdate}
+                      onDurationChange={onPlayerDurationChange}
+                      onPlay={() => setPlayerPlaying(true)}
+                      onPause={() => setPlayerPlaying(false)}
+                    />
+                    <div className="vlc-audio-vis">
+                      <div className="vlc-pulse-rings">
+                        {[0, 1, 2, 3].map((i) => (
+                          <span key={i} className="vlc-ring"
+                            style={{ width: `${44 + i * 32}px`, height: `${44 + i * 32}px`, animationDelay: `${i * 0.4}s`, animationPlayState: playerPlaying ? "running" : "paused" }} />
+                        ))}
+                        <span className="vlc-ring-note">♫</span>
+                      </div>
+                      <div className="vlc-audio-title">{playerModal.title}</div>
+                    </div>
+                  </>
                 ) : (
                   <video
                     ref={playerMediaRef}
-                    className="media-player-el"
-                    controls
+                    className="vlc-video-el"
+                    src={playerModal.url}
                     autoPlay
                     playsInline
                     preload="metadata"
-                    src={playerModal.url}
+                    onTimeUpdate={onPlayerTimeUpdate}
+                    onDurationChange={onPlayerDurationChange}
+                    onPlay={() => setPlayerPlaying(true)}
+                    onPause={() => setPlayerPlaying(false)}
                   />
                 )
               ) : (
-                <p className="day-state">No playable media.</p>
+                <div className="vlc-placeholder">No playable media.</div>
               )}
             </div>
+            {/* Controls */}
             {!playerModal.loading && playerModal.url ? (
-              <div className="media-controls">
-                <button className="btn-day secondary" onClick={togglePlayerPlay}>Play / Pause</button>
-                <label className="media-speed">
-                  <span>Speed</span>
-                  <select
-                    className="task-select speed-select"
-                    value={String(playerRate)}
-                    onChange={(e) => changePlayerSpeed(Number(e.target.value))}
-                  >
-                    <option value="0.5">0.5x</option>
-                    <option value="0.75">0.75x</option>
-                    <option value="1">1x</option>
-                    <option value="1.25">1.25x</option>
-                    <option value="1.5">1.5x</option>
-                    <option value="2">2x</option>
+              <div className="vlc-controls">
+                <div className="vlc-seek-row">
+                  <input type="range" className="vlc-seek" min="0" max={playerDuration || 0} step="0.5"
+                    value={playerCurrentTime} onChange={onPlayerSeek} />
+                  <span className="vlc-time">{fmtSecs(playerCurrentTime)} / {fmtSecs(playerDuration)}</span>
+                </div>
+                <div className="vlc-btn-row">
+                  <button className="vlc-btn vlc-play-btn" onClick={togglePlayerPlay}>
+                    {playerPlaying ? "⏸" : "▶"}
+                  </button>
+                  <div className="vlc-vol-group">
+                    <span>🔊</span>
+                    <input type="range" className="vlc-vol" min="0" max="1" step="0.05"
+                      value={playerVolume} onChange={onPlayerVolume} />
+                  </div>
+                  <select className="vlc-speed-sel" value={String(playerRate)}
+                    onChange={(e) => changePlayerSpeed(Number(e.target.value))}>
+                    <option value="0.5">0.5×</option>
+                    <option value="0.75">0.75×</option>
+                    <option value="1">1×</option>
+                    <option value="1.25">1.25×</option>
+                    <option value="1.5">1.5×</option>
+                    <option value="2">2×</option>
                   </select>
-                </label>
-                <button className="btn-day secondary" onClick={togglePlayerFullscreen}>Fullscreen</button>
-                <a className="btn-day secondary" href={playerModal.url} download target="_blank" rel="noreferrer">Download</a>
+                  <button className="vlc-btn" onClick={togglePlayerFullscreen} title="Fullscreen">⛶</button>
+                  <a className="vlc-btn" href={playerModal.url} download target="_blank" rel="noreferrer" title="Download">⬇</a>
+                </div>
               </div>
             ) : null}
           </div>
@@ -2556,19 +2498,25 @@ export default function RecorderPage() {
         <div className="task-modal-overlay" onClick={() => setExplainerModalOpen(false)}>
           <div className="task-modal explainer-modal" onClick={(e) => e.stopPropagation()}>
             <div className="recording-player-head">
-              <h3>PDF Explainer Player</h3>
+              <h3>PDF Explainer</h3>
               <button className="btn-cancel" onClick={() => setExplainerModalOpen(false)}>Close</button>
             </div>
-            <div className="explainer-viewer">
-              {attachmentKind === "pdf" && playbackUrls.attachment ? (
-                <iframe title="Explainer PDF" src={playbackUrls.attachment} className="explainer-asset" />
-              ) : null}
-              {attachmentKind === "image" && playbackUrls.attachment ? (
-                <img src={playbackUrls.attachment} alt="Explainer" className="explainer-asset" />
-              ) : null}
-              {attachmentKind === "other" ? (
-                <p className="day-state">Upload PDF/image to preview here.</p>
-              ) : null}
+            <div className="explainer-zoom-bar">
+              <button className="vlc-btn" onClick={() => setExplainerZoom((z) => Math.max(0.25, +(z - 0.1).toFixed(2)))}>−</button>
+              <span className="explainer-zoom-val">{Math.round(explainerZoom * 100)}%</span>
+              <button className="vlc-btn" onClick={() => setExplainerZoom((z) => Math.min(4, +(z + 0.1).toFixed(2)))}>+</button>
+              <button className="vlc-btn" onClick={() => setExplainerZoom(1)}>Reset</button>
+            </div>
+            <div className="explainer-viewer explainer-viewer-scroll">
+              <div style={{ transform: `scale(${explainerZoom})`, transformOrigin: "top center", transition: "transform 0.15s" }}>
+                {attachmentKind === "pdf" && playbackUrls.attachment ? (
+                  <iframe title="Explainer PDF" src={playbackUrls.attachment} className="explainer-asset" />
+                ) : attachmentKind === "image" && playbackUrls.attachment ? (
+                  <img src={playbackUrls.attachment} alt="Explainer" className="explainer-asset" />
+                ) : (
+                  <p className="day-state">Upload PDF/image to preview here.</p>
+                )}
+              </div>
             </div>
             <div className="explainer-audio-wrap">
               {playbackUrls.audio ? (

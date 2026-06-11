@@ -76,6 +76,8 @@ def settings() -> Dict[str, Any]:
         "auth_required": os.getenv("AUTH_REQUIRED", "false").lower() == "true",
         "mailjet_api_key": os.getenv("MAILJET_API_KEY", ""),
         "mailjet_secret_key": os.getenv("MAILJET_SECRET_KEY", ""),
+        "mongodb_day_activities_collection": os.getenv("MONGODB_DAY_ACTIVITIES_COLLECTION", "day_activities"),
+        "mongodb_activity_categories_collection": os.getenv("MONGODB_ACTIVITY_CATEGORIES_COLLECTION", "activity_categories"),
     }
 
 
@@ -193,6 +195,16 @@ def otps_collection():
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_otps_collection"]]
 
 
+def day_activities_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_day_activities_collection"]]
+
+
+def activity_categories_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_activity_categories_collection"]]
+
+
 def s3_client():
     cfg = settings()
     if boto3 is None:
@@ -218,6 +230,9 @@ def sanitize_key_part(value: str) -> str:
 
 
 def session_media_key(doc: Dict[str, Any], media_type: str, ext: str) -> str:
+    user_id = sanitize_key_part(doc.get("user_id", ""))
     date_part = sanitize_key_part(doc.get("date", current_date_str()))
     subject_part = sanitize_key_part(doc.get("subject", "general"))
+    if user_id:
+        return f"study-sessions/{user_id}/{date_part}/{subject_part}/{doc.get('_id')}/{media_type}.{ext}"
     return f"study-sessions/{date_part}/{subject_part}/{doc.get('_id')}/{media_type}.{ext}"
