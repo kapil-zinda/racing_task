@@ -228,3 +228,18 @@ class AgentV2EntryRequest(BaseModel):
     note: str = ""
     work_type: str = "study"
     confirm: bool = False
+
+
+class ActivityUpsertRequest(BaseModel):
+    title: str = ""
+    date: str = ""
+    start_time: str = ""
+    end_time: str = ""
+    category: str = "Study"
+    note: str = ""
+
+
+class ActivityCategoryRequest(BaseModel):
+    name: str
+    color: str = "#6366f1"
+

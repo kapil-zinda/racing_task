@@ -28,6 +28,17 @@ def _prefix() -> str:
     return (settings().get("content_prefix") or "content").strip().strip("/")
 
 
+def _user_root_id(user_id: str) -> str:
+    uid = (user_id or "").strip()
+    return f"content_root:{uid}" if uid else ROOT_FOLDER_ID
+
+
+def _user_prefix(user_id: str) -> str:
+    uid = (user_id or "").strip()
+    base = _prefix()
+    return f"{base}/{uid}" if uid else base
+
+
 def _new_id(prefix: str) -> str:
     return f"{prefix}:{uuid.uuid4().hex}"
 
@@ -75,20 +86,25 @@ def _ensure_indexes() -> None:
     files.create_index([("updated_at", ASCENDING)])
 
     _content_indexes_ensured = True
-    _ensure_root_folder()
 
 
-def _ensure_root_folder() -> None:
+def _ensure_root_folder(user_id: str = "") -> None:
+    root_id = _user_root_id(user_id)
+    uid = (user_id or "").strip()
+    # Use uid as the folder name so the (parent_id, name) unique index doesn't
+    # collide when multiple users each have a root with parent_id=None.
+    root_name = uid if uid else "Root"
     folders = content_folders_collection()
     folders.update_one(
-        {"_id": ROOT_FOLDER_ID},
+        {"_id": root_id},
         {
             "$setOnInsert": {
-                "_id": ROOT_FOLDER_ID,
-                "name": "Root",
+                "_id": root_id,
+                "name": root_name,
                 "parent_id": None,
                 "node_type": "folder",
                 "path": "",
+                "user_id": uid,
                 "created_at": _now(),
             },
             "$set": {"updated_at": _now()},
@@ -97,13 +113,17 @@ def _ensure_root_folder() -> None:
     )
 
 
-def _searchable_scope_ids() -> tuple[Set[str], Set[str]]:
+def _searchable_scope_ids(user_id: str = "") -> tuple[Set[str], Set[str]]:
     files = content_files_collection()
     folders = content_folders_collection()
     docs = pdf_docs_collection()
+    root_id = _user_root_id(user_id)
+    uid = (user_id or "").strip()
+    uid_filter: dict = {"user_id": uid} if uid else {}
 
     # Backfill: documents uploaded from Search page may not have content file links.
-    for row in docs.find({"key": {"$exists": True, "$ne": ""}}, {"doc_id": 1, "source_file_id": 1, "file_name": 1, "key": 1, "bucket": 1, "status": 1}):
+    backfill_query = {"key": {"$exists": True, "$ne": ""}, **uid_filter}
+    for row in docs.find(backfill_query, {"doc_id": 1, "source_file_id": 1, "file_name": 1, "key": 1, "bucket": 1, "status": 1}):
         status = str(row.get("status", "") or "").strip().lower()
         if status in {"failed", "deleted"}:
             continue
@@ -121,7 +141,7 @@ def _searchable_scope_ids() -> tuple[Set[str], Set[str]]:
             )
             continue
         file_name = str(row.get("file_name", "") or "").strip() or "document.pdf"
-        safe_name = _unique_file_name(ROOT_FOLDER_ID, file_name)
+        safe_name = _unique_file_name(root_id, file_name)
         new_id = _new_id("file")
         now = _now()
         file_bucket = str(row.get("bucket", "") or "").strip() or _pdf_bucket()
@@ -129,8 +149,8 @@ def _searchable_scope_ids() -> tuple[Set[str], Set[str]]:
             {
                 "_id": new_id,
                 "node_type": "file",
-                "parent_id": ROOT_FOLDER_ID,
-                "folder_id": ROOT_FOLDER_ID,
+                "parent_id": root_id,
+                "folder_id": root_id,
                 "name": safe_name,
                 "content_type": "application/pdf",
                 "size": 0,
@@ -140,6 +160,7 @@ def _searchable_scope_ids() -> tuple[Set[str], Set[str]]:
                 "status": "ready",
                 "source": "pdf_search_upload",
                 "visibility_scope": "searchable_only",
+                "user_id": uid,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -151,11 +172,11 @@ def _searchable_scope_ids() -> tuple[Set[str], Set[str]]:
 
     raw_file_ids = {
         str(row.get("source_file_id", "")).strip()
-        for row in docs.find({"source_file_id": {"$exists": True, "$ne": ""}}, {"source_file_id": 1})
+        for row in docs.find({"source_file_id": {"$exists": True, "$ne": ""}, **uid_filter}, {"source_file_id": 1})
     }
     raw_file_ids = {fid for fid in raw_file_ids if fid}
     if not raw_file_ids:
-        return set(), {ROOT_FOLDER_ID}
+        return set(), {root_id}
 
     file_docs = list(
         files.find(
@@ -169,7 +190,7 @@ def _searchable_scope_ids() -> tuple[Set[str], Set[str]]:
         str(row.get("_id")): row.get("parent_id")
         for row in folders.find({}, {"_id": 1, "parent_id": 1})
     }
-    searchable_folder_ids: Set[str] = {ROOT_FOLDER_ID}
+    searchable_folder_ids: Set[str] = {root_id}
     for file_doc in file_docs:
         parent_id = str(file_doc.get("parent_id") or file_doc.get("folder_id") or "").strip()
         while parent_id:
@@ -193,8 +214,8 @@ def _folder_path(folder: Dict[str, Any]) -> str:
     return (folder.get("path") or "").strip("/")
 
 
-def _build_object_key(folder: Dict[str, Any], file_name: str) -> str:
-    root = _prefix()
+def _build_object_key(folder: Dict[str, Any], file_name: str, user_id: str = "") -> str:
+    root = _user_prefix(user_id)
     path = _folder_path(folder)
     safe_file = _safe_key_part(file_name)
     if path:
@@ -273,9 +294,15 @@ def list_content(
     sort_by: str | None,
     sort_dir: str | None,
     view_mode: str | None = None,
+    user_id: str = "",
 ) -> Dict[str, Any]:
     _ensure_indexes()
-    fid = (folder_id or ROOT_FOLDER_ID).strip()
+    _ensure_root_folder(user_id)
+    uid = (user_id or "").strip()
+    fid = (folder_id or _user_root_id(uid)).strip()
+    # Authenticated users never land on the shared legacy root
+    if uid and fid == ROOT_FOLDER_ID:
+        fid = _user_root_id(uid)
     folder = _get_folder_or_404(fid)
     folders = content_folders_collection()
     files = content_files_collection()
@@ -294,7 +321,7 @@ def list_content(
 
     mode = (view_mode or "all").strip().lower()
     if mode == "searchable":
-        searchable_file_ids, searchable_folder_ids = _searchable_scope_ids()
+        searchable_file_ids, searchable_folder_ids = _searchable_scope_ids(user_id)
         subfolders = [row for row in subfolders if str(row.get("_id", "")) in searchable_folder_ids]
         file_docs = [row for row in file_docs if str(row.get("_id", "")) in searchable_file_ids]
     else:
@@ -329,15 +356,23 @@ def list_content(
     }
 
 
-def list_folder_tree(parent_id: str | None = None, view_mode: str | None = None) -> Dict[str, Any]:
+def list_folder_tree(parent_id: str | None = None, view_mode: str | None = None, user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
+    _ensure_root_folder(user_id)
+    uid = (user_id or "").strip()
     query: Dict[str, Any] = {}
     if parent_id is not None:
-        query["parent_id"] = parent_id
+        # Redirect legacy shared root to user's root
+        pid = parent_id
+        if uid and pid == ROOT_FOLDER_ID:
+            pid = _user_root_id(uid)
+        query["parent_id"] = pid
+    if uid:
+        query["user_id"] = uid
     rows = list(content_folders_collection().find(query, {"_id": 1, "name": 1, "parent_id": 1, "path": 1}))
     mode = (view_mode or "all").strip().lower()
     if mode == "searchable":
-        _, searchable_folder_ids = _searchable_scope_ids()
+        _, searchable_folder_ids = _searchable_scope_ids(user_id)
         rows = [row for row in rows if str(row.get("_id", "")) in searchable_folder_ids]
     return {
         "folders": [
@@ -352,10 +387,15 @@ def list_folder_tree(parent_id: str | None = None, view_mode: str | None = None)
     }
 
 
-def create_folder(parent_id: str, name: str) -> Dict[str, Any]:
+def create_folder(parent_id: str, name: str, user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
+    _ensure_root_folder(user_id)
+    uid = (user_id or "").strip()
     pname = _safe_name(name)
-    parent = _get_folder_or_404((parent_id or ROOT_FOLDER_ID).strip())
+    raw_pid = (parent_id or _user_root_id(uid)).strip()
+    if uid and raw_pid == ROOT_FOLDER_ID:
+        raw_pid = _user_root_id(uid)
+    parent = _get_folder_or_404(raw_pid)
     new_id = _new_id("folder")
     parent_path = _folder_path(parent)
     full_path = f"{parent_path}/{pname}".strip("/")
@@ -371,6 +411,7 @@ def create_folder(parent_id: str, name: str) -> Dict[str, Any]:
         "node_type": "folder",
         "parent_id": parent["_id"],
         "path": full_path,
+        "user_id": (user_id or "").strip(),
         "created_at": _now(),
         "updated_at": _now(),
     }
@@ -378,7 +419,7 @@ def create_folder(parent_id: str, name: str) -> Dict[str, Any]:
     return {"message": "Folder created", "folder": _folder_node(doc), "created": True}
 
 
-def rename_item(item_id: str, item_type: str, new_name: str) -> Dict[str, Any]:
+def rename_item(item_id: str, item_type: str, new_name: str, user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
     iid = (item_id or "").strip()
     if not iid:
@@ -400,7 +441,7 @@ def rename_item(item_id: str, item_type: str, new_name: str) -> Dict[str, Any]:
         return {"message": "File renamed", "item": _file_node(updated)}
 
     if kind == "folder":
-        if iid == ROOT_FOLDER_ID:
+        if iid == ROOT_FOLDER_ID or iid.startswith("content_root:"):
             raise ValueError("Root folder cannot be renamed")
         folders = content_folders_collection()
         folder = folders.find_one({"_id": iid})
@@ -427,12 +468,17 @@ def rename_item(item_id: str, item_type: str, new_name: str) -> Dict[str, Any]:
     raise ValueError("item_type must be file or folder")
 
 
-def create_upload_url(folder_id: str, file_name: str, content_type: str, size: int) -> Dict[str, Any]:
+def create_upload_url(folder_id: str, file_name: str, content_type: str, size: int, user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
-    folder = _get_folder_or_404((folder_id or ROOT_FOLDER_ID).strip())
+    _ensure_root_folder(user_id)
+    uid = (user_id or "").strip()
+    raw_fid = (folder_id or _user_root_id(uid)).strip()
+    if uid and raw_fid == ROOT_FOLDER_ID:
+        raw_fid = _user_root_id(uid)
+    folder = _get_folder_or_404(raw_fid)
     name = _safe_name(file_name)
     ct = (content_type or "application/octet-stream").strip()
-    s3_key = _build_object_key(folder, name)
+    s3_key = _build_object_key(folder, name, user_id)
     files = content_files_collection()
 
     existing = files.find_one({"$or": [{"parent_id": folder["_id"]}, {"folder_id": folder["_id"]}], "name": name})
@@ -454,6 +500,7 @@ def create_upload_url(folder_id: str, file_name: str, content_type: str, size: i
                 "s3_key": s3_key,
                 "bucket": _bucket(),
                 "status": "uploading",
+                "user_id": (user_id or "").strip(),
                 "updated_at": now,
             },
             "$setOnInsert": {"created_at": now},
@@ -544,14 +591,15 @@ def _is_descendant_folder(parent_id: str, candidate_child_id: str) -> bool:
     return candidate_child_id in _collect_descendant_folder_ids(parent_id)
 
 
-def copy_item(item_id: str, item_type: str, destination_folder_id: str, scope: str | None = "all") -> Dict[str, Any]:
+def copy_item(item_id: str, item_type: str, destination_folder_id: str, scope: str | None = "all", user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
     mode = (scope or "all").strip().lower()
     if mode == "searchable":
         raise ValueError("Copy is disabled in searchable view")
     iid = (item_id or "").strip()
     kind = (item_type or "").strip().lower()
-    dest_id = (destination_folder_id or ROOT_FOLDER_ID).strip() or ROOT_FOLDER_ID
+    root_id = _user_root_id(user_id)
+    dest_id = (destination_folder_id or root_id).strip() or root_id
     if kind not in {"file", "folder"}:
         raise ValueError("item_type must be file or folder")
     if not iid:
@@ -566,7 +614,7 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
         if not src:
             raise LookupError("File not found")
         target_name = _unique_file_name(dest_folder["_id"], src.get("name", "file"))
-        dst_key = _build_object_key(dest_folder, target_name)
+        dst_key = _build_object_key(dest_folder, target_name, user_id)
         src_key = src.get("s3_key", "")
         src_bucket = str(src.get("bucket", "") or "").strip() or _bucket()
         dst_bucket = _bucket()
@@ -585,12 +633,13 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
             "s3_key": dst_key,
             "bucket": dst_bucket,
             "status": "ready",
+            "user_id": (user_id or "").strip(),
             "created_at": now,
             "updated_at": now,
         })
         return {"message": "File copied", "item": _file_node(files.find_one({"_id": new_id}))}
 
-    if iid == ROOT_FOLDER_ID:
+    if iid == ROOT_FOLDER_ID or iid.startswith("content_root:"):
         raise ValueError("Root folder cannot be copied")
     src_root = folders.find_one({"_id": iid})
     if not src_root:
@@ -653,7 +702,7 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
         new_parent_doc = folders.find_one({"_id": new_parent})
         if not new_parent_doc:
             continue
-        dst_key = _build_object_key(new_parent_doc, target_name)
+        dst_key = _build_object_key(new_parent_doc, target_name, user_id)
         src_bucket = str(src.get("bucket", "") or "").strip() or _bucket()
         dst_bucket = _bucket()
         if src.get("s3_key"):
@@ -670,6 +719,7 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
             "s3_key": dst_key,
             "bucket": dst_bucket,
             "status": "ready",
+            "user_id": (user_id or "").strip(),
             "created_at": now,
             "updated_at": now,
         })
@@ -683,14 +733,15 @@ def copy_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
     }
 
 
-def move_item(item_id: str, item_type: str, destination_folder_id: str, scope: str | None = "all") -> Dict[str, Any]:
+def move_item(item_id: str, item_type: str, destination_folder_id: str, scope: str | None = "all", user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
     mode = (scope or "all").strip().lower()
     if mode == "searchable":
         raise ValueError("Move is disabled in searchable view")
     iid = (item_id or "").strip()
     kind = (item_type or "").strip().lower()
-    dest_id = (destination_folder_id or ROOT_FOLDER_ID).strip() or ROOT_FOLDER_ID
+    root_id = _user_root_id(user_id)
+    dest_id = (destination_folder_id or root_id).strip() or root_id
     if kind not in {"file", "folder"}:
         raise ValueError("item_type must be file or folder")
     if not iid:
@@ -707,7 +758,7 @@ def move_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
         if (doc.get("parent_id") or doc.get("folder_id")) == dest_folder["_id"]:
             return {"message": "File already in destination folder", "item": _file_node(doc)}
         target_name = _unique_file_name(dest_folder["_id"], doc.get("name", "file"), exclude_id=iid)
-        dst_key = _build_object_key(dest_folder, target_name)
+        dst_key = _build_object_key(dest_folder, target_name, user_id)
         src_bucket = str(doc.get("bucket", "") or "").strip() or _bucket()
         dst_bucket = _bucket()
         if doc.get("s3_key") and (doc.get("s3_key") != dst_key or src_bucket != dst_bucket):
@@ -725,7 +776,7 @@ def move_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
         )
         return {"message": "File moved", "item": _file_node(files.find_one({"_id": iid}))}
 
-    if iid == ROOT_FOLDER_ID:
+    if iid == ROOT_FOLDER_ID or iid.startswith("content_root:"):
         raise ValueError("Root folder cannot be moved")
     root = folders.find_one({"_id": iid})
     if not root:
@@ -762,7 +813,7 @@ def move_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
         if not parent_folder:
             continue
         target_name = _unique_file_name(parent_folder["_id"], fdoc.get("name", "file"), exclude_id=fdoc["_id"])
-        dst_key = _build_object_key(parent_folder, target_name)
+        dst_key = _build_object_key(parent_folder, target_name, user_id)
         src_key = fdoc.get("s3_key", "")
         src_bucket = str(fdoc.get("bucket", "") or "").strip() or _bucket()
         dst_bucket = _bucket()
@@ -783,7 +834,7 @@ def move_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
     return {"message": "Folder moved", "item": _folder_node(folders.find_one({"_id": iid}))}
 
 
-def download_item(item_id: str, item_type: str, recursive: bool = True) -> Dict[str, Any]:
+def download_item(item_id: str, item_type: str, recursive: bool = True, user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
     iid = (item_id or "").strip()
     kind = (item_type or "").strip().lower()
@@ -810,7 +861,7 @@ def download_item(item_id: str, item_type: str, recursive: bool = True) -> Dict[
     folder = folders.find_one({"_id": iid})
     if not folder:
         raise LookupError("Folder not found")
-    if iid == ROOT_FOLDER_ID:
+    if iid == ROOT_FOLDER_ID or iid.startswith("content_root:"):
         base_name = "Root"
     else:
         base_name = folder.get("name", "Folder")
@@ -858,7 +909,7 @@ def download_item(item_id: str, item_type: str, recursive: bool = True) -> Dict[
     }
 
 
-def delete_item(item_id: str, item_type: str, recursive: bool = False, scope: str | None = "all") -> Dict[str, Any]:
+def delete_item(item_id: str, item_type: str, recursive: bool = False, scope: str | None = "all", user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
     iid = (item_id or "").strip()
     kind = (item_type or "").strip().lower()
@@ -923,7 +974,7 @@ def delete_item(item_id: str, item_type: str, recursive: bool = False, scope: st
             "deleted_pages": index_deleted["deleted_pages"],
         }
 
-    if iid == ROOT_FOLDER_ID:
+    if iid == ROOT_FOLDER_ID or iid.startswith("content_root:"):
         raise ValueError("Root folder cannot be deleted")
 
     folder_doc = folders.find_one({"_id": iid})
@@ -970,7 +1021,7 @@ def delete_item(item_id: str, item_type: str, recursive: bool = False, scope: st
         removed_folders = 0
         for frow in folder_docs:
             fid = str(frow.get("_id", "") or "")
-            if not fid or fid == ROOT_FOLDER_ID:
+            if not fid or fid == ROOT_FOLDER_ID or fid.startswith("content_root:"):
                 continue
             has_child_folders = folders.find_one({"parent_id": fid}, {"_id": 1})
             has_child_files = files.find_one({"$or": [{"parent_id": fid}, {"folder_id": fid}]}, {"_id": 1})
@@ -1010,7 +1061,7 @@ def delete_item(item_id: str, item_type: str, recursive: bool = False, scope: st
         deleted_pages += idx["deleted_pages"]
 
     files.delete_many({"$or": [{"parent_id": {"$in": folder_ids}}, {"folder_id": {"$in": folder_ids}}]})
-    folders.delete_many({"_id": {"$in": [fid for fid in folder_ids if fid != ROOT_FOLDER_ID]}})
+    folders.delete_many({"_id": {"$in": [fid for fid in folder_ids if fid != ROOT_FOLDER_ID and not fid.startswith("content_root:")]}})
     return {
         "message": "Folder deleted",
         "deleted_folders": len(folder_ids),
@@ -1020,7 +1071,7 @@ def delete_item(item_id: str, item_type: str, recursive: bool = False, scope: st
     }
 
 
-def preview_by_id(file_id: str) -> Dict[str, Any]:
+def preview_by_id(file_id: str, user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
     fid = (file_id or "").strip()
     if not fid:
@@ -1100,7 +1151,7 @@ def _delete_search_index_by_file_id(file_id: str) -> Dict[str, int]:
     }
 
 
-def make_item_searchable(item_id: str, item_type: str, course: str) -> Dict[str, Any]:
+def make_item_searchable(item_id: str, item_type: str, course: str, user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
     iid = (item_id or "").strip()
     kind = (item_type or "").strip().lower()
@@ -1155,6 +1206,7 @@ def make_item_searchable(item_id: str, item_type: str, course: str) -> Dict[str,
                     "status": "uploaded_pending_index",
                     "source": "content_drive",
                     "source_file_id": file_id,
+                    "user_id": (user_id or "").strip(),
                     "updated_at": now,
                 },
                 "$setOnInsert": {"created_at": now},

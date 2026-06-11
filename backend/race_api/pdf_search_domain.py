@@ -53,13 +53,16 @@ def _pdf_bucket() -> str:
     return bucket
 
 
-def _pdf_key(doc_id: str, file_name: str) -> str:
+def _pdf_key(doc_id: str, file_name: str, user_id: str = "") -> str:
     cfg = settings()
     prefix = (cfg.get("pdf_search_prefix") or "pdf-search").strip("/")
     date_part = current_date_str()
     safe_name = sanitize_key_part(file_name or "document.pdf")
     if not safe_name.lower().endswith(".pdf"):
         safe_name = f"{safe_name}.pdf"
+    uid = sanitize_key_part(user_id or "")
+    if uid:
+        return f"{prefix}/{uid}/{date_part}/{doc_id}/{safe_name}"
     return f"{prefix}/{date_part}/{doc_id}/{safe_name}"
 
 
@@ -194,6 +197,10 @@ def _try_create_vector_index() -> None:
                 "type": "filter",
                 "path": "course",
             },
+            {
+                "type": "filter",
+                "path": "user_id",
+            },
         ]
     }
 
@@ -222,7 +229,7 @@ def _try_create_vector_index() -> None:
             return
 
 
-def create_pdf_presigned_upload(payload) -> Dict[str, Any]:
+def create_pdf_presigned_upload(payload, user_id: str = "") -> Dict[str, Any]:
     _ensure_pdf_indexes()
     file_name = (payload.file_name or "").strip()
     if not file_name:
@@ -236,7 +243,7 @@ def create_pdf_presigned_upload(payload) -> Dict[str, Any]:
         raise ValueError(f"course is required and must be one of: {allowed}")
 
     doc_id = _doc_id()
-    key = _pdf_key(doc_id, file_name)
+    key = _pdf_key(doc_id, file_name, user_id)
     bucket = _pdf_bucket()
 
     upload_url = s3_client().generate_presigned_url(
@@ -261,6 +268,7 @@ def create_pdf_presigned_upload(payload) -> Dict[str, Any]:
                 "course_label": COURSE_OPTIONS[course],
                 "status": "uploaded_pending_index",
                 "page_count": 0,
+                "user_id": (user_id or "").strip(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -354,6 +362,7 @@ def index_pdf_document(payload) -> Dict[str, Any]:
     bucket = doc.get("bucket") or _pdf_bucket()
     key = doc.get("key")
     course = _normalize_course(doc.get("course"))
+    doc_user_id = str(doc.get("user_id", "") or "").strip()
     if not course:
         raise ValueError("Document course metadata is missing")
     if not key:
@@ -392,6 +401,7 @@ def index_pdf_document(payload) -> Dict[str, Any]:
                 "key": key,
                 "course": course,
                 "course_label": COURSE_OPTIONS.get(course, course),
+                "user_id": doc_user_id,
                 "page_number": p["page_number"],
                 "text": p["text"],
                 "embedding": embedding_map.get(i),
@@ -444,9 +454,8 @@ def _snippet(text: str, query: str) -> str:
     return text[start:end]
 
 
-def search_pdf(query: str, limit: int = 20, course: str | None = None) -> Dict[str, Any]:
+def search_pdf(query: str, limit: int = 20, course: str | None = None, user_id: str = "") -> Dict[str, Any]:
     _ensure_pdf_indexes()
-    _try_create_vector_index()
     q = (query or "").strip()
     if not q:
         raise ValueError("query is required")
@@ -457,6 +466,7 @@ def search_pdf(query: str, limit: int = 20, course: str | None = None) -> Dict[s
     if course and not selected_course:
         allowed = ", ".join(COURSE_OPTIONS.values())
         raise ValueError(f"course must be one of: {allowed}")
+    uid = (user_id or "").strip()
 
     if not _openai_api_key():
         raise RuntimeError("OPENAI_API_KEY is required for vector search")
@@ -469,8 +479,13 @@ def search_pdf(query: str, limit: int = 20, course: str | None = None) -> Dict[s
         "numCandidates": max(100, lim * 15),
         "limit": lim,
     }
+    vector_filter: Dict[str, Any] = {}
     if selected_course:
-        vector_stage["filter"] = {"course": selected_course}
+        vector_filter["course"] = selected_course
+    if uid:
+        vector_filter["user_id"] = uid
+    if vector_filter:
+        vector_stage["filter"] = vector_filter
 
     try:
         rows: List[Dict[str, Any]] = list(

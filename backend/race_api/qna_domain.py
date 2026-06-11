@@ -96,7 +96,7 @@ def _extract_answer_text(agent_result: Any) -> str:
     return str(agent_result or "").strip()
 
 
-def _run_grounded_answer(question: str, course: str = "", limit: int = 8) -> Dict[str, Any]:
+def _run_grounded_answer(question: str, course: str = "", limit: int = 8, user_id: str = "") -> Dict[str, Any]:
     q = (question or "").strip()
     if not q:
         raise ValueError("question is required")
@@ -111,7 +111,7 @@ def _run_grounded_answer(question: str, course: str = "", limit: int = 8) -> Dic
             "LangChain QnA dependencies are missing. Install langchain and langchain-openai in the Lambda layer."
         ) from err
 
-    source_payload = search_pdf(q, lim, course)
+    source_payload = search_pdf(q, lim, course, user_id=user_id)
     raw_sources = source_payload.get("results", []) or []
     if not raw_sources:
         return {
@@ -376,7 +376,8 @@ def ask_qna_in_session(session_id: str, question: str, course: str = "", limit: 
     }
     qna_messages_collection().insert_one(user_msg)
 
-    grounded = _run_grounded_answer(q, course, limit)
+    session_user_id = str(session.get("user_id", "") or "").strip()
+    grounded = _run_grounded_answer(q, course, limit, user_id=session_user_id)
     assistant_msg = {
         "_id": _new_message_id(),
         "doc_type": "qna_message",

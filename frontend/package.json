@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "build:app": "BUILD_TARGET=app next build",
+    "build:app": "BUILD_TARGET=app NEXT_PUBLIC_API_BASE_URL=https://zd3tx6kput6k62mwuwhldvhb3a0fxzns.lambda-url.ap-south-1.on.aws next build",
     "sync": "npm run build:app && cap sync",
     "ios": "npm run sync && cap open ios",
     "android": "npm run sync && cap open android"
@@ -18,6 +18,7 @@
     "@capacitor/core": "^8.4.0",
     "@capacitor/ios": "^8.4.0",
     "next": "14.2.25",
+    "pdfjs-dist": "^6.0.227",
     "plotly.js-dist-min": "^3.6.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
