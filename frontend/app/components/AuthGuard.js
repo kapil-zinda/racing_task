@@ -8,6 +8,8 @@ export default function AuthGuard({ children }) {
   const { auth, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  // TEMP: auth bypass for local UI testing without a backend, restore after testing
+  return children;
 
   useEffect(() => {
     if (!loading && !auth && !pathname.startsWith("/auth")) {

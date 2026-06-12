@@ -3561,6 +3561,105 @@ button:hover {
   color: #dae4ff;
 }
 
+/* ── Progress Hub ───────────────────────────────────────── */
+.hub-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
+}
+
+.hub-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hub-tab-icon {
+  font-size: 14px;
+}
+
+.hub-decay-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.progress-card-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.progress-card {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 12px;
+}
+
+.progress-card-head {
+  margin-bottom: 10px;
+}
+
+.progress-card-head h4 {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+
+.progress-card-kind {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.1);
+  color: #c4d0ef;
+}
+
+.progress-card-kind.kind-course { background: rgba(114, 221, 247, 0.18); color: #9be9fb; }
+.progress-card-kind.kind-book { background: rgba(128, 237, 153, 0.18); color: #aaf3bd; }
+.progress-card-kind.kind-random { background: rgba(255, 209, 102, 0.18); color: #ffe2a3; }
+.progress-card-kind.kind-test { background: rgba(255, 107, 107, 0.18); color: #ffb3b3; }
+
+.progress-card-bars {
+  display: grid;
+  gap: 8px;
+}
+
+.progress-card-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #c6d2f1;
+}
+
+.progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.progress-fill.coverage { background: #72ddf7; }
+.progress-fill.retention { background: #80ed99; }
+.progress-fill.performance { background: #ffd166; }
+
 .agent-v2-wrap {
   position: fixed;
   right: 16px;
@@ -3780,6 +3879,10 @@ button:hover {
   .mission-lower-grid {
     grid-template-columns: 1fr;
   }
+
+  .hub-decay-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -3806,6 +3909,10 @@ button:hover {
 
   .identity-grid {
     grid-template-columns: 1fr;
+  }
+
+  .progress-card-row {
+    grid-template-columns: 64px 1fr 40px;
   }
 }
 

@@ -3,47 +3,107 @@ import { apiFetch } from "../lib/auth";
 
 import { useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
+import { buildRecentDates } from "../lib/dateUtils";
+import { buildMissionExecution, buildMissionModel } from "../lib/missionModel";
+import { buildDummyMissionControl, DUMMY_DATA_NOTICE } from "../lib/dummyData";
+import HubTabs from "../components/progress-hub/HubTabs";
+import SummitSummary from "../components/progress-hub/SummitSummary";
+import RadarWheel from "../components/progress-hub/RadarWheel";
+import GrowthStoryPanel from "../components/progress-hub/GrowthStoryPanel";
+import ActivityHeatmap from "../components/progress-hub/ActivityHeatmap";
+import DecayPanel from "../components/progress-hub/DecayPanel";
+import TestStoryPanel from "../components/progress-hub/TestStoryPanel";
+import DimensionProgressGrid from "../components/progress-hub/DimensionProgressGrid";
+import SyllabusTree from "../components/progress-hub/SyllabusTree";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
-const REVISION_HEADERS = [
-  "First Revision Date",
-  "Second Revision Date",
-  "Third Revision Date",
-  "Fourth Revision Date",
-  "Fifth Revision Date",
+
+const HUB_TABS = [
+  { key: "overview", label: "Overview", icon: "📊" },
+  { key: "heatmap", label: "Heatmap", icon: "🔥" },
+  { key: "decay", label: "Decay", icon: "⏳" },
+  { key: "tests", label: "Tests", icon: "📝" },
+  { key: "detail", label: "Detail", icon: "📚" },
 ];
-
-function labelDate(value) {
-  if (!value) return "-";
-  return value;
-}
-
-function subjectRecordings(subject) {
-  return (subject.topics || []).flatMap((topic) =>
-    (topic.recordings || []).map((rec, idx) => ({
-      key: `${subject.subject}-${topic.topic}-rec-${idx}`,
-      note: rec.note || topic.topic,
-      date: rec.date || "",
-      session_id: rec.session_id || "",
-      default_media_type: rec.default_media_type || "",
-    }))
-  );
-}
 
 function norm(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-export default function SyllabusPage() {
+export default function ProgressHubPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [data, setData] = useState({ exams: [] });
+  const [syllabus, setSyllabus] = useState({ exams: [] });
+  const [activityByDate, setActivityByDate] = useState({});
+  const [missionConfig, setMissionConfig] = useState(null);
+  const [usingDummy, setUsingDummy] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
   const [playbackByKey, setPlaybackByKey] = useState({});
   const [playbackLoadingKey, setPlaybackLoadingKey] = useState("");
 
+  const applyDummyData = () => {
+    const dummy = buildDummyMissionControl();
+    setSyllabus(dummy.syllabus);
+    setActivityByDate(dummy.activity_by_date);
+    setMissionConfig(dummy.mission);
+    setUsingDummy(true);
+  };
+
+  const loadProgress = async () => {
+    if (!API_BASE_URL) {
+      applyDummyData();
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/mission-control?lookback_days=90`);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Progress API failed: ${res.status} ${txt}`);
+      }
+      const payload = await res.json();
+      const liveSyllabus = payload?.syllabus || { exams: [] };
+      const liveMission = payload?.mission || null;
+      const liveActivity = payload?.activity_by_date || {};
+      const hasData = (liveSyllabus.exams || []).length > 0 || Boolean(liveMission);
+      if (!hasData) {
+        applyDummyData();
+      } else {
+        setSyllabus(liveSyllabus);
+        setActivityByDate(liveActivity);
+        setMissionConfig(liveMission);
+        setUsingDummy(false);
+      }
+      setPlaybackByKey({});
+    } catch (err) {
+      setError(String(err.message || err));
+      applyDummyData();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProgress();
+  }, []);
+
+  useEffect(() => {
+    if (!error) return;
+    const id = setTimeout(() => setError(""), NOTICE_TTL_MS);
+    return () => clearTimeout(id);
+  }, [error]);
+
+  const planExecution = useMemo(
+    () => buildMissionExecution(missionConfig?.plan, syllabus),
+    [missionConfig?.plan, syllabus],
+  );
+  const mission = useMemo(() => buildMissionModel(planExecution), [planExecution]);
+  const recent45 = useMemo(() => buildRecentDates(45), []);
+
   const globalTestsBySource = useMemo(() => {
-    const exams = Array.isArray(data?.exams) ? data.exams : [];
+    const exams = Array.isArray(syllabus?.exams) ? syllabus.exams : [];
     const bySource = new Map();
     const recordingIndex = new Map();
 
@@ -135,35 +195,7 @@ export default function SyllabusPage() {
           }),
       }))
       .sort((a, b) => a.source.localeCompare(b.source));
-  }, [data]);
-
-  const loadSyllabus = async () => {
-    if (!API_BASE_URL) return;
-    setLoading(true);
-    setError("");
-    try {
-      const res = await apiFetch(`${API_BASE_URL}/syllabus`);
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`Syllabus API failed: ${res.status} ${txt}`);
-      }
-      const json = await res.json();
-      setData(json || { exams: [] });
-      setPlaybackByKey({});
-    } catch (err) {
-      setError(String(err.message || err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { loadSyllabus(); }, []);
-
-  useEffect(() => {
-    if (!error) return;
-    const id = setTimeout(() => setError(""), NOTICE_TTL_MS);
-    return () => clearTimeout(id);
-  }, [error]);
+  }, [syllabus]);
 
   const playRecording = async (rec) => {
     if (!API_BASE_URL || !rec.session_id || !rec.default_media_type) return;
@@ -183,7 +215,7 @@ export default function SyllabusPage() {
         [rec.key]: {
           url: json.playback_url || "",
           mediaType: rec.default_media_type,
-        }
+        },
       }));
     } catch (err) {
       setError(String(err.message || err));
@@ -193,262 +225,80 @@ export default function SyllabusPage() {
   };
 
   return (
-    <main className="app-shell">
+    <main className="app-shell mission-shell">
       <div className="bg-orb orb-1" />
       <div className="bg-orb orb-2" />
 
-      <header className="hero">
+      <header className="hero mission-hero">
         <MainMenu active="syllabus" />
-        <h1>Syllabus Tracker</h1>
-        <p className="subtext">Expandable progress map for classes, revisions, recordings, and tests.</p>
+        <h1>Progress Hub</h1>
+        <p className="subtext">Your growth dashboard — achievements, consistency, weak areas, and what to fix next.</p>
+
+        {!API_BASE_URL ? <p className="api-state warn">Backend URL needed for live data. Showing sample data below.</p> : null}
+        {error ? <p className="api-state error">{error}</p> : null}
       </header>
 
-      <section className="milestone-panel">
-        {!API_BASE_URL ? (
-          <p className="api-state warn">Backend URL needed for syllabus API.</p>
-        ) : (
-          <>
-            <div className="session-form-grid">
-              <button className="btn-day" onClick={() => loadSyllabus()}>Refresh</button>
-            </div>
-            {error ? <p className="api-state error">{error}</p> : null}
-            {loading ? <p className="day-state">Loading syllabus...</p> : null}
-
-            <div className="syllabus-tree">
-              {(data.exams || []).length === 0 ? (
-                <p className="day-state">No syllabus progress found yet.</p>
-              ) : (
-                (data.exams || []).map((exam) => (
-                  <details key={exam.exam} className="syllabus-exam" open>
-                    <summary>{exam.exam}</summary>
-
-                    <div className="syllabus-subjects">
-                      {(exam.subjects || []).map((subject) => {
-                        const recordings = subjectRecordings(subject);
-                        const topicRows = subject.topics || [];
-                        const maxRevisionCols = Math.max(
-                          1,
-                          ...topicRows.map((topic) => {
-                            const n = Number(topic?.revision_limit || 0);
-                            if (!Number.isFinite(n)) return 1;
-                            return Math.max(1, Math.min(5, n));
-                          }),
-                        );
-                        return (
-                          <details key={`${exam.exam}-${subject.subject}`} className="syllabus-subject">
-                            <summary>{subject.subject}</summary>
-
-                            <div className="syllabus-table-wrap">
-                              <table className="syllabus-table">
-                                <thead>
-                                  <tr>
-                                    <th>Topic</th>
-                                    <th>Class/Study First Date</th>
-                                    {REVISION_HEADERS.slice(0, maxRevisionCols).map((header) => (
-                                      <th key={`${subject.subject}-${header}`}>{header}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {topicRows.map((topic) => (
-                                    <tr key={`${subject.subject}-${topic.topic}`}>
-                                      <td>{topic.topic}</td>
-                                      <td>{labelDate(topic.class_study_first_date)}</td>
-                                      {Array.from({ length: maxRevisionCols }, (_, idx) => (
-                                        <td key={`${topic.topic}-rev-${idx}`}>
-                                          {labelDate((topic.revision_dates || [])[idx] || "")}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-
-                            <div className="syllabus-table-wrap">
-                              <table className="syllabus-table">
-                                <thead>
-                                  <tr>
-                                    <th>Recording Note</th>
-                                    <th>Date</th>
-                                    <th>Play</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {recordings.length === 0 ? (
-                                    <tr>
-                                      <td colSpan={3}>No recording</td>
-                                    </tr>
-                                  ) : (
-                                    recordings.map((rec) => (
-                                      <tr key={rec.key}>
-                                        <td>{rec.note}</td>
-                                        <td>{labelDate(rec.date)}</td>
-                                        <td>
-                                          <button
-                                            className="btn-day secondary"
-                                            disabled={!rec.session_id || !rec.default_media_type || playbackLoadingKey === rec.key}
-                                            onClick={() => playRecording(rec)}
-                                          >
-                                            {playbackLoadingKey === rec.key ? "Loading..." : "Play"}
-                                          </button>
-                                          {playbackByKey[rec.key]?.url ? (
-                                            playbackByKey[rec.key].mediaType === "audio" ? (
-                                              <audio className="session-player" controls preload="metadata" src={playbackByKey[rec.key].url} />
-                                            ) : (
-                                              <video className="session-player" controls preload="metadata" playsInline src={playbackByKey[rec.key].url} />
-                                            )
-                                          ) : null}
-                                        </td>
-                                      </tr>
-                                    ))
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          </details>
-                        );
-                      })}
-                    </div>
-
-                    {(exam.tickets || []).length > 0 ? (
-                      <details className="syllabus-tests">
-                        <summary>Tickets</summary>
-                        {(exam.tickets || []).map((org) => (
-                            <details key={`${exam.exam}-org-${org.org}`} className="syllabus-source">
-                              <summary>Org: {org.org}</summary>
-                              <div className="syllabus-table-wrap">
-                                <table className="syllabus-table">
-                                  <thead>
-                                    <tr>
-                                      <th>Ticket Note</th>
-                                      <th>Date</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {(org.tickets || []).length === 0 ? (
-                                      <tr>
-                                        <td colSpan={2}>No tickets</td>
-                                      </tr>
-                                    ) : (
-                                      (org.tickets || []).map((row, idx) => (
-                                        <tr key={`${org.org}-${idx}`}>
-                                          <td>{row.note || "-"}</td>
-                                          <td>{labelDate(row.date)}</td>
-                                        </tr>
-                                      ))
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </details>
-                          ))
-                        }
-                      </details>
-                    ) : null}
-                  </details>
-                ))
-              )}
-            </div>
-
-            {globalTestsBySource.length > 0 ? (
-              <details className="syllabus-tests" open>
-                <summary>Tests</summary>
-                {(
-                  globalTestsBySource.map((source) => (
-                    <details key={`global-tests-${source.source}`} className="syllabus-source">
-                      <summary>Source: {source.source}</summary>
-                      <div className="syllabus-table-wrap">
-                        <table className="syllabus-table">
-                          <thead>
-                            <tr>
-                              <th>Exam</th>
-                              <th>Test Number</th>
-                              <th>Test Given Date</th>
-                              <th>Analysis</th>
-                              <th>Revision</th>
-                              <th>Second Revision</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(source.tests || []).length === 0 ? (
-                              <tr>
-                                <td colSpan={6}>No tests</td>
-                              </tr>
-                            ) : (
-                              (source.tests || []).map((test) => (
-                                <tr key={test._dedupeKey}>
-                                  <td>{test.exam || "-"}</td>
-                                  <td>{test.test_number || "-"}</td>
-                                  <td>{labelDate(test.test_given_date)}</td>
-                                  <td>{labelDate(test.analysis_done_date)}</td>
-                                  <td>{labelDate(test.revision_date)}</td>
-                                  <td>{labelDate(test.second_revision_date)}</td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="syllabus-table-wrap">
-                        <table className="syllabus-table">
-                          <thead>
-                            <tr>
-                              <th>Recording Note</th>
-                              <th>Date</th>
-                              <th>Play</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(() => {
-                              const allRecordings = (source.tests || [])
-                                .flatMap((test) => (test.recordings || []).map((rec) => ({
-                                  ...rec,
-                                  note: rec.note || `${test.test_name || "Test"} ${test.test_number || ""}`.trim(),
-                                })))
-                                .filter((rec) => rec?.session_id && rec?.default_media_type);
-                              if (allRecordings.length === 0) {
-                                return (
-                                  <tr>
-                                    <td colSpan={3}>No recording</td>
-                                  </tr>
-                                );
-                              }
-                              return allRecordings.map((rec) => (
-                                <tr key={rec.key}>
-                                  <td>{rec.note}</td>
-                                  <td>{labelDate(rec.date)}</td>
-                                  <td>
-                                    <button
-                                      className="btn-day secondary"
-                                      disabled={!rec.session_id || !rec.default_media_type || playbackLoadingKey === rec.key}
-                                      onClick={() => playRecording(rec)}
-                                    >
-                                      {playbackLoadingKey === rec.key ? "Loading..." : "Play"}
-                                    </button>
-                                    {playbackByKey[rec.key]?.url ? (
-                                      playbackByKey[rec.key].mediaType === "audio" ? (
-                                        <audio className="session-player" controls preload="metadata" src={playbackByKey[rec.key].url} />
-                                      ) : (
-                                        <video className="session-player" controls preload="metadata" playsInline src={playbackByKey[rec.key].url} />
-                                      )
-                                    ) : null}
-                                  </td>
-                                </tr>
-                              ));
-                            })()}
-                          </tbody>
-                        </table>
-                      </div>
-                    </details>
-                  ))
-                )}
-              </details>
-            ) : null}
-          </>
-        )}
+      <section className="milestone-panel mission-controls">
+        <div className="session-form-grid">
+          <button className="btn-day" onClick={() => loadProgress()} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh Progress"}
+          </button>
+        </div>
+        {usingDummy ? <p className="api-state warn" style={{ marginTop: 10 }}>{DUMMY_DATA_NOTICE}</p> : null}
       </section>
+
+      <HubTabs tabs={HUB_TABS} active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "overview" ? (
+        <div role="tabpanel" aria-label="Overview">
+          <SummitSummary mission={mission} goalLabel={missionConfig?.title} />
+          <RadarWheel mission={mission} />
+          <section className="mission-lower-grid">
+            <GrowthStoryPanel mission={mission} />
+          </section>
+        </div>
+      ) : null}
+
+      {activeTab === "heatmap" ? (
+        <div role="tabpanel" aria-label="Heatmap">
+          <ActivityHeatmap activityByDate={activityByDate} dates={recent45} />
+        </div>
+      ) : null}
+
+      {activeTab === "decay" ? (
+        <div role="tabpanel" aria-label="Decay">
+          <section className="hub-decay-grid">
+            <DecayPanel mission={mission} />
+          </section>
+        </div>
+      ) : null}
+
+      {activeTab === "tests" ? (
+        <div role="tabpanel" aria-label="Tests">
+          <TestStoryPanel mission={mission} />
+        </div>
+      ) : null}
+
+      {activeTab === "detail" ? (
+        <div role="tabpanel" aria-label="Detail">
+          <article className="milestone-panel">
+            <h2>Progress by Area</h2>
+            <p className="day-state">Coverage, retention, and performance for everything in your plan.</p>
+            <DimensionProgressGrid dimensions={planExecution.dimensions || []} />
+          </article>
+          <article className="milestone-panel">
+            <h2>Syllabus Detail</h2>
+            <p className="day-state">Expand to see class dates, revisions, notes, and recordings.</p>
+            <SyllabusTree
+              data={syllabus}
+              globalTestsBySource={globalTestsBySource}
+              playbackByKey={playbackByKey}
+              playbackLoadingKey={playbackLoadingKey}
+              onPlay={playRecording}
+            />
+          </article>
+        </div>
+      ) : null}
     </main>
   );
 }
