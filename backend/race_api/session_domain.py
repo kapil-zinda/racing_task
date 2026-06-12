@@ -28,7 +28,7 @@ def _normalize_modes(recorder_type: str, modes: List[str]) -> tuple[str, List[st
         if mode not in unique_modes:
             unique_modes.append(mode)
 
-    if recorder in {"audio", "video", "call", "pdf_explainer"}:
+    if recorder in {"audio", "video", "screen", "call", "pdf_explainer"}:
         unique_modes = list(default_modes)
 
     return recorder, unique_modes
