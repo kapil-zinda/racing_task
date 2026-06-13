@@ -1242,6 +1242,17 @@ export default function RecorderPage() {
     audioSourceNodesRef.current.push(node);
   };
 
+  // System/tab audio only arrives if the user ticked "Share audio" in the picker —
+  // and the browser/OS supports it (Chrome captures tab audio; full system audio
+  // isn't exposed on macOS). Tell the user when it didn't come through.
+  const warnIfNoSystemAudio = (screenStream) => {
+    if (!screenStream?.getAudioTracks?.().length) {
+      setSessionError(
+        "Screen captured without system audio. To record it, pick a Chrome tab and tick \"Share tab audio\" in the dialog (full system audio can't be captured on macOS)."
+      );
+    }
+  };
+
   // Canvas-backed recorder. drawFrame handles all cases: screen+camera PiP (call),
   // camera full (video), and an avatar placeholder when the camera is off — so the
   // recorded file shows the placeholder instead of black frames.
@@ -1361,19 +1372,19 @@ export default function RecorderPage() {
 
     const composed = canvas.captureStream(30);
     const micTracks = streamRefs.current.audio?.getAudioTracks?.() || [];
-    const screenAudioTracks = streamRefs.current.screen?.getAudioTracks?.() || [];
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (screenAudioTracks.length && AudioCtx) {
-      // Two audio sources (mic + system/tab audio) genuinely need mixing, so route
-      // them through Web Audio into one track.
+    // A call ("screen" target) shares its screen/tab audio LATER via the Share button,
+    // so it must always set up the Web-Audio mixer now — otherwise startScreenShare's
+    // connectStreamAudioToComposite has nowhere to route the tab audio and it's lost.
+    // Video-only never gains a second source, so it uses the clean raw mic track.
+    const needsMixer = targetMode !== "video";
+    if (needsMixer && AudioCtx) {
       audioContextRef.current = new AudioCtx();
       audioDestinationRef.current = audioContextRef.current.createMediaStreamDestination();
-      connectStreamAudioToComposite(streamRefs.current.audio);
-      connectStreamAudioToComposite(streamRefs.current.screen);
+      connectStreamAudioToComposite(streamRefs.current.audio); // mic now
+      connectStreamAudioToComposite(streamRefs.current.screen); // tab/system audio if already shared
       audioDestinationRef.current.stream.getAudioTracks().forEach((track) => composed.addTrack(track));
     } else if (micTracks.length) {
-      // Single source (e.g. video recording): attach the raw mic track directly.
-      // Avoids the Web Audio resampling that was adding noise.
       composed.addTrack(micTracks[0]);
     }
 
@@ -1414,6 +1425,7 @@ export default function RecorderPage() {
     if (streamRefs.current.screen) return;
     const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     streamRefs.current.screen = screenStream;
+    warnIfNoSystemAudio(screenStream);
     if (isCompositeMode(selectedSession?.modes || [])) {
       connectStreamAudioToComposite(screenStream);
     } else {
@@ -1488,11 +1500,15 @@ export default function RecorderPage() {
     // would throw).
     if (screenOnly) {
       streamRefs.current.screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      warnIfNoSystemAudio(streamRefs.current.screen);
     }
     const needMic = unique.includes("audio") || unique.includes("video") || unique.includes("screen");
     if (needMic) {
+      // Capture raw mic — browser voice-call DSP (noise suppression / AGC / echo
+      // cancellation) muffles the voice and pumps the gain, which sounds worse for
+      // a recording. The earlier "noise" was the Web-Audio resampling, now avoided.
       streamRefs.current.audio = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         video: false,
       });
     }
