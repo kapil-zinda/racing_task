@@ -40,7 +40,12 @@ export default function MilestoneDetailSheet({ dim, planExecution, onClose }) {
         aria-label={dim.label}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3>{dim.label}</h3>
+        <div className="sheet-title-row">
+          <h3>{dim.label}</h3>
+          {dim.decaying ? <span className="sheet-chip sheet-chip-decay">⚠ Needs revision</span> : null}
+          {dim.state === "done" ? <span className="sheet-chip sheet-chip-done">✓ Complete</span> : null}
+          {dim.isCurrent && !dim.decaying ? <span className="sheet-chip sheet-chip-current">📍 You are here</span> : null}
+        </div>
         <p className="day-state" style={{ marginTop: 0 }}>
           {KIND_LABELS[dim.kind] || dim.kind} · {overall}% complete
         </p>

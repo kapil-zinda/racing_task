@@ -3,15 +3,17 @@ import { apiFetch } from "../lib/auth";
 
 import { useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
-import { buildRecentDates } from "../lib/dateUtils";
 import { buildMissionExecution, buildMissionModel } from "../lib/missionModel";
 import { buildDummyMissionControl, DUMMY_DATA_NOTICE } from "../lib/dummyData";
+import { buildStreaks, buildWeekPulse } from "../lib/journeyInsights";
 import HubTabs from "../components/progress-hub/HubTabs";
-import SummitSummary from "../components/progress-hub/SummitSummary";
-import RadarWheel from "../components/progress-hub/RadarWheel";
-import GrowthStoryPanel from "../components/progress-hub/GrowthStoryPanel";
-import ActivityHeatmap from "../components/progress-hub/ActivityHeatmap";
-import DecayPanel from "../components/progress-hub/DecayPanel";
+import GoalHealthHero from "../components/progress-hub/GoalHealthHero";
+import WeekPulse from "../components/progress-hub/WeekPulse";
+import ContributionCalendar from "../components/progress-hub/ContributionCalendar";
+import FocusBalance from "../components/progress-hub/FocusBalance";
+import NeedsAttention from "../components/progress-hub/NeedsAttention";
+import CoachNote from "../components/progress-hub/CoachNote";
+import Achievements from "../components/progress-hub/Achievements";
 import TestStoryPanel from "../components/progress-hub/TestStoryPanel";
 import DimensionProgressGrid from "../components/progress-hub/DimensionProgressGrid";
 import SyllabusTree from "../components/progress-hub/SyllabusTree";
@@ -21,8 +23,6 @@ const NOTICE_TTL_MS = 15000;
 
 const HUB_TABS = [
   { key: "overview", label: "Overview", icon: "📊" },
-  { key: "heatmap", label: "Heatmap", icon: "🔥" },
-  { key: "decay", label: "Decay", icon: "⏳" },
   { key: "tests", label: "Tests", icon: "📝" },
   { key: "detail", label: "Detail", icon: "📚" },
 ];
@@ -100,7 +100,8 @@ export default function ProgressHubPage() {
     [missionConfig?.plan, syllabus],
   );
   const mission = useMemo(() => buildMissionModel(planExecution), [planExecution]);
-  const recent45 = useMemo(() => buildRecentDates(45), []);
+  const streaks = useMemo(() => buildStreaks(activityByDate), [activityByDate]);
+  const weekPulse = useMemo(() => buildWeekPulse(activityByDate), [activityByDate]);
 
   const globalTestsBySource = useMemo(() => {
     const exams = Array.isArray(syllabus?.exams) ? syllabus.exams : [];
@@ -250,26 +251,22 @@ export default function ProgressHubPage() {
       <HubTabs tabs={HUB_TABS} active={activeTab} onChange={setActiveTab} />
 
       {activeTab === "overview" ? (
-        <div role="tabpanel" aria-label="Overview">
-          <SummitSummary mission={mission} goalLabel={missionConfig?.title} />
-          <RadarWheel mission={mission} />
-          <section className="mission-lower-grid">
-            <GrowthStoryPanel mission={mission} />
-          </section>
-        </div>
-      ) : null}
-
-      {activeTab === "heatmap" ? (
-        <div role="tabpanel" aria-label="Heatmap">
-          <ActivityHeatmap activityByDate={activityByDate} dates={recent45} />
-        </div>
-      ) : null}
-
-      {activeTab === "decay" ? (
-        <div role="tabpanel" aria-label="Decay">
-          <section className="hub-decay-grid">
-            <DecayPanel mission={mission} />
-          </section>
+        <div role="tabpanel" aria-label="Overview" className="hub-grid">
+          <GoalHealthHero mission={mission} streaks={streaks} weekPulse={weekPulse} />
+          <div className="hub-span-2">
+            <CoachNote mission={mission} />
+          </div>
+          <WeekPulse weekPulse={weekPulse} />
+          <div className="hub-span-2">
+            <ContributionCalendar activityByDate={activityByDate} streaks={streaks} />
+          </div>
+          <div className="hub-span-2">
+            <FocusBalance mission={mission} />
+          </div>
+          <NeedsAttention mission={mission} />
+          <div className="hub-span-3">
+            <Achievements mission={mission} streaks={streaks} />
+          </div>
         </div>
       ) : null}
 

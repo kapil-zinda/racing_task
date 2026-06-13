@@ -699,6 +699,8 @@ export function buildMissionModel(planExecution) {
     timeline,
     testsAttempted,
     reviewRate,
+    coverageScore,
+    retentionScore,
     performanceScore,
     fullTestsLeft,
     forumLeft,

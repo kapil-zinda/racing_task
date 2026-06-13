@@ -5,9 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import { buildMissionExecution, buildMissionModel } from "../lib/missionModel";
 import { buildDummyMissionControl, DUMMY_DATA_NOTICE } from "../lib/dummyData";
-import JourneyPathHero from "../components/journey/JourneyPathHero";
-import NextActionCard from "../components/journey/NextActionCard";
-import MilestoneList from "../components/journey/MilestoneList";
+import { buildStreaks } from "../lib/journeyInsights";
+import JourneyHero from "../components/journey/JourneyHero";
+import TodayMove from "../components/journey/TodayMove";
+import JourneyTrail from "../components/journey/JourneyTrail";
 import MilestoneDetailSheet from "../components/journey/MilestoneDetailSheet";
 import JourneyEmptyState from "../components/journey/JourneyEmptyState";
 import JourneyWizard from "../components/journey/JourneyWizard";
@@ -29,6 +30,7 @@ export default function JourneyPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [syllabus, setSyllabus] = useState({ exams: [] });
+  const [activityByDate, setActivityByDate] = useState({});
   const [missionConfig, setMissionConfig] = useState(null);
   const [usingDummy, setUsingDummy] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -39,6 +41,7 @@ export default function JourneyPage() {
   const applyDummyData = () => {
     const dummy = buildDummyMissionControl();
     setSyllabus(dummy.syllabus);
+    setActivityByDate(dummy.activity_by_date);
     setMissionConfig(dummy.mission);
     setUsingDummy(true);
     setBattleDone([false, false, false]);
@@ -60,11 +63,13 @@ export default function JourneyPage() {
       const payload = await res.json();
       const liveSyllabus = payload?.syllabus || { exams: [] };
       const liveMission = payload?.mission || null;
+      const liveActivity = payload?.activity_by_date || {};
       const hasData = (liveSyllabus.exams || []).length > 0 || Boolean(liveMission);
       if (!hasData) {
         applyDummyData();
       } else {
         setSyllabus(liveSyllabus);
+        setActivityByDate(liveActivity);
         setMissionConfig(liveMission);
         setUsingDummy(false);
       }
@@ -92,7 +97,7 @@ export default function JourneyPage() {
     [missionConfig?.plan, syllabus],
   );
   const mission = useMemo(() => buildMissionModel(planExecution), [planExecution]);
-  const battleProgress = Math.round((battleDone.filter(Boolean).length / 3) * 100);
+  const streaks = useMemo(() => buildStreaks(activityByDate), [activityByDate]);
 
   const initialDraft = useMemo(
     () => ({
@@ -186,25 +191,15 @@ export default function JourneyPage() {
         <JourneyEmptyState onCreate={() => setWizardOpen(true)} />
       ) : (
         <>
-          <JourneyPathHero
-            missionConfig={missionConfig}
-            mission={mission}
-            planExecution={planExecution}
-            onSelectMilestone={setSelectedDim}
-          />
+          <JourneyHero missionConfig={missionConfig} mission={mission} streaks={streaks} />
 
-          <NextActionCard
+          <TodayMove
             mission={mission}
             battleDone={battleDone}
             onToggle={(idx) => setBattleDone((prev) => prev.map((v, i) => (i === idx ? !v : v)))}
-            battleProgress={battleProgress}
           />
 
-          <section className="milestone-panel">
-            <h2>Areas</h2>
-            <p className="day-state">Tap an area to see topic-level progress.</p>
-            <MilestoneList dimensions={dimensions} onSelect={setSelectedDim} />
-          </section>
+          <JourneyTrail dimensions={dimensions} onSelectMilestone={setSelectedDim} />
         </>
       )}
 

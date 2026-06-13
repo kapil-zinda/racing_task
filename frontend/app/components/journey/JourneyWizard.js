@@ -1,21 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AreasEditor from "./AreasEditor";
+import { CourseAreaStep, BookAreaStep, RandomAreaStep, TestAreaStep, groupCourses } from "./AreaBuilder";
 
 const ICON_OPTIONS = ["🎯", "🏛️", "💪", "💼", "🚀", "📚", "🎨", "🧘", "💰", "🌍", "🏆", "🧩"];
 const CATEGORY_OPTIONS = ["Education", "Fitness", "Career", "Business", "Skill", "General"];
 
-const STEP_TITLES = ["What's the goal?", "Name & target date", "Areas", "Review"];
-
-function countAreas(plan) {
-  return (
-    (plan?.courses?.length || 0) +
-    (plan?.books?.length || 0) +
-    (plan?.random?.length || 0) +
-    (plan?.tests?.length || 0)
-  );
-}
+const STEP_TITLES = ["What's the goal?", "Name & target date", "Courses", "Books", "Practice Topics", "Tests", "Review"];
 
 export default function JourneyWizard({ open, initialDraft, onSave, onClose, saving }) {
   const [step, setStep] = useState(0);
@@ -35,6 +26,11 @@ export default function JourneyWizard({ open, initialDraft, onSave, onClose, sav
       ...prev,
       plan: typeof updater === "function" ? updater(prev.plan) : updater,
     }));
+
+  const courseCount = groupCourses(draft.plan?.courses).length;
+  const bookCount = (draft.plan?.books || []).length;
+  const topicCount = (draft.plan?.random || []).length;
+  const testCount = (draft.plan?.tests || []).length;
 
   return (
     <div className="task-modal-overlay sheet-overlay" onClick={onClose}>
@@ -112,16 +108,12 @@ export default function JourneyWizard({ open, initialDraft, onSave, onClose, sav
           </div>
         ) : null}
 
-        {step === 2 ? (
-          <>
-            <p className="day-state" style={{ marginTop: 0 }}>
-              Saved values are loaded as read-only. Use item Action -&gt; Edit to modify.
-            </p>
-            <AreasEditor plan={draft.plan} onChange={updatePlan} />
-          </>
-        ) : null}
+        {step === 2 ? <CourseAreaStep plan={draft.plan} onChange={updatePlan} /> : null}
+        {step === 3 ? <BookAreaStep plan={draft.plan} onChange={updatePlan} /> : null}
+        {step === 4 ? <RandomAreaStep plan={draft.plan} onChange={updatePlan} /> : null}
+        {step === 5 ? <TestAreaStep plan={draft.plan} onChange={updatePlan} /> : null}
 
-        {step === 3 ? (
+        {step === 6 ? (
           <div>
             <p style={{ fontSize: 28, margin: "4px 0" }}>
               {draft.icon} {draft.title || "Untitled Journey"}
@@ -129,7 +121,12 @@ export default function JourneyWizard({ open, initialDraft, onSave, onClose, sav
             <p className="day-state">
               Category: {draft.category || "General"} · Target: {draft.target_date || "Not set"} · Status: {draft.status}
             </p>
-            <p className="day-state">{countAreas(draft.plan)} area(s) in this journey.</p>
+            <div className="area-card-stats" style={{ marginTop: 12 }}>
+              <span className="area-stat-chip">🎓 {courseCount} course{courseCount === 1 ? "" : "s"}</span>
+              <span className="area-stat-chip">📘 {bookCount} book{bookCount === 1 ? "" : "s"}</span>
+              <span className="area-stat-chip">🎲 {topicCount} topic{topicCount === 1 ? "" : "s"}</span>
+              <span className="area-stat-chip">📝 {testCount} test{testCount === 1 ? "" : "s"}</span>
+            </div>
           </div>
         ) : null}
 
