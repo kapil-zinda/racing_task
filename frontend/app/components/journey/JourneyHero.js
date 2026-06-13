@@ -1,20 +1,16 @@
 "use client";
 
-import RadialRing from "../shared/RadialRing";
 import { daysUntil } from "../../lib/dateUtils";
+import JourneyActionsMenu from "./JourneyActionsMenu";
+import { countTreeNodes } from "./JourneyTreeBuilder";
 
-function healthColor(value) {
-  if (value >= 65) return "#7CF29C";
-  if (value >= 40) return "#FFD166";
-  return "#FF6B6B";
-}
-
-export default function JourneyHero({ missionConfig, mission, streaks }) {
-  const title = missionConfig?.title || "Your Journey";
-  const icon = missionConfig?.icon || "🎯";
-  const targetDate = missionConfig?.target_date || "";
+export default function JourneyHero({ journey, onTogglePause, onDelete, busy }) {
+  const title = journey?.title || "Your Journey";
+  const icon = journey?.icon || "🎯";
+  const targetDate = journey?.target_date || "";
   const remaining = daysUntil(targetDate);
-  const readiness = Math.max(0, Math.min(100, mission?.readiness || 0));
+  const itemCount = countTreeNodes(journey?.plan?.structure);
+  const isPaused = (journey?.status || "").toLowerCase() === "paused";
 
   let daysLabel = "No target date set";
   if (remaining !== null) {
@@ -25,19 +21,16 @@ export default function JourneyHero({ missionConfig, mission, streaks }) {
 
   return (
     <section className="journey-hero-card">
-      <RadialRing value={readiness} size={104} stroke={10} color={healthColor(readiness)} label={`${readiness}`} sublabel="Ready" />
+      <JourneyActionsMenu status={journey?.status} onTogglePause={onTogglePause} onDelete={onDelete} busy={busy} />
+      <div className="journey-hero-icon" aria-hidden="true">{icon}</div>
       <div className="journey-hero-body">
         <p className="journey-hero-eyebrow">
           {icon} {title}
         </p>
         <div className="journey-hero-stats">
-          <span className="journey-stat journey-stat-streak">
-            🔥 {streaks?.current || 0}-day streak
-          </span>
           <span className="journey-stat">{daysLabel}</span>
-          <span className={`journey-stat journey-trajectory journey-trajectory-${(mission?.trajectory || "stable").toLowerCase().replace(/\s+/g, "-")}`}>
-            {mission?.trajectory || "Stable"}
-          </span>
+          <span className="journey-stat">🧭 {itemCount} topic{itemCount === 1 ? "" : "s"}</span>
+          {isPaused ? <span className="journey-stat journey-stat-paused">Paused</span> : null}
         </div>
       </div>
     </section>

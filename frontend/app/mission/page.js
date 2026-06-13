@@ -3,51 +3,33 @@ import { apiFetch } from "../lib/auth";
 
 import { useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
-import { buildMissionExecution, buildMissionModel } from "../lib/missionModel";
-import { buildDummyMissionControl, DUMMY_DATA_NOTICE } from "../lib/dummyData";
+import { buildDummyActivity, buildDummyJourneys, DUMMY_DATA_NOTICE } from "../lib/dummyData";
 import { buildStreaks } from "../lib/journeyInsights";
 import JourneyHero from "../components/journey/JourneyHero";
-import TodayMove from "../components/journey/TodayMove";
-import JourneyTrail from "../components/journey/JourneyTrail";
-import MilestoneDetailSheet from "../components/journey/MilestoneDetailSheet";
 import JourneyEmptyState from "../components/journey/JourneyEmptyState";
-import JourneyWizard from "../components/journey/JourneyWizard";
+import CreateJourneyWizard from "../components/journey/CreateJourneyWizard";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
 
-function sanitizeMissionTestRows(rows) {
-  if (!Array.isArray(rows)) return [];
-  return rows.map((row) => ({
-    test_name: String(row?.test_name || ""),
-    source: String(row?.source || ""),
-    number_of_tests: Math.max(1, Number(row?.number_of_tests || 1)),
-    revisions: Math.max(0, Number(row?.revisions || 0)),
-  }));
-}
+const blankDraft = { title: "", target_date: "", plan: { structure: [] } };
 
 export default function JourneyPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [syllabus, setSyllabus] = useState({ exams: [] });
+  const [journeys, setJourneys] = useState([]);
   const [activityByDate, setActivityByDate] = useState({});
-  const [missionConfig, setMissionConfig] = useState(null);
   const [usingDummy, setUsingDummy] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [missionSaving, setMissionSaving] = useState(false);
-  const [selectedDim, setSelectedDim] = useState(null);
-  const [battleDone, setBattleDone] = useState([false, false, false]);
 
   const applyDummyData = () => {
-    const dummy = buildDummyMissionControl();
-    setSyllabus(dummy.syllabus);
-    setActivityByDate(dummy.activity_by_date);
-    setMissionConfig(dummy.mission);
+    setJourneys(buildDummyJourneys());
+    setActivityByDate(buildDummyActivity());
     setUsingDummy(true);
-    setBattleDone([false, false, false]);
   };
 
-  const loadMission = async () => {
+  const loadJourneys = async () => {
     if (!API_BASE_URL) {
       applyDummyData();
       return;
@@ -55,25 +37,19 @@ export default function JourneyPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await apiFetch(`${API_BASE_URL}/mission-control?lookback_days=90`);
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`Journey API failed: ${res.status} ${txt}`);
+      const [journeysRes, controlRes] = await Promise.all([
+        apiFetch(`${API_BASE_URL}/journeys`),
+        apiFetch(`${API_BASE_URL}/mission-control?lookback_days=90`),
+      ]);
+      if (!journeysRes.ok) {
+        const txt = await journeysRes.text();
+        throw new Error(`Journey API failed: ${journeysRes.status} ${txt}`);
       }
-      const payload = await res.json();
-      const liveSyllabus = payload?.syllabus || { exams: [] };
-      const liveMission = payload?.mission || null;
-      const liveActivity = payload?.activity_by_date || {};
-      const hasData = (liveSyllabus.exams || []).length > 0 || Boolean(liveMission);
-      if (!hasData) {
-        applyDummyData();
-      } else {
-        setSyllabus(liveSyllabus);
-        setActivityByDate(liveActivity);
-        setMissionConfig(liveMission);
-        setUsingDummy(false);
-      }
-      setBattleDone([false, false, false]);
+      const journeysPayload = await journeysRes.json();
+      const controlPayload = controlRes.ok ? await controlRes.json() : {};
+      setJourneys(journeysPayload?.journeys || []);
+      setActivityByDate(controlPayload?.activity_by_date || {});
+      setUsingDummy(false);
     } catch (err) {
       setError(String(err.message || err));
       applyDummyData();
@@ -83,7 +59,7 @@ export default function JourneyPage() {
   };
 
   useEffect(() => {
-    loadMission();
+    loadJourneys();
   }, []);
 
   useEffect(() => {
@@ -92,60 +68,33 @@ export default function JourneyPage() {
     return () => clearTimeout(id);
   }, [error]);
 
-  const planExecution = useMemo(
-    () => buildMissionExecution(missionConfig?.plan, syllabus),
-    [missionConfig?.plan, syllabus],
-  );
-  const mission = useMemo(() => buildMissionModel(planExecution), [planExecution]);
   const streaks = useMemo(() => buildStreaks(activityByDate), [activityByDate]);
 
-  const initialDraft = useMemo(
-    () => ({
-      title: missionConfig?.title || "",
-      target_date: missionConfig?.target_date || "",
-      status: missionConfig?.status || "active",
-      icon: missionConfig?.icon || "🎯",
-      category: missionConfig?.category || "General",
-      plan: {
-        courses: Array.isArray(missionConfig?.plan?.courses) ? missionConfig.plan.courses : [],
-        books: Array.isArray(missionConfig?.plan?.books) ? missionConfig.plan.books : [],
-        random: Array.isArray(missionConfig?.plan?.random) ? missionConfig.plan.random : [],
-        tests: sanitizeMissionTestRows(missionConfig?.plan?.tests),
-      },
-    }),
-    [missionConfig],
-  );
-
-  const saveMission = async (draft) => {
+  const handleCreateJourney = async (draft) => {
     if (!API_BASE_URL) {
-      setMissionConfig((prev) => ({ ...(prev || {}), ...draft }));
+      const journey = {
+        id: `local-${Date.now()}`,
+        status: "active",
+        icon: "🎯",
+        ...draft,
+      };
+      setJourneys((prev) => [journey, ...prev]);
       setWizardOpen(false);
       return;
     }
     setMissionSaving(true);
     setError("");
     try {
-      const res = await apiFetch(`${API_BASE_URL}/mission`, {
-        method: "PUT",
+      const res = await apiFetch(`${API_BASE_URL}/journeys`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: draft.title,
-          target_date: draft.target_date,
-          status: draft.status,
-          icon: draft.icon,
-          category: draft.category,
-          plan: {
-            ...draft.plan,
-            tests: sanitizeMissionTestRows(draft?.plan?.tests),
-          },
-        }),
+        body: JSON.stringify(draft),
       });
       if (!res.ok) {
         const txt = await res.text();
-        throw new Error(`Journey save failed: ${res.status} ${txt}`);
+        throw new Error(`Journey create failed: ${res.status} ${txt}`);
       }
-      const payload = await res.json();
-      setMissionConfig(payload?.mission || null);
+      await loadJourneys();
       setWizardOpen(false);
     } catch (err) {
       setError(String(err.message || err));
@@ -154,8 +103,55 @@ export default function JourneyPage() {
     }
   };
 
-  const dimensions = planExecution.dimensions || [];
-  const hasAreas = dimensions.length > 0;
+  const togglePauseJourney = async (journey) => {
+    const nextStatus = (journey.status || "active").toLowerCase() === "paused" ? "active" : "paused";
+    if (!API_BASE_URL) {
+      setJourneys((prev) => prev.map((j) => (j.id === journey.id ? { ...j, status: nextStatus } : j)));
+      return;
+    }
+    setMissionSaving(true);
+    setError("");
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/journeys/${journey.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Journey update failed: ${res.status} ${txt}`);
+      }
+      await loadJourneys();
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setMissionSaving(false);
+    }
+  };
+
+  const deleteJourney = async (journey) => {
+    if (!window.confirm("Delete this journey? This cannot be undone.")) return;
+    if (!API_BASE_URL) {
+      setJourneys((prev) => prev.filter((j) => j.id !== journey.id));
+      return;
+    }
+    setMissionSaving(true);
+    setError("");
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/journeys/${journey.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Journey delete failed: ${res.status} ${txt}`);
+      }
+      await loadJourneys();
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setMissionSaving(false);
+    }
+  };
+
+  const hasAreas = journeys.length > 0;
 
   return (
     <main className="app-shell mission-shell">
@@ -173,11 +169,11 @@ export default function JourneyPage() {
 
       <section className="milestone-panel mission-controls">
         <div className="session-form-grid">
-          <button className="btn-day" onClick={() => loadMission()} disabled={loading}>
+          <button className="btn-day" onClick={() => loadJourneys()} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh Journey"}
           </button>
           <button className="btn-day secondary" onClick={() => setWizardOpen(true)} disabled={loading}>
-            Edit Journey
+            Create New Journey
           </button>
         </div>
         {usingDummy ? (
@@ -187,28 +183,29 @@ export default function JourneyPage() {
         ) : null}
       </section>
 
-      {!hasAreas && !usingDummy ? (
+      {!hasAreas ? (
         <JourneyEmptyState onCreate={() => setWizardOpen(true)} />
       ) : (
         <>
-          <JourneyHero missionConfig={missionConfig} mission={mission} streaks={streaks} />
-
-          <TodayMove
-            mission={mission}
-            battleDone={battleDone}
-            onToggle={(idx) => setBattleDone((prev) => prev.map((v, i) => (i === idx ? !v : v)))}
-          />
-
-          <JourneyTrail dimensions={dimensions} onSelectMilestone={setSelectedDim} />
+          <p className="journey-streak-banner">🔥 {streaks?.current || 0}-day streak</p>
+          <div className="journey-list">
+            {journeys.map((journey) => (
+              <JourneyHero
+                key={journey.id}
+                journey={journey}
+                onTogglePause={() => togglePauseJourney(journey)}
+                onDelete={() => deleteJourney(journey)}
+                busy={missionSaving}
+              />
+            ))}
+          </div>
         </>
       )}
 
-      <MilestoneDetailSheet dim={selectedDim} planExecution={planExecution} onClose={() => setSelectedDim(null)} />
-
-      <JourneyWizard
+      <CreateJourneyWizard
         open={wizardOpen}
-        initialDraft={initialDraft}
-        onSave={saveMission}
+        initialDraft={blankDraft}
+        onSave={handleCreateJourney}
         onClose={() => setWizardOpen(false)}
         saving={missionSaving}
       />

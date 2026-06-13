@@ -31,6 +31,35 @@ export function buildDummyMission() {
   };
 }
 
+export function buildDummyJourneys() {
+  return [
+    {
+      id: "dummy-1",
+      title: "UPSC Selection Mission",
+      target_date: daysAgo(-180),
+      status: "active",
+      icon: "🎯",
+      category: "General",
+      plan: {
+        structure: [
+          {
+            label: "GS Foundation",
+            children: [
+              { label: "Polity", children: [] },
+              { label: "History", children: [] },
+            ],
+          },
+          {
+            label: "Books",
+            children: [{ label: "Laxmikanth", children: [] }],
+          },
+          { label: "Current Affairs", children: [] },
+        ],
+      },
+    },
+  ];
+}
+
 export function buildDummySyllabus() {
   return {
     exams: [

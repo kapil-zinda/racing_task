@@ -179,6 +179,19 @@ class MissionUpsertRequest(BaseModel):
     plan: dict = {}
 
 
+class JourneyCreateRequest(BaseModel):
+    title: str
+    target_date: str = ""
+    plan: dict = {}
+
+
+class JourneyUpdateRequest(BaseModel):
+    title: str | None = None
+    target_date: str | None = None
+    status: str | None = None
+    plan: dict | None = None
+
+
 class AgentV2CreateRequest(BaseModel):
     user_id: str = ""
     mode: str = "supportive"
