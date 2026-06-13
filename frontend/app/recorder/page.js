@@ -10,9 +10,16 @@ import { apiFetch, useAuth } from "../lib/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
-const MULTIPART_COMPLETE_RETRIES = 3;
-const MULTIPART_COMPLETE_RETRY_DELAY_MS = 1200;
-const RECORDER_FLUSH_INTERVAL_MS = 1500;
+const MULTIPART_PART_UPLOAD_RETRIES = 2;
+// Network-loss handling while recording.
+const OFFLINE_BUFFER_CAP_BYTES = 5 * 1024 * 1024; // accumulate up to ~5 MB, then pause capture
+const OFFLINE_MAX_MS = 2 * 60 * 1000;             // give up & stop after 2 min offline
+const OFFLINE_RETRY_INTERVAL_MS = 5000;           // re-attempt uploads every 5s while offline
+const HEARTBEAT_INTERVAL_MS = 90 * 1000;          // tell the backend we're alive
+// One chunk = one presigned PUT, so a longer interval means far fewer presign
+// requests and less main-thread churn (smoother video), at the cost of a slightly
+// larger "last few seconds" loss window if the tab dies.
+const RECORDER_FLUSH_INTERVAL_MS = 5000;
 const MULTIPART_FILE_PART_BYTES = 6 * 1024 * 1024;
 const SESSION_MEDIA_TYPES = ["audio", "video", "screen", "attachment"];
 
@@ -68,6 +75,18 @@ function formatDuration(totalSeconds) {
   return [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
 }
 
+function getSessionDurationSeconds(session) {
+  const elapsed = Number(session?.elapsed_seconds || 0);
+  if (elapsed > 0) return elapsed;
+  const mins = Number(session?.total_time_minutes || 0);
+  return mins > 0 ? mins * 60 : 0;
+}
+
+function isSessionFinalizing(session) {
+  const uploads = session?.uploads || {};
+  return SESSION_MEDIA_TYPES.some((m) => uploads?.[m]?.status === "processing");
+}
+
 function fmtSecs(s) {
   const t = Math.floor(s || 0);
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
@@ -104,16 +123,15 @@ function getAttachmentKindFromName(name = "") {
 
 function createEmptyMultipartState() {
   return {
-    initialized: false,
-    mediaType: "",
+    // Live recording uploads each MediaRecorder chunk immediately as its own S3
+    // object (durable within ~1.5s), then a backend concat stitches them into the
+    // final file on stop. No client-side 5 MB buffering, no silent data loss.
     contentType: "",
     extension: "webm",
-    uploadId: "",
-    key: "",
-    nextPartNumber: 1,
-    pendingParts: [],
-    pendingBytes: 0,
-    completedParts: [],
+    seq: 0,            // next chunk sequence number (0-based, recording order)
+    uploadedChunks: 0,
+    failedChunks: 0,
+    hasChunks: false,
     queue: Promise.resolve(),
     failed: false
   };
@@ -193,6 +211,20 @@ export default function RecorderPage() {
   const [recorderArming, setRecorderArming] = useState(false); // overlay mounted before streams bind
   const [stopping, setStopping] = useState(false); // finalizing upload after Stop pressed
   const stoppingRef = useRef(false); // synchronous guard against double-Stop
+  // Per-mode live upload health so the user always knows recording is being saved:
+  // mode -> "saving" | "saved" | "error".
+  const [uploadHealth, setUploadHealth] = useState({});
+  const markUpload = (mode, status) => setUploadHealth((prev) => ({ ...prev, [mode]: status }));
+  // Network-loss state: while uploads are failing we buffer chunks, show a blocking
+  // overlay, and stop after OFFLINE_MAX_MS if it never recovers.
+  const [uploadOffline, setUploadOffline] = useState(false);
+  const offlineRef = useRef(false);
+  const offlineSinceRef = useRef(0);
+  const offlineBufferRef = useRef([]); // [{ mode, seq, blob }]
+  const offlineBytesRef = useRef(0);
+  const offlineTimerRef = useRef(0);
+  const offlineTickBusyRef = useRef(false);
+  const offlinePausedRef = useRef(false); // recorders paused to bound the buffer
   const [floatPos, setFloatPos] = useState(null); // {x, y} when dragged
   const [playerModal, setPlayerModal] = useState({ open: false, mediaType: "", url: "", title: "", loading: false, streaming: false });
   const [playerRate, setPlayerRate] = useState(1);
@@ -283,6 +315,27 @@ export default function RecorderPage() {
     const id = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(id);
   }, [timerState.running]);
+
+  // While any session is still being concatenated server-side, refresh the list
+  // so its "Finalizing…" flips to playable once the final file is ready.
+  useEffect(() => {
+    if (!sessionList.some((s) => isSessionFinalizing(s))) return undefined;
+    const id = setInterval(() => { fetchSessions(); }, 4000);
+    return () => clearInterval(id);
+  }, [sessionList]);
+
+  // Heartbeat: tell the backend this device is still recording, so its reaper
+  // doesn't treat the session as abandoned. The backend auto-finalizes a session
+  // with no heartbeat for ~5 min (closed tab / crash / lost connection).
+  useEffect(() => {
+    const active = ["started", "resumed"].includes(selectedSession?.status);
+    const sid = selectedSession?._id;
+    if (!API_BASE_URL || !active || !sid) return undefined;
+    const beat = () => { apiFetch(`${API_BASE_URL}/sessions/${sid}/heartbeat`, { method: "POST" }).catch(() => {}); };
+    beat();
+    const id = setInterval(beat, HEARTBEAT_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [selectedSession?.status, selectedSession?._id]);
 
   useEffect(() => {
     if (!sessionError) return;
@@ -630,12 +683,29 @@ export default function RecorderPage() {
 
   // Create a live session and immediately begin recording (no idle "created" entry).
   const createAndStart = async () => {
+    // Preflight BEFORE creating, so declining doesn't leave a rough "created" entry.
+    // fetchSessions also reaps stale ones, so only genuinely-active recordings remain.
+    let forceStart = false;
+    const sessions = await fetchSessions();
+    const activeElsewhere = (sessions || []).find((s) =>
+      ["started", "resumed", "paused"].includes(s?.status)
+    );
+    if (activeElsewhere) {
+      const ok = window.confirm(
+        "A recording is already going on another device. Stop it and start a new recording here?"
+      );
+      if (!ok) {
+        setSessionError("Recording not started — the other device's recording is still running.");
+        return;
+      }
+      forceStart = true;
+    }
     const created = await createSession();
     if (!created?._id) return;
     setCreateModalOpen(false);
     setRecordView("full");
     setFloatPos(null);
-    await startSession(created);
+    await startSession(created, { forceStart });
   };
 
   const openExplainerFrame = () => {
@@ -788,6 +858,10 @@ export default function RecorderPage() {
 
   const stopAndReleaseStreams = () => {
     stopAudioVisualizer();
+    if (offlineTimerRef.current) { clearInterval(offlineTimerRef.current); offlineTimerRef.current = 0; }
+    offlineRef.current = false;
+    offlinePausedRef.current = false;
+    setUploadOffline(false);
     if (compositeDrawRef.current) {
       clearInterval(compositeDrawRef.current);
       compositeDrawRef.current = 0;
@@ -906,163 +980,212 @@ export default function RecorderPage() {
     multipartUploadsRef.current[mode].mediaType = mode;
   };
 
-  const enqueueMultipartTask = (mode, task) => {
+  const enqueueModeTask = (mode, task) => {
     const state = multipartUploadsRef.current[mode];
     state.queue = state.queue
       .then(task)
       .catch((err) => {
         state.failed = true;
+        markUpload(mode, "error");
         const msg = String(err?.message || err);
         if (msg.includes("RECORDING_BUCKET is not configured")) {
           setSessionError("Upload is disabled: backend RECORDING_BUCKET is not configured.");
         } else {
-          setSessionError(`Multipart upload failed (${mode}): ${msg}`);
+          setSessionError(`Recording upload failed (${mode}): ${msg}`);
         }
       });
     return state.queue;
   };
 
-  const ensureMultipartInitialized = async (mode, contentType) => {
+  // Upload one recorder chunk as its own S3 object (presigned PUT). Retries
+  // transient failures so a blip doesn't lose the chunk; no ETag/CORS dependency
+  // since these are plain objects, not multipart parts.
+  const uploadChunkObject = async (mode, seq, blob) => {
     const state = multipartUploadsRef.current[mode];
-    if (state.initialized) return state;
+    if (!blob || blob.size === 0) return;
     const activeId = recordingSessionIdRef.current || selectedSessionRef.current?._id || selectedSession?._id;
-    if (!API_BASE_URL || !activeId) {
-      throw new Error("Session not ready for multipart upload");
-    }
+    if (!API_BASE_URL || !activeId) throw new Error("Session not ready for chunk upload");
+    const contentType = state.contentType || blob.type || getMimeForMode(mode);
 
-    const extension = getExtensionFromContentType(contentType || getMimeForMode(mode));
-    const res = await apiFetch(`${API_BASE_URL}/sessions/${activeId}/multipart/start`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        media_type: mode,
-        content_type: contentType || getMimeForMode(mode),
-        extension
-      })
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`Multipart start failed: ${res.status} ${txt}`);
+    markUpload(mode, "saving");
+    let lastErr = null;
+    for (let attempt = 1; attempt <= MULTIPART_PART_UPLOAD_RETRIES; attempt += 1) {
+      try {
+        const presignRes = await apiFetch(`${API_BASE_URL}/sessions/${activeId}/chunk/presign-url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ media_type: mode, seq, content_type: contentType })
+        });
+        if (!presignRes.ok) {
+          const txt = await presignRes.text();
+          throw new Error(`Chunk presign failed: ${presignRes.status} ${txt}`);
+        }
+        const presignData = await presignRes.json();
+        const putRes = await fetch(presignData.upload_url, {
+          method: "PUT",
+          headers: { "Content-Type": contentType },
+          body: blob
+        });
+        if (!putRes.ok) {
+          throw new Error(`Chunk PUT failed: ${putRes.status}`);
+        }
+        state.uploadedChunks += 1;
+        markUpload(mode, "saved");
+        return;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[recorder] chunk upload failed ${mode} seq ${seq} (attempt ${attempt})`, err);
+        if (attempt < MULTIPART_PART_UPLOAD_RETRIES) {
+          await new Promise((r) => setTimeout(r, 800 * attempt));
+        }
+      }
     }
-    const data = await res.json();
-    state.initialized = true;
-    state.mediaType = mode;
-    state.contentType = contentType || getMimeForMode(mode);
-    state.extension = extension;
-    state.uploadId = data.upload_id || "";
-    state.key = data.key || "";
-    return state;
+    throw lastErr || new Error("Chunk upload failed");
   };
 
-  const uploadOneMultipartPart = async (mode, blob) => {
-    const state = multipartUploadsRef.current[mode];
-    if (!blob || blob.size === 0 || state.failed) return;
-    await ensureMultipartInitialized(mode, blob.type || getMimeForMode(mode));
-    const partNumber = state.nextPartNumber;
-
-    const activeId = recordingSessionIdRef.current || selectedSessionRef.current?._id || selectedSession?._id;
-    const presignRes = await apiFetch(`${API_BASE_URL}/sessions/${activeId}/multipart/presign-part`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        media_type: mode,
-        upload_id: state.uploadId,
-        part_number: partNumber
-      })
-    });
-    if (!presignRes.ok) {
-      const txt = await presignRes.text();
-      throw new Error(`Multipart presign part failed: ${presignRes.status} ${txt}`);
+  // Hold a chunk we couldn't upload. Once the buffer passes the cap we pause the
+  // recorders so it can't grow without bound while we're offline.
+  const bufferOfflineChunk = (item) => {
+    offlineBufferRef.current.push(item);
+    offlineBytesRef.current += item.blob.size;
+    markUpload(item.mode, "error");
+    if (offlineBytesRef.current >= OFFLINE_BUFFER_CAP_BYTES && !offlinePausedRef.current) {
+      offlinePausedRef.current = true;
+      Object.values(recorderRefs.current).forEach((rec) => {
+        try { if (rec && rec.state === "recording") rec.pause(); } catch (_) {}
+      });
     }
-    const presignData = await presignRes.json();
-    const putRes = await fetch(presignData.upload_url, { method: "PUT", body: blob });
-    if (!putRes.ok) {
-      throw new Error(`Multipart part upload failed: ${putRes.status}`);
-    }
-    const rawEtag = putRes.headers.get("ETag") || "";
-    if (!rawEtag) {
-      throw new Error("S3 did not expose ETag header. Configure bucket CORS ExposeHeaders to include ETag.");
-    }
-    const etag = rawEtag;
-    state.completedParts.push({ part_number: partNumber, etag });
-    state.nextPartNumber += 1;
   };
 
-  const flushMultipartBuffer = (mode, force = false) => enqueueMultipartTask(mode, async () => {
-    const state = multipartUploadsRef.current[mode];
-    if (state.failed) return;
-    if (!force && state.pendingBytes < MULTIPART_MIN_PART_BYTES) return;
-    if (state.pendingBytes <= 0 || state.pendingParts.length === 0) return;
+  const exitOfflineMode = (resume) => {
+    if (offlineTimerRef.current) { clearInterval(offlineTimerRef.current); offlineTimerRef.current = 0; }
+    offlineRef.current = false;
+    offlineSinceRef.current = 0;
+    setUploadOffline(false);
+    if (resume && offlinePausedRef.current) {
+      offlinePausedRef.current = false;
+      Object.values(recorderRefs.current).forEach((rec) => {
+        try { if (rec && rec.state === "paused") rec.resume(); } catch (_) {}
+      });
+    } else {
+      offlinePausedRef.current = false;
+    }
+  };
 
-    const partBlob = new Blob(state.pendingParts, { type: state.contentType || getMimeForMode(mode) });
-    state.pendingParts = [];
-    state.pendingBytes = 0;
-    await uploadOneMultipartPart(mode, partBlob);
-  });
+  // Periodic tick while offline: retry the buffered chunks; if they all upload we
+  // recover and resume; if we've been offline past the limit, give up and stop.
+  const offlineTick = async () => {
+    if (offlineTickBusyRef.current) return;
+    offlineTickBusyRef.current = true;
+    try {
+      if (Date.now() - offlineSinceRef.current >= OFFLINE_MAX_MS) {
+        console.warn("[recorder] offline > limit — stopping and salvaging");
+        exitOfflineMode(false);
+        offlineBufferRef.current = [];
+        offlineBytesRef.current = 0;
+        await stopSession();
+        return;
+      }
+      while (offlineBufferRef.current.length > 0) {
+        const item = offlineBufferRef.current[0];
+        try {
+          await uploadChunkObject(item.mode, item.seq, item.blob);
+          offlineBufferRef.current.shift();
+          offlineBytesRef.current -= item.blob.size;
+        } catch (_) {
+          return; // still offline; wait for the next tick
+        }
+      }
+      // Buffer drained → connection is back.
+      console.log("[recorder] connection recovered — resuming");
+      exitOfflineMode(true);
+    } finally {
+      offlineTickBusyRef.current = false;
+    }
+  };
+
+  const enterOfflineMode = () => {
+    if (offlineRef.current) return;
+    offlineRef.current = true;
+    offlineSinceRef.current = Date.now();
+    setUploadOffline(true);
+    offlineTimerRef.current = setInterval(() => { offlineTick(); }, OFFLINE_RETRY_INTERVAL_MS);
+  };
 
   const handleRecorderChunk = (mode, chunk) => {
     if (!chunk || chunk.size === 0) return;
     const state = multipartUploadsRef.current[mode];
-    console.log(`[recorder] chunk ${mode} +${chunk.size}B pending=${state.pendingBytes + chunk.size} sid=${recordingSessionIdRef.current}`);
     if (state.failed) return;
     if (!state.contentType) {
       state.contentType = chunk.type || getMimeForMode(mode);
       state.extension = getExtensionFromContentType(state.contentType);
     }
-    state.pendingParts.push(chunk);
-    state.pendingBytes += chunk.size;
-    if (state.pendingBytes >= MULTIPART_MIN_PART_BYTES) {
-      flushMultipartBuffer(mode, false);
+    const seq = state.seq;
+    state.seq += 1;
+    state.hasChunks = true;
+    const item = { mode, seq, blob: chunk };
+    console.log(`[recorder] chunk ${mode} seq=${seq} +${chunk.size}B sid=${recordingSessionIdRef.current}`);
+    if (offlineRef.current) {
+      bufferOfflineChunk(item);
+      return;
     }
+    enqueueModeTask(mode, async () => {
+      try {
+        await uploadChunkObject(mode, seq, chunk);
+      } catch (err) {
+        bufferOfflineChunk(item);
+        enterOfflineMode();
+      }
+    });
   };
 
-  const completeMultipartForMode = async (mode) => {
+  // After recording stops: drain pending chunk uploads, then ask the backend to
+  // concatenate them into the final object. The concat runs async on Lambda and
+  // the caller polls waitForConcatComplete().
+  const finalizeChunkConcat = async (mode) => {
     const state = multipartUploadsRef.current[mode];
     await state.queue;
-    await flushMultipartBuffer(mode, true);
-    await state.queue;
-
-    if (state.failed || !state.initialized) return;
-    if (state.completedParts.length === 0) return;
-
-    let lastErr = null;
-    const activeId = recordingSessionIdRef.current || selectedSessionRef.current?._id || selectedSession?._id;
-    for (let attempt = 1; attempt <= MULTIPART_COMPLETE_RETRIES; attempt += 1) {
-      const completeRes = await apiFetch(`${API_BASE_URL}/sessions/${activeId}/multipart/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          media_type: mode,
-          upload_id: state.uploadId,
-          parts: state.completedParts
-        })
-      });
-      if (completeRes.ok) {
-        return;
-      }
-      const txt = await completeRes.text();
-      lastErr = new Error(`Multipart complete failed: ${completeRes.status} ${txt}`);
-      if (attempt < MULTIPART_COMPLETE_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, MULTIPART_COMPLETE_RETRY_DELAY_MS * attempt));
-      }
+    if (!state.hasChunks) return { triggered: false };
+    if (state.failed || state.failedChunks > 0) {
+      throw new Error(`Some ${mode} chunks failed to upload (${state.failedChunks}); cannot finalize cleanly`);
     }
-    throw lastErr || new Error("Multipart complete failed");
+    const activeId = recordingSessionIdRef.current || selectedSessionRef.current?._id || selectedSession?._id;
+    const res = await apiFetch(`${API_BASE_URL}/sessions/${activeId}/chunks/concat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        media_type: mode,
+        content_type: state.contentType || getMimeForMode(mode),
+        extension: state.extension || getExtensionFromContentType(state.contentType)
+      })
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Concat trigger failed: ${res.status} ${txt}`);
+    }
+    return { triggered: true };
   };
 
-  const abortMultipartForMode = async (mode) => {
-    const state = multipartUploadsRef.current[mode];
-    if (!state.initialized || !state.uploadId) return;
+  // Poll the session until every concatenating mode reaches "completed" (or one
+  // reports "failed"). The backend concat is async, so we wait on its result.
+  const waitForConcatComplete = async (modes, { timeoutMs = 5 * 60 * 1000, intervalMs = 2500 } = {}) => {
     const activeId = recordingSessionIdRef.current || selectedSessionRef.current?._id || selectedSession?._id;
-    try {
-      await apiFetch(`${API_BASE_URL}/sessions/${activeId}/multipart/abort`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          media_type: mode,
-          upload_id: state.uploadId
-        })
-      });
-    } catch (_) {}
+    if (!API_BASE_URL || !activeId || modes.length === 0) return { ok: true, failed: [] };
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      let doc = null;
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/sessions/${activeId}`);
+        if (res.ok) doc = (await res.json())?.session;
+      } catch (_) {}
+      const uploads = doc?.uploads || {};
+      const failed = modes.filter((m) => uploads[m]?.status === "failed");
+      const done = modes.filter((m) => uploads[m]?.status === "completed");
+      if (failed.length > 0) return { ok: false, failed };
+      if (done.length === modes.length) return { ok: true, failed: [] };
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    return { ok: false, failed: modes, timedOut: true };
   };
 
   const createRecorderForMode = (mode, stream) => {
@@ -1072,7 +1195,18 @@ export default function RecorderPage() {
     }
     resetMultipartStateForMode(mode);
     const mimeType = getMimeForMode(mode);
-    const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    // Explicit bitrates: default browser bitrates can be low and cause blocky/laggy
+    // video and thin/noisy audio. 128 kbps audio + ~3 Mbps video is clean for study
+    // recordings without bloating the file.
+    const opts = { audioBitsPerSecond: 128000 };
+    if (mode !== "audio") opts.videoBitsPerSecond = 3000000;
+    if (mimeType) opts.mimeType = mimeType;
+    let rec;
+    try {
+      rec = new MediaRecorder(stream, opts);
+    } catch (_) {
+      rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    }
     const clearFlushTimer = () => {
       const timerId = recorderFlushTimersRef.current[mode];
       if (timerId) clearInterval(timerId);
@@ -1108,7 +1242,10 @@ export default function RecorderPage() {
     audioSourceNodesRef.current.push(node);
   };
 
-  const startCompositeRecorder = () => {
+  // Canvas-backed recorder. drawFrame handles all cases: screen+camera PiP (call),
+  // camera full (video), and an avatar placeholder when the camera is off — so the
+  // recorded file shows the placeholder instead of black frames.
+  const startCompositeRecorder = (targetMode = "screen") => {
     if (compositeStreamRef.current) return;
 
     const canvas = document.createElement("canvas");
@@ -1220,21 +1357,29 @@ export default function RecorderPage() {
         ctx.fillText("Waiting for camera/screen...", 36, 70);
       }
     };
-    compositeDrawRef.current = setInterval(drawFrame, Math.floor(1000 / 24));
+    compositeDrawRef.current = setInterval(drawFrame, Math.floor(1000 / 30));
 
-    const composed = canvas.captureStream(24);
+    const composed = canvas.captureStream(30);
+    const micTracks = streamRefs.current.audio?.getAudioTracks?.() || [];
+    const screenAudioTracks = streamRefs.current.screen?.getAudioTracks?.() || [];
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (AudioCtx) {
+    if (screenAudioTracks.length && AudioCtx) {
+      // Two audio sources (mic + system/tab audio) genuinely need mixing, so route
+      // them through Web Audio into one track.
       audioContextRef.current = new AudioCtx();
       audioDestinationRef.current = audioContextRef.current.createMediaStreamDestination();
       connectStreamAudioToComposite(streamRefs.current.audio);
       connectStreamAudioToComposite(streamRefs.current.screen);
       audioDestinationRef.current.stream.getAudioTracks().forEach((track) => composed.addTrack(track));
+    } else if (micTracks.length) {
+      // Single source (e.g. video recording): attach the raw mic track directly.
+      // Avoids the Web Audio resampling that was adding noise.
+      composed.addTrack(micTracks[0]);
     }
 
     compositeStreamRef.current = composed;
     bindPreview(combinedPreviewRef, composed);
-    createRecorderForMode("screen", composed);
+    createRecorderForMode(targetMode, composed);
   };
 
   const stopSingleRecorder = async (mode) => {
@@ -1327,6 +1472,14 @@ export default function RecorderPage() {
       screen: createEmptyMultipartState(),
       attachment: createEmptyMultipartState()
     };
+    setUploadHealth({});
+    if (offlineTimerRef.current) { clearInterval(offlineTimerRef.current); offlineTimerRef.current = 0; }
+    offlineRef.current = false;
+    offlineSinceRef.current = 0;
+    offlineBufferRef.current = [];
+    offlineBytesRef.current = 0;
+    offlinePausedRef.current = false;
+    setUploadOffline(false);
     const unique = Array.from(new Set(modes || []));
     const screenOnly = unique.includes("screen") && !unique.includes("video");
     console.log("[recorder] initRecorders modes=", unique, "screenOnly=", screenOnly);
@@ -1338,7 +1491,10 @@ export default function RecorderPage() {
     }
     const needMic = unique.includes("audio") || unique.includes("video") || unique.includes("screen");
     if (needMic) {
-      streamRefs.current.audio = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      streamRefs.current.audio = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
     }
     if (unique.includes("audio") && streamRefs.current.audio) createRecorderForMode("audio", streamRefs.current.audio);
 
@@ -1348,10 +1504,9 @@ export default function RecorderPage() {
       videoStream.getVideoTracks().forEach((t) => { t.enabled = false; });
       bindPreview(cameraPreviewRef, videoStream);
       if (!unique.includes("screen")) {
-        const videoTracks = videoStream.getVideoTracks?.() || [];
-        const micTracks = (streamRefs.current.audio?.getAudioTracks?.() || []);
-        const videoRecordStream = new MediaStream([...videoTracks, ...micTracks]);
-        createRecorderForMode("video", videoRecordStream);
+        // Record through a canvas so a cam-off placeholder (avatar) ends up in the
+        // file instead of black frames.
+        startCompositeRecorder("video");
       }
     } else {
       bindPreview(cameraPreviewRef, null);
@@ -1412,7 +1567,7 @@ export default function RecorderPage() {
     }
   };
 
-  const startSession = async (sessionOverride = null) => {
+  const startSession = async (sessionOverride = null, options = {}) => {
     let activeSession = sessionOverride || selectedSession;
     console.log("[recorder] startSession sid=", resolveSessionId(activeSession), "status=", activeSession?.status, "modes=", activeSession?.modes);
     if (!activeSession) {
@@ -1461,15 +1616,27 @@ export default function RecorderPage() {
       setSessionError(`Recorder permission/device error: ${String(err.message || err)}`);
       return;
     }
+    // forceStart is set when the caller already confirmed taking over an active
+    // recording (preflight), so we don't prompt again here.
+    const forceStart = Boolean(options.forceStart);
     try {
-      await pushSessionStatus("started", {}, activeSession);
+      await pushSessionStatus("started", { forceStopPrevious: forceStart }, activeSession);
     } catch (err) {
       const msg = String(err?.message || err || "");
       const conflict = msg.includes("Another session is active");
       if (conflict) {
-        // A previous session is still marked active in the backend (commonly our
-        // own just-stopped one whose "stopped" push didn't land). The user clicked
-        // start here, so take over automatically instead of getting stuck.
+        // A recording became active elsewhere between preflight and now. Ask before
+        // taking over — never silently stop the other recording.
+        const confirmStop = window.confirm(
+          "A recording is already going on another device. Do you want to stop that ongoing recording and start here?"
+        );
+        if (!confirmStop) {
+          stopAndReleaseStreams();
+          recorderRefs.current = {};
+          setRecorderArming(false);
+          setSessionError("Recording not started — the other device's recording is still running.");
+          return;
+        }
         try {
           await pushSessionStatus("started", { forceStopPrevious: true }, activeSession);
         } catch (err2) {
@@ -1529,15 +1696,16 @@ export default function RecorderPage() {
       });
       await stopRecordersOnly();
       console.log(
-        "[recorder] recorders stopped; parts per mode=",
-        SESSION_MEDIA_TYPES.map((m) => `${m}:${multipartUploadsRef.current[m]?.completedParts?.length || 0}`)
+        "[recorder] recorders stopped; chunks per mode=",
+        SESSION_MEDIA_TYPES.map((m) => `${m}:${multipartUploadsRef.current[m]?.uploadedChunks || 0}/${(multipartUploadsRef.current[m]?.uploadedChunks || 0) + (multipartUploadsRef.current[m]?.failedChunks || 0)}`)
       );
+      // Drain pending chunk uploads, then trigger server-side concat per mode.
       const failedModes = [];
       await Promise.all(SESSION_MEDIA_TYPES.map(async (mode) => {
         try {
-          await completeMultipartForMode(mode);
+          await finalizeChunkConcat(mode);
         } catch (err) {
-          console.error(`[recorder] completeMultipartForMode(${mode}) failed`, err);
+          console.error(`[recorder] finalizeChunkConcat(${mode}) failed`, err);
           failedModes.push(mode);
         }
       }));
@@ -1559,6 +1727,9 @@ export default function RecorderPage() {
         setSelectedSession((prev) => (prev ? { ...prev, status: "stopped" } : prev));
         broadcastRecorderStatus("stopped");
       }
+      // The chunks are already durably in S3, so we DON'T block the UI on the
+      // server-side concat (it can take minutes for a long recording). The list
+      // shows a "Finalizing…" badge per session until the final file is ready.
       if (failedModes.length === 0) {
         multipartUploadsRef.current = {
           audio: createEmptyMultipartState(),
@@ -1567,11 +1738,13 @@ export default function RecorderPage() {
           attachment: createEmptyMultipartState()
         };
         setPendingFinalizeModes([]);
+        await fetchSessions();
         return true;
       } else {
-        setPendingFinalizeModes(failedModes);
+        const uniqueFailed = [...new Set(failedModes)];
+        setPendingFinalizeModes(uniqueFailed);
         setSessionError(
-          `Session stopped, but final upload step failed for: ${failedModes.join(", ")}. Use "Retry Pending Uploads".`
+          `Session stopped, but saving failed for: ${uniqueFailed.join(", ")}. Use "Retry Pending Uploads".`
         );
         return false;
       }
@@ -1696,12 +1869,18 @@ export default function RecorderPage() {
     setFinalizeRetrying(true);
     try {
       const failedModes = [];
+      const triggeredModes = [];
       for (const mode of pendingFinalizeModes) {
         try {
-          await completeMultipartForMode(mode);
+          const r = await finalizeChunkConcat(mode);
+          if (r.triggered) triggeredModes.push(mode);
         } catch (_) {
           failedModes.push(mode);
         }
+      }
+      if (triggeredModes.length > 0) {
+        const { ok, failed } = await waitForConcatComplete(triggeredModes);
+        if (!ok) failedModes.push(...failed);
       }
       if (failedModes.length === 0) {
         multipartUploadsRef.current = {
@@ -1713,8 +1892,9 @@ export default function RecorderPage() {
         setPendingFinalizeModes([]);
         setSessionError("");
       } else {
-        setPendingFinalizeModes(failedModes);
-        setSessionError(`Retry still pending for: ${failedModes.join(", ")}`);
+        const uniqueFailed = [...new Set(failedModes)];
+        setPendingFinalizeModes(uniqueFailed);
+        setSessionError(`Retry still pending for: ${uniqueFailed.join(", ")}`);
       }
     } catch (err) {
       setSessionError(String(err.message || err));
@@ -1817,13 +1997,61 @@ export default function RecorderPage() {
     const streaming = mediaType !== "audio" && mediaType !== "attachment" && /\.webm$/i.test(key);
     const title = `${session.subject || "Session"}${session.topic ? ` — ${session.topic}` : ""}`;
     setPlayerRate(1);
-    setPlayerModal({ open: true, mediaType, url: "", title, loading: true, streaming });
+    setPlayerModal({ open: true, sid, mediaType, url: "", title, loading: true, streaming });
     try {
       const url = await fetchPlaybackUrl(sid, mediaType);
-      setPlayerModal({ open: true, mediaType, url, title, loading: false, streaming });
+      setPlayerModal({ open: true, sid, mediaType, url, title, loading: false, streaming });
     } catch (err) {
-      setPlayerModal({ open: false, mediaType: "", url: "", title: "", loading: false, streaming: false });
+      setPlayerModal({ open: false, sid: "", mediaType: "", url: "", title: "", loading: false, streaming: false });
       setSessionError(`Playback failed: ${String(err.message || err)}`);
+    }
+  };
+
+  // Force a browser download (presigned URL carries Content-Disposition: attachment),
+  // so it saves the file instead of opening it in a new tab.
+  const triggerDownload = async (sid, mediaType) => {
+    if (!API_BASE_URL || !sid || !mediaType) {
+      setSessionError("No recording available to download yet.");
+      return;
+    }
+    try {
+      const res = await apiFetch(
+        `${API_BASE_URL}/sessions/${sid}/playback-url?media_type=${encodeURIComponent(mediaType)}&download=1`
+      );
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const a = document.createElement("a");
+      a.href = data.playback_url;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      setSessionError(`Download failed: ${String(err.message || err)}`);
+    }
+  };
+
+  const downloadRecording = (session) => {
+    setOpenSessionMenuId("");
+    return triggerDownload(resolveSessionId(session), getPrimaryPlaybackType(session));
+  };
+
+  const editSessionNote = async (session) => {
+    const sid = resolveSessionId(session);
+    if (!sid) return;
+    setOpenSessionMenuId("");
+    const next = window.prompt("Edit note for this recording:", session?.notes || "");
+    if (next === null) return; // cancelled
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/sessions/${sid}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: next.trim() }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await fetchSessions();
+    } catch (err) {
+      setSessionError(`Could not update note: ${String(err.message || err)}`);
     }
   };
 
@@ -2187,6 +2415,19 @@ export default function RecorderPage() {
   const elapsedDisplay = timerState.running
     ? timerState.baseElapsed + Math.floor((nowTick - timerState.startedAt) / 1000)
     : timerState.baseElapsed;
+  const offlineRemainingSecs = uploadOffline
+    ? Math.max(0, Math.ceil((OFFLINE_MAX_MS - (nowTick - offlineSinceRef.current)) / 1000))
+    : 0;
+  // Roll the per-mode upload health into a single banner: any error wins, else
+  // any in-flight = "saving", else if anything has saved = "saved".
+  const uploadHealthValues = Object.values(uploadHealth);
+  const uploadIndicator = uploadHealthValues.includes("error")
+    ? { cls: "error", label: "⚠ Not saving — check connection" }
+    : uploadHealthValues.includes("saving")
+    ? { cls: "saving", label: "⬆ Saving…" }
+    : uploadHealthValues.includes("saved")
+    ? { cls: "saved", label: "✓ Saved" }
+    : null;
   const sessionStatus = selectedSession?.status || "created";
   const isClosed = sessionStatus === "stopped";
   const canPause = sessionStatus === "started" || sessionStatus === "resumed";
@@ -2214,13 +2455,25 @@ export default function RecorderPage() {
   const selectedTopicValue = sessionForm.topic === OTHER_VALUE ? sessionForm.topic_other : sessionForm.topic;
   // Always present newest-first by created_at, deterministically, so selecting or
   // running a previous session never reshuffles the list.
+  // The session this device is actively recording (if any) — used to hide
+  // sessions that are running on a *different* device from this device's list.
+  const myActiveRecordingId =
+    isRecordingActive && hasLocalRecordingInThisTab() ? resolveSessionId(selectedSession) : "";
+
   const orderedSessionList = useMemo(() => {
-    return [...sessionList].sort((a, b) => {
-      const ta = Date.parse(a?.created_at || "") || 0;
-      const tb = Date.parse(b?.created_at || "") || 0;
-      return tb - ta;
-    });
-  }, [sessionList]);
+    return [...sessionList]
+      .filter((s) => {
+        const active = ["started", "resumed", "paused"].includes(s?.status);
+        // Hide recordings active on another device/tab; only show the one this
+        // device is recording (or non-active sessions).
+        return !active || resolveSessionId(s) === myActiveRecordingId;
+      })
+      .sort((a, b) => {
+        const ta = Date.parse(a?.created_at || "") || 0;
+        const tb = Date.parse(b?.created_at || "") || 0;
+        return tb - ta;
+      });
+  }, [sessionList, myActiveRecordingId]);
 
   return (
     <main className="app-shell">
@@ -2429,6 +2682,9 @@ export default function RecorderPage() {
                     <span className="record-dot live" />
                     <span className="meet-elapsed">{formatDuration(elapsedDisplay)}</span>
                     <span className="meet-session-name">{recorderLabel}</span>
+                    {uploadIndicator ? (
+                      <span className={`meet-upload-status ${uploadIndicator.cls}`}>{uploadIndicator.label}</span>
+                    ) : null}
                   </div>
                   <div className="meet-topbar-right" onPointerDown={(e) => e.stopPropagation()}>
                     {hasVideoMode || hasScreenMode ? (
@@ -2559,7 +2815,7 @@ export default function RecorderPage() {
                   ) : null}
                   {canStop ? (
                     <button className="meet-end" onClick={stopSession} disabled={stopping}>
-                      {stopping ? "Uploading…" : (selectedRecorderType === "audio" ? "End" : "Stop")}
+                      {stopping ? "Finalizing…" : (selectedRecorderType === "audio" ? "End" : "Stop")}
                     </button>
                   ) : null}
                 </div>
@@ -2682,7 +2938,9 @@ export default function RecorderPage() {
               <div className="session-grid">
                 {orderedSessionList.map((session) => {
                   const running = ["started", "resumed", "paused"].includes(session.status);
-                  const canPlay = Boolean(getPrimaryPlaybackType(session));
+                  const finalizing = isSessionFinalizing(session);
+                  const canPlay = Boolean(getPrimaryPlaybackType(session)) && !finalizing;
+                  const durationSecs = getSessionDurationSeconds(session);
                   return (
                     <div
                       key={session._id}
@@ -2703,6 +2961,20 @@ export default function RecorderPage() {
                           {openSessionMenuId === session._id ? (
                             <div className="menu-dropdown session-actions-menu">
                               <button
+                                className="menu-item"
+                                onClick={() => editSessionNote(session)}
+                              >
+                                Edit Note
+                              </button>
+                              <button
+                                className="menu-item"
+                                onClick={() => downloadRecording(session)}
+                                disabled={!canPlay}
+                                title={canPlay ? "Download recording" : "No recording available yet"}
+                              >
+                                Download
+                              </button>
+                              <button
                                 className="menu-item session-menu-delete"
                                 onClick={() => deleteSession(session)}
                                 disabled={Boolean(deletingSessionIds[session._id]) || running}
@@ -2719,15 +2991,17 @@ export default function RecorderPage() {
                         <span className="session-chip">{capitalize(getRecorderType(session)).replace("_", " ")}</span>
                         <span className="session-chip">{session.session_type}</span>
                         <span className="session-chip">{session.date}</span>
+                        {durationSecs > 0 ? <span className="session-chip">⏱ {formatDuration(durationSecs)}</span> : null}
                       </div>
+                      {session.notes ? <p className="session-card-note">📝 {session.notes}</p> : null}
                       <div className="session-card-actions" onClick={(e) => e.stopPropagation()}>
                         <button
                           className="btn-day"
                           onClick={() => openPlayer(session)}
                           disabled={!canPlay}
-                          title={canPlay ? "Play recording" : "No recording uploaded yet"}
+                          title={canPlay ? "Play recording" : (finalizing ? "Finalizing recording…" : "No recording uploaded yet")}
                         >
-                          ▶ Play
+                          {finalizing ? "⏳ Finalizing…" : "▶ Play"}
                         </button>
                       </div>
                     </div>
@@ -2738,6 +3012,20 @@ export default function RecorderPage() {
           </>
         )}
       </section>
+      {uploadOffline ? (
+        <div className="offline-overlay">
+          <div className="offline-card">
+            <div className="offline-spinner" />
+            <h3 className="offline-title">Internet problem — not able to upload</h3>
+            <p className="offline-sub">
+              Recording is buffered and paused. Trying to reconnect…
+            </p>
+            <p className="offline-countdown">
+              Will stop &amp; save what we have in <strong>{formatDuration(offlineRemainingSecs)}</strong>
+            </p>
+          </div>
+        </div>
+      ) : null}
       {playerModal.open ? (
         <div className="vlc-backdrop" onClick={closePlayer}>
           <div className="vlc-player" onClick={(e) => e.stopPropagation()}>
@@ -2819,7 +3107,7 @@ export default function RecorderPage() {
                     <option value="2">2×</option>
                   </select>
                   <button className="vlc-btn" onClick={togglePlayerFullscreen} title="Fullscreen">⛶</button>
-                  <a className="vlc-btn" href={playerModal.url} download target="_blank" rel="noreferrer" title="Download">⬇</a>
+                  <button className="vlc-btn" onClick={() => triggerDownload(playerModal.sid, playerModal.mediaType)} title="Download">⬇</button>
                 </div>
               </div>
             ) : null}

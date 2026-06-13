@@ -34,6 +34,10 @@ class SessionStatusRequest(BaseModel):
     force_stop_previous: bool = False
 
 
+class SessionNotesRequest(BaseModel):
+    notes: str = ""
+
+
 class PresignRequest(BaseModel):
     media_type: str  # audio | video | screen | attachment
     content_type: str = "application/octet-stream"
@@ -66,6 +70,18 @@ class MultipartCompleteRequest(BaseModel):
 class MultipartAbortRequest(BaseModel):
     media_type: str  # audio | video | screen | attachment
     upload_id: str
+
+
+class ChunkPresignRequest(BaseModel):
+    media_type: str  # audio | video | screen | attachment
+    seq: int  # 0-based ordering of the chunk within the recording
+    content_type: str = "application/octet-stream"
+
+
+class ChunkConcatRequest(BaseModel):
+    media_type: str  # audio | video | screen | attachment
+    content_type: str = "application/octet-stream"
+    extension: str = "webm"
 
 
 class PdfPresignUploadRequest(BaseModel):
