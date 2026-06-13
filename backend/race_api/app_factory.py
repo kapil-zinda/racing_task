@@ -398,6 +398,8 @@ def create_app() -> FastAPI:
                 title=payload.title,
                 target_date=payload.target_date,
                 status=payload.status,
+                icon=payload.icon,
+                category=payload.category,
                 weights=payload.weights,
                 targets=payload.targets,
                 plan=payload.plan,

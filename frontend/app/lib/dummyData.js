@@ -14,6 +14,8 @@ export function buildDummyMission() {
     title: "UPSC Selection Mission",
     target_date: daysAgo(-180),
     status: "active",
+    icon: "🎯",
+    category: "Education",
     plan: {
       courses: [
         { course_name: "GS Foundation", subject_name: "Polity", class_count: 4, revision_count: 2 },

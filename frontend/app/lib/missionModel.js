@@ -711,3 +711,43 @@ export function buildMissionModel(planExecution) {
     identityDelta,
   };
 }
+
+// Resolves the topic-level rows (from planExecution.missionTopics) that belong
+// to a given dimension card, for Journey's milestone detail sheet.
+export function dimensionTopics(dim, missionTopics) {
+  const topics = Array.isArray(missionTopics) ? missionTopics : [];
+  if (!dim) return [];
+  if (dim.kind === "course") {
+    return topics.filter((t) => t.axis === "Courses" && t.exam === dim.label);
+  }
+  if (dim.kind === "book") {
+    return topics.filter((t) => t.axis === "Books" && t.exam === `Book: ${dim.label}`);
+  }
+  if (dim.kind === "random") {
+    return topics.filter((t) => t.axis === "Randoms" && `${t.subject} - ${t.topic}` === dim.label);
+  }
+  return [];
+}
+
+// Resolves the test slots (from planExecution.missionTestSlots) that belong to
+// a given "test" dimension card, for Journey's milestone detail sheet.
+export function dimensionTestSlots(dim, missionTestSlots) {
+  const slots = Array.isArray(missionTestSlots) ? missionTestSlots : [];
+  if (!dim || dim.kind !== "test") return [];
+  return slots.filter((slot) => `${slot.source} - ${slot.testName}` === dim.label);
+}
+
+function dimAxisPct(done, total) {
+  if (!total) return 0;
+  return Math.round((Math.max(0, done) / total) * 100);
+}
+
+// Overall completion % for a single plan dimension (average of its three axes),
+// used by Journey's path hero and milestone cards.
+export function dimensionCompletion(dim) {
+  if (!dim) return 0;
+  const coverage = dimAxisPct(dim.coverageDone, dim.coverageTotal);
+  const retention = dimAxisPct(dim.retentionDone, dim.retentionTotal);
+  const performance = dimAxisPct(dim.performanceDone, dim.performanceTotal);
+  return Math.round((coverage + retention + performance) / 3);
+}

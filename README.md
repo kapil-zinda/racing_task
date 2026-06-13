@@ -39,8 +39,7 @@ If `NEXT_PUBLIC_API_BASE_URL` is empty, frontend uses localStorage fallback.
 ```bash
 cd backend
 python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+source .venv/bin/activatere
 cp .env.example .env
 export $(grep -v '^#' .env | xargs)
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
@@ -78,6 +77,7 @@ Note: backend now auto-loads variables from `backend/.env` via `python-dotenv`.
   - `audio`, `video`, `screen`
 
 API endpoints:
+
 - `POST /sessions`
 - `GET /sessions?user_id=kapil|divya` (today by default)
 - `GET /sessions/{session_id}`
@@ -109,6 +109,7 @@ pip install -r requirements.txt -t python
 7. Deploy API.
 
 Lambda handler value can be:
+
 - `lambda_function.lambda_handler` (current wrapper)
 - or `app.handler` (Mangum handler directly)
 

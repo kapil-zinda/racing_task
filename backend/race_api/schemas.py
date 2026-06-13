@@ -172,6 +172,8 @@ class MissionUpsertRequest(BaseModel):
     title: str = ""
     target_date: str = ""
     status: str = "active"
+    icon: str = ""
+    category: str = ""
     weights: dict = {}
     targets: dict | None = None
     plan: dict = {}

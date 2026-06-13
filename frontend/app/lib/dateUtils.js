@@ -16,6 +16,16 @@ export function toIsoDate(d) {
   return d.toISOString().slice(0, 10);
 }
 
+export function daysUntil(value) {
+  const d = toDate(value);
+  if (!d) return null;
+  const now = new Date();
+  const startOfNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = startOfTarget.getTime() - startOfNow.getTime();
+  return Math.round(diff / (1000 * 60 * 60 * 24));
+}
+
 export function buildRecentDates(total) {
   const dates = [];
   const now = new Date();
