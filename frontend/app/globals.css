@@ -3389,11 +3389,42 @@ body:has(.mission-shell) {
 .mission-shell .radial-ring-track {
   stroke: rgba(170, 120, 160, 0.18);
 }
+.mission-shell .radial-ring-progress {
+  filter: none;
+}
+.mission-shell .radial-ring {
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(199, 146, 234, 0.1), transparent 70%);
+}
 .mission-shell .radial-ring-content strong {
   color: #3D2C4E;
 }
 .mission-shell .radial-ring-content span {
   color: #7A6A8C;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  font-weight: bold;
+}
+.mission-shell .hub-goal-health {
+  gap: 26px;
+  padding: 22px 26px;
+}
+.mission-shell .hub-goal-health-meta {
+  gap: 12px;
+}
+.mission-shell .hub-trend,
+.mission-shell .hub-streak,
+.mission-shell .hub-risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(170, 120, 160, 0.07);
+}
+.mission-shell .hub-streak small {
+  color: #A998B8;
 }
 .mission-shell .hub-trend-flat,
 .mission-shell .hub-streak,
