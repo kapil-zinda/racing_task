@@ -25,6 +25,7 @@ RECORDER_MODE_MAP = {
     "time": [],
     "audio": ["audio"],
     "video": ["video"],
+    "screen": ["screen"],
     "call": ["video", "screen"],
     "pdf_explainer": ["audio"],
     "uploader": [],

@@ -85,7 +85,10 @@ from .schemas import (
     ContentPresignUploadRequest,
     ContentRenameRequest,
     ContentMoveRequest,
+    ChunkConcatRequest,
+    ChunkPresignRequest,
     CreateSessionRequest,
+    SessionNotesRequest,
     ExtrasUpsertRequest,
     MultipartAbortRequest,
     MultipartCompleteRequest,
@@ -107,14 +110,18 @@ from .schemas import (
 from .session_domain import (
     abort_multipart_upload_payload,
     complete_multipart_upload_payload,
+    concat_chunks_payload,
     create_presigned_playback_url_payload,
     create_presigned_upload_payload,
     create_session_payload,
     delete_session_payload,
     get_session_payload,
     list_sessions_payload,
+    presign_chunk_upload_payload,
     presign_multipart_part_payload,
+    record_session_heartbeat_payload,
     start_multipart_upload_payload,
+    update_session_notes_payload,
     update_session_status_payload,
 )
 
@@ -805,12 +812,46 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /sessions/{id}/multipart/abort")
 
-    @app.get("/sessions/{session_id}/playback-url")
-    def create_presigned_playback_url(session_id: str, media_type: str = Query(...)):
+    @app.post("/sessions/{session_id}/chunk/presign-url")
+    def presign_chunk_upload(session_id: str, payload: ChunkPresignRequest):
         try:
-            return create_presigned_playback_url_payload(session_id, media_type)
+            return presign_chunk_upload_payload(session_id, payload)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /sessions/{id}/chunk/presign-url")
+
+    @app.post("/sessions/{session_id}/chunks/concat")
+    def concat_chunks(session_id: str, payload: ChunkConcatRequest):
+        try:
+            return concat_chunks_payload(session_id, payload)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /sessions/{id}/chunks/concat")
+
+    @app.get("/sessions/{session_id}/playback-url")
+    def create_presigned_playback_url(
+        session_id: str,
+        media_type: str = Query(...),
+        download: bool = Query(default=False),
+    ):
+        try:
+            return create_presigned_playback_url_payload(
+                session_id, media_type, disposition="attachment" if download else None
+            )
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /sessions/{id}/playback-url")
+
+    @app.post("/sessions/{session_id}/notes")
+    def update_session_notes(session_id: str, payload: SessionNotesRequest):
+        try:
+            return update_session_notes_payload(session_id, payload)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /sessions/{id}/notes")
+
+    @app.post("/sessions/{session_id}/heartbeat")
+    def session_heartbeat(session_id: str):
+        try:
+            return record_session_heartbeat_payload(session_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /sessions/{id}/heartbeat")
 
     # ── Day Activity Tracker ──────────────────────────────────────────────
     @app.get("/tracker/activities")

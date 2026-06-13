@@ -225,6 +225,18 @@ def textract_client():
     return boto3.client("textract", region_name=region)
 
 
+def lambda_client():
+    cfg = settings()
+    if boto3 is None:
+        raise RuntimeError("boto3 is not installed")
+    return boto3.client("lambda", region_name=cfg["aws_region"])
+
+
+def current_lambda_function_name() -> str:
+    """The running Lambda's own name, or empty string when not on Lambda."""
+    return os.environ.get("AWS_LAMBDA_FUNCTION_NAME", "")
+
+
 def sanitize_key_part(value: str) -> str:
     return quote((value or "").strip().replace(" ", "_"), safe="_-")
 
@@ -236,3 +248,17 @@ def session_media_key(doc: Dict[str, Any], media_type: str, ext: str) -> str:
     if user_id:
         return f"study-sessions/{user_id}/{date_part}/{subject_part}/{doc.get('_id')}/{media_type}.{ext}"
     return f"study-sessions/{date_part}/{subject_part}/{doc.get('_id')}/{media_type}.{ext}"
+
+
+def session_media_chunk_prefix(doc: Dict[str, Any], media_type: str) -> str:
+    """S3 prefix where the per-chunk recording objects live before concatenation."""
+    user_id = sanitize_key_part(doc.get("user_id", ""))
+    date_part = sanitize_key_part(doc.get("date", current_date_str()))
+    subject_part = sanitize_key_part(doc.get("subject", "general"))
+    if user_id:
+        return f"study-sessions/{user_id}/{date_part}/{subject_part}/{doc.get('_id')}/{media_type}_chunks/"
+    return f"study-sessions/{date_part}/{subject_part}/{doc.get('_id')}/{media_type}_chunks/"
+
+
+def session_media_chunk_key(doc: Dict[str, Any], media_type: str, seq: int) -> str:
+    return f"{session_media_chunk_prefix(doc, media_type)}{int(seq):08d}.part"

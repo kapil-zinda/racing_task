@@ -461,6 +461,19 @@ body {
   font-size: 13px;
   font-weight: 700;
   border: 1px solid transparent;
+  /* Reset native <button> chrome so menu buttons aren't white-on-white. */
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  font-family: inherit;
+}
+
+.menu-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .menu-item:hover {
@@ -1421,6 +1434,14 @@ h1 {
   word-break: break-word;
 }
 
+.session-card-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-word;
+  opacity: 0.85;
+}
+
 .session-card-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1531,7 +1552,7 @@ h1 {
 /* ── Google Meet-style recording overlay ────────────────────────────── */
 .meet-overlay {
   position: fixed;
-  z-index: 60;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   background: #202124;
@@ -1602,6 +1623,81 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 240px;
+}
+
+.offline-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 9, 20, 0.82);
+  backdrop-filter: blur(4px);
+}
+.offline-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 48px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #1a2035, #131929);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  max-width: 420px;
+}
+.offline-spinner {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 6px solid rgba(255, 255, 255, 0.12);
+  border-top-color: #ef4444;
+  animation: offline-spin 0.9s linear infinite;
+}
+@keyframes offline-spin {
+  to { transform: rotate(360deg); }
+}
+.offline-title {
+  margin: 0;
+  font-size: 17px;
+  color: #fecaca;
+}
+.offline-sub {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.72);
+}
+.offline-countdown {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.meet-upload-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.meet-upload-status.saving {
+  color: #bfdbfe;
+  background: rgba(59,130,246,0.18);
+}
+.meet-upload-status.saved {
+  color: #bbf7d0;
+  background: rgba(16,185,129,0.18);
+}
+.meet-upload-status.error {
+  color: #fecaca;
+  background: rgba(239,68,68,0.22);
+  animation: meet-upload-pulse 1.4s ease-in-out infinite;
+}
+@keyframes meet-upload-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 
 .meet-icon-sm {
@@ -1772,6 +1868,7 @@ h1 {
   height: 100%;
   object-fit: contain;
   background: #000;
+  transition: opacity 0.25s ease;
 }
 .meet-vcall-stage.screen-active .meet-screen-video {
   display: block;
@@ -1785,6 +1882,9 @@ h1 {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  transition: top 0.28s ease, left 0.28s ease, right 0.28s ease,
+    bottom 0.28s ease, width 0.28s ease, height 0.28s ease,
+    border-radius 0.28s ease;
 }
 .meet-vcall-stage .meet-vcam video {
   width: 100%;
