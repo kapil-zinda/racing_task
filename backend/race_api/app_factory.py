@@ -1,3 +1,5 @@
+import time
+
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -133,18 +135,35 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         cfg = _settings()
         auth_required = cfg.get("auth_required", False)
+        method = request.method
         path = request.url.path
         is_public = path in _PUBLIC_PATHS or path.startswith("/auth/")
         api_key = request.headers.get("X-API-Key", "")
+        user_id = ""
         if api_key:
             user = _auth_service.get_user_by_api_key(api_key)
             if user:
                 request.state.user = user
+                user_id = user.get("user_id", "") if isinstance(user, dict) else ""
             elif auth_required and not is_public:
+                logger.warning("%s %s -> 401 invalid API key", method, path)
                 return JSONResponse({"detail": "Invalid API key"}, status_code=401)
         elif auth_required and not is_public:
+            logger.warning("%s %s -> 401 missing API key", method, path)
             return JSONResponse({"detail": "Missing X-API-Key header"}, status_code=401)
-        return await call_next(request)
+
+        logger.info("--> %s %s user=%s", method, path, user_id or "-")
+        start = time.monotonic()
+        try:
+            response = await call_next(request)
+        except Exception:
+            ms = (time.monotonic() - start) * 1000
+            logger.exception("<-- %s %s FAILED after %.0fms", method, path, ms)
+            raise
+        ms = (time.monotonic() - start) * 1000
+        log = logger.warning if response.status_code >= 500 else logger.info
+        log("<-- %s %s %s %.0fms user=%s", method, path, response.status_code, ms, user_id or "-")
+        return response
 
 
 def _req_user_id(request: Request) -> str:
@@ -163,15 +182,16 @@ def _require_auth(request: Request) -> str:
 
 def _raise_as_http(err: Exception, endpoint_name: str) -> None:
     if isinstance(err, HTTPException):
+        logger.warning("%s -> HTTP %s: %s", endpoint_name, err.status_code, err.detail)
         raise err
     if isinstance(err, ValueError):
+        logger.warning("%s -> 400 (ValueError): %s", endpoint_name, err)
         raise HTTPException(status_code=400, detail=str(err))
-    if isinstance(err, LookupError):
-        raise HTTPException(status_code=404, detail=str(err))
-    if isinstance(err, FileNotFoundError):
+    if isinstance(err, (LookupError, FileNotFoundError)):
+        logger.warning("%s -> 404: %s", endpoint_name, err)
         raise HTTPException(status_code=404, detail=str(err))
 
-    logger.exception("%s failed", endpoint_name)
+    logger.exception("%s -> 500 (unhandled): %s", endpoint_name, err)
     raise HTTPException(status_code=500, detail=f"Internal server error: {err}")
 
 

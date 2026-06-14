@@ -1659,6 +1659,10 @@ h1 {
 @keyframes offline-spin {
   to { transform: rotate(360deg); }
 }
+.offline-stop-icon {
+  font-size: 44px;
+  line-height: 1;
+}
 .offline-title {
   margin: 0;
   font-size: 17px;

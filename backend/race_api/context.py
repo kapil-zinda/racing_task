@@ -21,6 +21,19 @@ except ImportError:  # pragma: no cover - runtime packaging concern
 _mongo_client = None
 logger = logging.getLogger("race-api")
 
+# Configure the app logger once. Honour LOG_LEVEL (default INFO). Use our own
+# handler + format and disable propagation so logs appear locally and in
+# CloudWatch (Lambda) without duplicating through the root handler.
+_log_level = (os.environ.get("LOG_LEVEL", "INFO") or "INFO").upper()
+logger.setLevel(getattr(logging, _log_level, logging.INFO))
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s [race-api] %(message)s", "%Y-%m-%d %H:%M:%S")
+    )
+    logger.addHandler(_handler)
+    logger.propagate = False
+
 
 def session_id() -> str:
     return f"session:{uuid.uuid4().hex}"

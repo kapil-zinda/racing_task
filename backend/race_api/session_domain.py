@@ -18,9 +18,22 @@ from .context import (
     sessions_collection,
     settings,
 )
+from .ledger_domain import log_activity
 
 # S3 multipart requires every part except the last to be >= 5 MiB.
 CHUNK_CONCAT_PART_BYTES = 5 * 1024 * 1024
+
+
+def _record_activity(doc_or_user, activity_type: str, *, duration_minutes: int = 0, meta: Dict[str, Any] | None = None) -> None:
+    """Append a recorder activity to the user's activity ledger (best-effort — a
+    ledger failure must never break recording)."""
+    try:
+        user_id = doc_or_user.get("user_id", "") if isinstance(doc_or_user, dict) else str(doc_or_user or "")
+        if not user_id:
+            return
+        log_activity(user_id, activity_type, duration_minutes=duration_minutes, meta=meta or {})
+    except Exception:
+        logger.exception("ledger log_activity failed (%s)", activity_type)
 
 
 def _normalize_modes(recorder_type: str, modes: List[str]) -> tuple[str, List[str]]:
@@ -93,6 +106,13 @@ def create_session_payload(payload) -> Dict[str, Any]:
         }
 
     sessions_collection().insert_one(doc)
+    logger.info(
+        "session created id=%s user=%s recorder=%s modes=%s subject=%r",
+        doc["_id"], doc.get("user_id"), recorder_type, modes, doc.get("subject"),
+    )
+    _record_activity(doc, "recording_created", meta={
+        "session_id": doc["_id"], "recorder_type": recorder_type, "modes": modes, "subject": doc.get("subject"),
+    })
     return {"message": "Session created", "session": doc}
 
 
@@ -148,6 +168,8 @@ def delete_session_payload(session_id_value: str) -> Dict[str, Any]:
     if deleted.deleted_count == 0:
         raise LookupError("Session not found")
 
+    logger.info("session deleted id=%s (kept %d S3 file(s))", sid, len(retained_s3_keys))
+    _record_activity(doc, "recording_deleted", meta={"session_id": sid, "kept_s3_keys": len(retained_s3_keys)})
     return {
         "message": "Session deleted from app data. Recording files in S3 were kept.",
         "session_id": sid,
@@ -232,6 +254,10 @@ def update_session_status_payload(session_id_value: str, payload) -> Dict[str, A
         raise LookupError("Session not found")
 
     current_status = doc.get("status", "created")
+    logger.info(
+        "session status change requested id=%s %s -> %s force=%s",
+        session_id_value, current_status, payload.status, getattr(payload, "force_stop_previous", False),
+    )
     if current_status == "stopped":
         raise ValueError("Session already stopped/closed")
 
@@ -262,6 +288,10 @@ def update_session_status_payload(session_id_value: str, payload) -> Dict[str, A
                     )
                 now_iso = datetime.now(timezone.utc).isoformat()
                 other_elapsed = max(0, int(other_active.get("elapsed_seconds", 0) or 0))
+                logger.info("force-stopping previously active session id=%s to start id=%s", other_active.get("_id"), session_id_value)
+                _record_activity(other_active, "recording_force_stopped", duration_minutes=(other_elapsed // 60), meta={
+                    "session_id": other_active.get("_id"), "stopped_by": session_id_value,
+                })
                 _best_effort_finalize_multipart_uploads(collection, other_active)
                 # Also salvage a per-chunk recording (stitch whatever reached S3).
                 bucket = settings()["recording_bucket"]
@@ -320,6 +350,13 @@ def update_session_status_payload(session_id_value: str, payload) -> Dict[str, A
 
     collection.update_one({"_id": session_id_value}, {"$set": update_fields, "$push": {"events": event}})
     updated = collection.find_one({"_id": session_id_value})
+    logger.info("session status updated id=%s -> %s elapsed=%ss", session_id_value, payload.status, elapsed_seconds)
+    _record_activity(
+        doc,
+        f"recording_{payload.status}",
+        duration_minutes=(elapsed_seconds // 60) if payload.status == "stopped" else 0,
+        meta={"session_id": session_id_value, "elapsed_seconds": elapsed_seconds},
+    )
     return {"message": "Session status updated", "session": updated}
 
 
@@ -399,6 +436,7 @@ def start_multipart_upload_payload(session_id_value: str, payload) -> Dict[str, 
             }
         },
     )
+    logger.info("multipart upload started id=%s media=%s key=%s", session_id_value, payload.media_type, key)
     return {"bucket": bucket, "key": key, "upload_id": upload_id, "media_type": payload.media_type}
 
 
@@ -466,6 +504,8 @@ def complete_multipart_upload_payload(session_id_value: str, payload) -> Dict[st
         UploadId=payload.upload_id,
         MultipartUpload={"Parts": parts},
     )
+    logger.info("multipart upload completed id=%s media=%s parts=%d key=%s", session_id_value, payload.media_type, len(parts), key)
+    _record_activity(doc, "recording_uploaded", meta={"session_id": session_id_value, "media_type": payload.media_type, "key": key})
 
     object_url = f"https://{bucket}.s3.{cfg['aws_region']}.amazonaws.com/{key}"
     collection.update_one(
@@ -546,6 +586,7 @@ def presign_chunk_upload_payload(session_id_value: str, payload) -> Dict[str, An
         Params={"Bucket": bucket, "Key": key, "ContentType": payload.content_type},
         ExpiresIn=3600,
     )
+    logger.debug("presigned chunk upload id=%s media=%s seq=%s", session_id_value, payload.media_type, payload.seq)
     return {"upload_url": upload_url, "key": key, "seq": payload.seq, "media_type": payload.media_type}
 
 
@@ -603,9 +644,11 @@ def _trigger_media_concat(session_id_value: str, media_type: str, content_type: 
                 }
             ).encode("utf-8"),
         )
+        logger.info("concat triggered (async) id=%s media=%s", session_id_value, media_type)
         return {"message": "Concatenation started", "status": "processing", "media_type": media_type, "async": True}
 
     # Local / non-Lambda: do it inline.
+    logger.info("concat running (inline) id=%s media=%s", session_id_value, media_type)
     return _run_chunk_concat(session_id_value, media_type, content_type, ext)
 
 
@@ -615,6 +658,7 @@ def run_concat_chunks_task(event: Dict[str, Any]) -> Dict[str, Any]:
     media_type = str(event.get("media_type") or "")
     content_type = str(event.get("content_type") or "application/octet-stream")
     ext = str(event.get("extension") or "webm")
+    logger.info("concat worker start id=%s media=%s", session_id_value, media_type)
     try:
         return _run_chunk_concat(session_id_value, media_type, content_type, ext)
     except Exception as err:  # noqa: BLE001
@@ -747,6 +791,14 @@ def _run_chunk_concat(session_id_value: str, media_type: str, content_type: str,
             }
         },
     )
+    logger.info(
+        "concat complete id=%s media=%s chunks=%d parts=%d bytes=%d key=%s",
+        session_id_value, media_type, len(chunk_keys), len(parts), total_bytes, final_key,
+    )
+    _record_activity(doc, "recording_finalized", meta={
+        "session_id": session_id_value, "media_type": media_type,
+        "chunks": len(chunk_keys), "bytes": total_bytes, "key": final_key,
+    })
     return {
         "message": "Chunks concatenated",
         "media_type": media_type,
@@ -772,6 +824,7 @@ def record_session_heartbeat_payload(session_id_value: str) -> Dict[str, Any]:
     )
     if res.matched_count == 0:
         raise LookupError("Session not found")
+    logger.debug("heartbeat id=%s", session_id_value)
     return {"message": "ok", "at": now_iso}
 
 
@@ -788,6 +841,7 @@ def _finalize_abandoned_session(doc: Dict[str, Any], reason: str) -> None:
     bucket = settings()["recording_bucket"]
     now_iso = datetime.now(timezone.utc).isoformat()
     collection = sessions_collection()
+    logger.info("finalizing abandoned session id=%s reason=%s", sid, reason)
 
     if bucket:
         for media_type in MEDIA_TYPES:
@@ -811,6 +865,9 @@ def _finalize_abandoned_session(doc: Dict[str, Any], reason: str) -> None:
             "$push": {"events": {"status": "stopped", "elapsed_seconds": elapsed, "at": now_iso, "reason": reason}},
         },
     )
+    _record_activity(doc, "recording_auto_stopped", duration_minutes=(elapsed // 60), meta={
+        "session_id": sid, "reason": reason,
+    })
 
 
 def reap_stale_sessions(user_id: str | None = None) -> Dict[str, Any]:
@@ -840,6 +897,8 @@ def reap_stale_sessions(user_id: str | None = None) -> Dict[str, Any]:
             reaped.append(doc.get("_id"))
         except Exception:
             logger.exception("Failed to reap stale session %s", doc.get("_id"))
+    if reaped:
+        logger.info("reaper finalized %d stale session(s): %s", len(reaped), reaped)
     return {"reaped": reaped, "count": len(reaped)}
 
 
@@ -854,6 +913,7 @@ def update_session_notes_payload(session_id_value: str, payload) -> Dict[str, An
         {"$set": {"notes": notes, "updated_at": datetime.now(timezone.utc).isoformat()}},
     )
     updated = collection.find_one({"_id": session_id_value})
+    logger.info("session notes updated id=%s len=%d", session_id_value, len(notes))
     return {"message": "Notes updated", "session": updated}
 
 
@@ -897,4 +957,8 @@ def create_presigned_playback_url_payload(
         params["ResponseContentDisposition"] = f'attachment; filename="{safe}.{ext}"'
 
     playback_url = client.generate_presigned_url("get_object", Params=params, ExpiresIn=3600)
+    logger.info(
+        "presigned %s url id=%s media=%s key=%s",
+        "download" if disposition == "attachment" else "playback", session_id_value, media_type, key,
+    )
     return {"playback_url": playback_url, "media_type": media_type, "key": key}
