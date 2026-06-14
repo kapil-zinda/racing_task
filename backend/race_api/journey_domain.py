@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -8,6 +9,7 @@ from .context import journeys_collection
 
 _STRUCTURE_MAX_DEPTH = 6
 _STRUCTURE_MAX_NODES = 500
+_COUNTERS_MAX_PER_NODE = 20
 
 
 def _now() -> str:
@@ -19,6 +21,28 @@ def _uid(user_id: str) -> str:
     if not uid:
         raise ValueError("Invalid user_id")
     return uid
+
+
+def _normalize_counters(raw: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    result: List[Dict[str, Any]] = []
+    seen: set = set()
+    for item in raw:
+        if len(result) >= _COUNTERS_MAX_PER_NODE:
+            break
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("key") or "").strip()
+        if not key or key in seen:
+            continue
+        try:
+            count = int(item.get("count", 0))
+        except (TypeError, ValueError):
+            count = 0
+        seen.add(key)
+        result.append({"key": key, "count": max(0, count)})
+    return result
 
 
 def _normalize_structure_nodes(nodes: Any, depth: int = 0, counter: List[int] | None = None) -> List[Dict[str, Any]]:
@@ -36,8 +60,10 @@ def _normalize_structure_nodes(nodes: Any, depth: int = 0, counter: List[int] | 
         if not label:
             continue
         counter[0] += 1
+        node_id = str(node.get("id") or "").strip() or uuid.uuid4().hex
         children = _normalize_structure_nodes(node.get("children"), depth + 1, counter)
-        result.append({"label": label, "children": children})
+        counters = _normalize_counters(node.get("counters"))
+        result.append({"id": node_id, "label": label, "children": children, "counters": counters})
     return result
 
 

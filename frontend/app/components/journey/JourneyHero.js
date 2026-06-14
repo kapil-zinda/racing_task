@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { daysUntil } from "../../lib/dateUtils";
 import JourneyActionsMenu from "./JourneyActionsMenu";
 import { countTreeNodes } from "./JourneyTreeBuilder";
 
 export default function JourneyHero({ journey, onTogglePause, onDelete, busy }) {
+  const router = useRouter();
   const title = journey?.title || "Your Journey";
   const icon = journey?.icon || "🎯";
   const targetDate = journey?.target_date || "";
@@ -19,8 +21,20 @@ export default function JourneyHero({ journey, onTogglePause, onDelete, busy }) 
     else daysLabel = `${Math.abs(remaining)} day${Math.abs(remaining) === 1 ? "" : "s"} past target`;
   }
 
+  const handleCardClick = () => {
+    if (journey?.id) router.push(`/mission/${journey.id}`);
+  };
+
   return (
-    <section className="journey-hero-card">
+    <section
+      className="journey-hero-card clickable"
+      onClick={handleCardClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") handleCardClick();
+      }}
+    >
       <JourneyActionsMenu status={journey?.status} onTogglePause={onTogglePause} onDelete={onDelete} busy={busy} />
       <div className="journey-hero-icon" aria-hidden="true">{icon}</div>
       <div className="journey-hero-body">

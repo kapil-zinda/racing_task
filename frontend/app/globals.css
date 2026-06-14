@@ -5807,6 +5807,310 @@ body:has(.mission-shell) {
   }
 }
 
+/* -- Journey card click-through -- */
+.journey-hero-card.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.journey-hero-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(114, 221, 247, 0.18);
+}
+
+/* -- Journey tree view (org chart) -- */
+.journey-tree-section {
+  margin-top: 24px;
+}
+
+.journey-tree-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.journey-tree-toolbar h2 {
+  margin: 0;
+  font-family: var(--font-bebas), sans-serif;
+  font-size: clamp(20px, 3vw, 28px);
+  letter-spacing: 0.04em;
+}
+
+.journey-back-link {
+  margin-top: 12px;
+  align-self: flex-start;
+}
+
+.journey-org-chart-wrap {
+  overflow: auto;
+  max-width: 100%;
+  padding: 28px 16px 40px;
+}
+
+.org-chart,
+.org-chart ul {
+  display: flex;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.org-chart {
+  width: max-content;
+  min-width: 100%;
+  margin: 0 auto;
+}
+
+.org-chart ul {
+  padding-top: 28px;
+}
+
+.org-chart li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  position: relative;
+  padding: 28px 10px 0;
+}
+
+/* horizontal connector to the left + right of each node, vertical drop into the node */
+.org-chart li::before,
+.org-chart li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 28px;
+  border-top: 2px solid var(--card-border);
+}
+
+.org-chart li::before {
+  right: 50%;
+}
+
+.org-chart li::after {
+  left: 50%;
+  border-left: 2px solid var(--card-border);
+}
+
+.org-chart li:first-child::before,
+.org-chart li:last-child::after {
+  border-top: none;
+}
+
+.org-chart li:last-child::before {
+  border-right: 2px solid var(--card-border);
+}
+
+/* only child: straight drop, no sideways connector */
+.org-chart li:only-child {
+  padding-top: 0;
+}
+
+.org-chart li:only-child::before,
+.org-chart li:only-child::after {
+  display: none;
+}
+
+/* vertical trunk line from a node down to its children row */
+.org-chart ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 28px;
+  border-left: 2px solid var(--card-border);
+}
+
+/* the journey-root node has no incoming connector */
+.org-chart.org-chart-root {
+  padding-top: 0;
+}
+
+.org-chart.org-chart-root::before {
+  display: none;
+}
+
+.org-chart.org-chart-root > li {
+  padding-top: 0;
+}
+
+.org-chart.org-chart-root > li::before,
+.org-chart.org-chart-root > li::after {
+  display: none;
+}
+
+.org-node {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+}
+
+.org-node-root {
+  background: linear-gradient(145deg, rgba(114, 221, 247, 0.9), rgba(128, 237, 153, 0.55));
+  border-color: rgba(114, 221, 247, 0.5);
+  color: #10212a;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 14px 22px;
+}
+
+.org-node-collapsed > .org-node {
+  border-style: dashed;
+}
+
+.org-node-toggle {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.org-node-label {
+  white-space: normal;
+  max-width: 220px;
+  text-align: left;
+}
+
+.org-node-menu {
+  position: relative;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+}
+
+.org-node-menu .ellipsis-btn {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+}
+
+.mission-shell .org-node .ellipsis-btn {
+  background: rgba(170, 120, 160, 0.1);
+  border-color: rgba(170, 120, 160, 0.25);
+  color: #3D2C4E;
+}
+
+.mission-shell .org-node .ellipsis-btn:hover {
+  background: rgba(170, 120, 160, 0.18);
+  border-color: rgba(170, 120, 160, 0.4);
+}
+
+.org-node-menu .menu-dropdown {
+  left: auto;
+  right: 0;
+  top: calc(100% + 6px);
+}
+
+/* rendered via portal to document.body, so it's outside .mission-shell —
+   give it its own self-contained light theme instead of relying on that ancestor */
+.org-node-dropdown {
+  background: linear-gradient(160deg, #ffffff, #fff6fb);
+  border-color: rgba(170, 120, 160, 0.25);
+  box-shadow: 0 16px 28px rgba(170, 120, 160, 0.18);
+}
+
+.org-node-dropdown .menu-item {
+  color: #3D2C4E;
+}
+
+.org-node-dropdown .menu-item:hover {
+  border-color: rgba(114, 221, 247, 0.5);
+  background: rgba(114, 221, 247, 0.16);
+}
+
+.org-node-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.org-node-counter-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(114, 221, 247, 0.16);
+  border: 1px solid rgba(114, 221, 247, 0.35);
+  color: #3D2C4E;
+  white-space: nowrap;
+}
+
+.counter-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.counter-manage-row {
+  display: grid;
+  grid-template-columns: 1fr 90px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.counter-manage-key {
+  font-weight: 700;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counter-add-row {
+  display: grid;
+  grid-template-columns: 1fr 90px auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 740px) {
+  .journey-org-chart-wrap {
+    max-height: 70vh;
+  }
+  .org-node-label {
+    max-width: 140px;
+  }
+  .counter-manage-row,
+  .counter-add-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* -- Today's Move -- */
 .today-move {
   margin-top: 16px;
