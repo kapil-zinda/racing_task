@@ -3119,6 +3119,13 @@ button:hover {
 
 .mission-shell {
   max-width: 1240px;
+  min-height: 100vh;
+  background: linear-gradient(160deg, #FFF6F0, #FDEEF6, #F0F1FF);
+  --text: #3D2C4E;
+  --muted: #7A6A8C;
+  --card: #FFFFFF;
+  --card-border: rgba(170, 120, 160, 0.16);
+  color: var(--text);
 }
 
 .mission-hero h1 {
@@ -3130,388 +3137,449 @@ button:hover {
   gap: 14px;
 }
 
-.mission-status-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.mission-kpi {
-  background: linear-gradient(160deg, rgba(12, 20, 38, 0.8), rgba(19, 31, 58, 0.62));
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 14px;
-  padding: 12px;
-}
-
-.mission-kpi.clickable {
-  cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.mission-kpi.clickable:hover,
-.mission-kpi.clickable:focus-visible {
-  transform: translateY(-1px);
-  border-color: rgba(114, 221, 247, 0.6);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
-}
-
-.mission-kpi h3 {
-  margin: 0;
-  font-size: 12px;
-  color: #b9c5e9;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.mission-kpi p {
-  margin: 8px 0 0;
-  font-size: 28px;
-  font-weight: 800;
-  color: #f3f7ff;
-}
-
-.mission-plan-row {
-  border-radius: 10px;
-  padding: 6px;
-  align-items: center;
-}
-
-.mission-plan-row.is-locked {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px dashed rgba(170, 185, 220, 0.35);
-}
-
-.mission-plan-row.is-editing {
-  background: rgba(114, 221, 247, 0.1);
-  border: 1px solid rgba(114, 221, 247, 0.45);
-}
-
-.mission-row-state {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 6px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-}
-
-.mission-row-state.locked {
-  color: #d1d9ef;
-  background: rgba(170, 185, 220, 0.18);
-  border: 1px solid rgba(170, 185, 220, 0.3);
-}
-
-.mission-row-state.editing {
-  color: #082233;
-  background: rgba(114, 221, 247, 0.85);
-  border: 1px solid rgba(114, 221, 247, 1);
-}
-
-.summit-panel {
-  padding: 18px;
-}
-
-.summit-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.trajectory-chip {
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 209, 102, 0.45);
-  color: #ffe7a0;
-  font-weight: 700;
-  font-size: 13px;
-  background: rgba(255, 209, 102, 0.1);
-}
-
-.summit-metrics {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.summit-metrics > div {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 12px;
-  padding: 10px;
-}
-
-.summit-metrics span {
-  display: block;
-  color: #bcc9ea;
-  font-size: 12px;
-}
-
-.summit-metrics strong {
-  display: block;
-  margin-top: 5px;
-  font-size: 21px;
-}
-
-.momentum-rising { color: #8df6af; }
-.momentum-stable { color: #ffe39f; }
-.momentum-falling { color: #ff9b9b; }
-
 .risk-low { color: #8df6af; }
 .risk-medium { color: #ffd67a; }
 .risk-high { color: #ff8c8c; }
 
-.summit-path-wrap {
-  margin-top: 14px;
+/* ============================================================
+   Light pastel theme for Journey + Progress Hub only
+   ============================================================ */
+
+.mission-shell .bg-orb {
+  display: none;
 }
 
-.summit-path {
-  position: relative;
-  height: 70px;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: linear-gradient(120deg, #13243f, #1f375c);
+body:has(.mission-shell) {
+  background: linear-gradient(160deg, #FFF6F0, #FDEEF6, #F0F1FF);
 }
 
-.summit-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: linear-gradient(90deg, rgba(128, 237, 153, 0.2), rgba(255, 209, 102, 0.26));
+.mission-shell .risk-low { color: #2F8F5B; }
+.mission-shell .risk-medium { color: #B8860B; }
+.mission-shell .risk-high { color: #C0455A; }
+
+/* -- Inputs, buttons, status pills -- */
+.mission-shell .task-select,
+.mission-shell .task-textarea,
+.mission-shell .day-picker {
+  background: #FFFFFF;
+  border-color: rgba(170, 120, 160, 0.25);
+  color: #3D2C4E;
 }
 
-.summit-fog {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.mission-shell .task-select:disabled,
+.mission-shell .task-textarea:disabled {
+  background: rgba(170, 120, 160, 0.08);
+  border-color: rgba(170, 120, 160, 0.25);
+  color: #A998B8;
 }
 
-.fog-low { background: transparent; }
-.fog-medium { background: linear-gradient(90deg, transparent, rgba(255, 209, 102, 0.12)); }
-.fog-high { background: linear-gradient(90deg, transparent, rgba(255, 107, 107, 0.2)); }
+.mission-shell .btn-day.secondary,
+.mission-shell .btn-cancel {
+  background: rgba(170, 120, 160, 0.12);
+  color: #3D2C4E;
+}
 
-.summit-marker {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 18px;
-  height: 18px;
+.mission-shell .api-state {
+  border-color: rgba(170, 120, 160, 0.2);
+}
+.mission-shell .api-state.ok {
+  background: rgba(128, 237, 153, 0.25);
+  color: #2F6B45;
+}
+.mission-shell .api-state.warn {
+  background: rgba(255, 209, 102, 0.3);
+  color: #8A6300;
+}
+.mission-shell .api-state.error {
+  background: rgba(255, 107, 107, 0.22);
+  color: #B23A3A;
+}
+
+/* -- General light card surfaces -- */
+.mission-shell .milestone-panel,
+.mission-shell .hub-card,
+.mission-shell .journey-trail-card,
+.mission-shell .journey-empty-state,
+.mission-shell .task-modal.bottom-sheet,
+.mission-shell .progress-card,
+.mission-shell .story-kpi,
+.mission-shell .popup-score-card,
+.mission-shell .popup-history-card,
+.mission-shell .milestone-item,
+.mission-shell .area-card,
+.mission-shell .course-card {
+  background: #FFFFFF;
+  border-color: rgba(170, 120, 160, 0.14);
+  box-shadow: 0 10px 30px rgba(170, 120, 160, 0.12);
+}
+
+.mission-shell .milestone-panel,
+.mission-shell .journey-hero-card,
+.mission-shell .today-move-card,
+.mission-shell .journey-trail-card,
+.mission-shell .hub-card,
+.mission-shell .journey-empty-state,
+.mission-shell .task-modal.bottom-sheet,
+.mission-shell .progress-card,
+.mission-shell .area-card,
+.mission-shell .course-card {
+  border-radius: 22px;
+}
+
+.mission-shell .area-card,
+.mission-shell .course-card,
+.mission-shell .milestone-item {
+  box-shadow: none;
+}
+
+/* -- Progress Hub tabs -- */
+.mission-shell .session-tab {
+  background: #FFFFFF;
+  border-color: rgba(170, 120, 160, 0.18);
+  color: #6B5B7C;
+}
+.mission-shell .session-tab.active {
+  background: linear-gradient(145deg, rgba(114, 221, 247, 0.32), rgba(125, 211, 252, 0.2));
+  border-color: rgba(114, 221, 247, 0.6);
+  color: #2E6E85;
+  box-shadow: 0 0 0 2px rgba(114, 221, 247, 0.18);
+}
+.mission-shell .session-tab:focus,
+.mission-shell .session-tab:focus-visible {
+  outline: none;
+  color: #3D2C4E;
+}
+.mission-shell .session-tab.active:focus,
+.mission-shell .session-tab.active:focus-visible {
+  color: #2E6E85;
+}
+
+/* Hero / featured cards keep a soft tinted gradient on a light base */
+.mission-shell .journey-hero-card {
+  background: linear-gradient(135deg, rgba(114, 221, 247, 0.16), rgba(128, 237, 153, 0.12)), #FFFFFF;
+}
+
+.mission-shell .today-move-card {
+  background: linear-gradient(135deg, rgba(255, 209, 102, 0.22), rgba(255, 107, 107, 0.08)), #FFFFFF;
+  border-color: rgba(255, 209, 102, 0.45);
+}
+
+.mission-shell .today-move-card.done {
+  background: linear-gradient(135deg, rgba(128, 237, 153, 0.22), rgba(114, 221, 247, 0.08)), #FFFFFF;
+  border-color: rgba(128, 237, 153, 0.5);
+}
+
+.mission-shell .hub-coach {
+  background: linear-gradient(135deg, rgba(199, 146, 234, 0.18), rgba(114, 221, 247, 0.1)), #FFFFFF;
+  border-color: rgba(199, 146, 234, 0.35);
+}
+
+.mission-shell .subject-row {
+  background: rgba(170, 120, 160, 0.06);
+}
+
+/* -- Modal -- */
+.mission-shell .task-modal {
+  background: linear-gradient(160deg, #FFFFFF, #FFF6FB);
+  border-color: rgba(170, 120, 160, 0.16);
+  box-shadow: 0 20px 40px rgba(170, 120, 160, 0.18);
+}
+
+/* -- Step dots, icon/category pickers -- */
+.mission-shell .step-dot {
+  background: rgba(170, 120, 160, 0.22);
+}
+
+.mission-shell .icon-picker-option {
+  background: #FFFFFF;
+  border-color: rgba(170, 120, 160, 0.18);
+}
+
+.mission-shell .category-chip {
+  background: #FFFFFF;
+  border-color: rgba(170, 120, 160, 0.18);
+}
+.mission-shell .category-chip.active {
+  background: rgba(114, 221, 247, 0.22);
+  color: #2E6E85;
+  border-color: #72ddf7;
+}
+
+/* -- Area builder chips/buttons -- */
+.mission-shell .area-stat-chip {
+  background: rgba(170, 120, 160, 0.1);
+}
+
+.mission-shell .area-icon-btn {
+  background: #FFFFFF;
+  border-color: rgba(170, 120, 160, 0.18);
+}
+.mission-shell .area-icon-btn:hover {
+  background: rgba(170, 120, 160, 0.12);
+}
+
+.mission-shell .area-empty {
+  border-color: rgba(170, 120, 160, 0.22);
+}
+
+.mission-shell .area-add-btn {
+  border-color: rgba(114, 221, 247, 0.5);
+  background: rgba(114, 221, 247, 0.1);
+  color: #2E6E85;
+}
+.mission-shell .area-add-btn:hover {
+  background: rgba(114, 221, 247, 0.18);
+}
+
+.mission-shell .area-form {
+  border-color: rgba(114, 221, 247, 0.4);
+  background: rgba(114, 221, 247, 0.08);
+}
+
+/* -- Journey hero stats & trajectory chips -- */
+.mission-shell .journey-stat {
+  background: rgba(170, 120, 160, 0.08);
+  border-color: rgba(170, 120, 160, 0.16);
+}
+
+.mission-shell .journey-stat-streak,
+.mission-shell .journey-trajectory-drifting {
+  background: rgba(255, 209, 102, 0.28);
+  color: #8A6300;
+}
+
+.mission-shell .journey-trajectory-closer-to-goal {
+  background: rgba(128, 237, 153, 0.28);
+  color: #2F6B45;
+}
+
+.mission-shell .journey-trajectory-stable {
+  background: rgba(114, 221, 247, 0.28);
+  color: #2E6E85;
+}
+
+.mission-shell .journey-trajectory-falling-behind {
+  background: rgba(255, 107, 107, 0.22);
+  color: #B23A3A;
+}
+
+.mission-shell .journey-hero-icon {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(170, 120, 160, 0.2);
+}
+
+.mission-shell .journey-stat-paused {
+  background: rgba(170, 120, 160, 0.1);
+  border-color: rgba(170, 120, 160, 0.18);
+  color: #6B5B7C;
+}
+
+.mission-shell .journey-streak-banner {
+  color: #8A6300;
+}
+
+/* -- Today's Move -- */
+.mission-shell .today-move-type {
+  background: rgba(170, 120, 160, 0.14);
+  color: #3D2C4E;
+}
+
+.mission-shell .today-move-chip {
+  border-color: rgba(170, 120, 160, 0.2);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.mission-shell .today-move-chip.done {
+  color: #2F6B45;
+  border-color: rgba(128, 237, 153, 0.6);
+}
+
+/* -- Journey trail -- */
+.mission-shell .trail-line {
+  background: linear-gradient(90deg, rgba(128, 237, 153, 0.6), rgba(255, 209, 102, 0.6), rgba(170, 120, 160, 0.2));
+}
+
+@media (max-width: 720px) {
+  .mission-shell .trail-line {
+    background: linear-gradient(180deg, rgba(128, 237, 153, 0.6), rgba(255, 209, 102, 0.6), rgba(170, 120, 160, 0.2));
+  }
+}
+
+.mission-shell .trail-node-dot {
+  background: #FFFFFF;
+  border-color: rgba(170, 120, 160, 0.22);
+  box-shadow: 0 4px 14px rgba(170, 120, 160, 0.12);
+}
+
+.mission-shell .trail-node.trail-done .trail-node-dot {
+  background: rgba(128, 237, 153, 0.32);
+  color: #2F6B45;
+}
+
+.mission-shell .trail-node.trail-current .trail-node-dot {
+  background: rgba(114, 221, 247, 0.32);
+}
+
+.mission-shell .trail-node.trail-decaying .trail-node-dot {
+  background: rgba(255, 107, 107, 0.26);
+}
+
+/* -- Milestone sheet status chips -- */
+.mission-shell .sheet-chip-decay {
+  background: rgba(255, 107, 107, 0.22);
+  color: #B23A3A;
+}
+.mission-shell .sheet-chip-done {
+  background: rgba(128, 237, 153, 0.28);
+  color: #2F6B45;
+}
+.mission-shell .sheet-chip-current {
+  background: rgba(114, 221, 247, 0.28);
+  color: #2E6E85;
+}
+
+.mission-shell .owner {
+  border-color: rgba(170, 120, 160, 0.22);
+}
+.mission-shell .owner.won {
+  background: rgba(128, 237, 153, 0.25);
+  color: #2F6B45;
+  border-color: rgba(128, 237, 153, 0.6);
+}
+
+/* -- Progress Hub -- */
+.mission-shell .hub-trend-up { color: #2F6B45; }
+.mission-shell .hub-trend-down { color: #B23A3A; }
+
+.mission-shell .week-pulse-track {
+  background: rgba(170, 120, 160, 0.1);
+}
+
+.mission-shell .cal-cell {
+  background: rgba(170, 120, 160, 0.12);
+}
+
+.mission-shell .balance-track {
+  background: rgba(170, 120, 160, 0.1);
+}
+.mission-shell .balance-axes {
+  border-top-color: rgba(170, 120, 160, 0.15);
+}
+
+.mission-shell .attention-row {
+  background: rgba(170, 120, 160, 0.07);
+}
+
+.mission-shell .badge-chip {
+  background: rgba(170, 120, 160, 0.07);
+  border-color: rgba(170, 120, 160, 0.18);
+  color: #3D2C4E;
+  opacity: 1;
+}
+
+/* -- Progress by Area cards -- */
+.mission-shell .progress-card-kind {
+  background: rgba(170, 120, 160, 0.12);
+  color: #6B5B7C;
+}
+.mission-shell .progress-card-kind.kind-course { background: rgba(114, 221, 247, 0.28); color: #2E6E85; }
+.mission-shell .progress-card-kind.kind-book { background: rgba(128, 237, 153, 0.28); color: #2F6B45; }
+.mission-shell .progress-card-kind.kind-random { background: rgba(255, 209, 102, 0.3); color: #8A6300; }
+.mission-shell .progress-card-kind.kind-test { background: rgba(255, 107, 107, 0.24); color: #B23A3A; }
+
+.mission-shell .progress-track {
+  background: rgba(170, 120, 160, 0.12);
+}
+.mission-shell .progress-card-row {
+  color: #6B5B7C;
+}
+
+/* -- Test story panel -- */
+.mission-shell .story-kpi span,
+.mission-shell .river-labels {
+  color: #7A6A8C;
+}
+.mission-shell .river-chart {
+  background: rgba(170, 120, 160, 0.16);
+}
+
+.mission-shell .radial-ring-track {
+  stroke: rgba(170, 120, 160, 0.18);
+}
+.mission-shell .radial-ring-progress {
+  filter: none;
+}
+.mission-shell .radial-ring {
   border-radius: 50%;
-  border: 2px solid #ffe8ac;
-  background: #ffd166;
-  box-shadow: 0 0 18px rgba(255, 209, 102, 0.7);
+  background: radial-gradient(circle, rgba(199, 146, 234, 0.1), transparent 70%);
 }
-
-.summit-goal {
-  position: absolute;
-  right: 10px;
-  top: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #ffd166;
+.mission-shell .radial-ring-content strong {
+  color: #3D2C4E;
 }
-
-.risk-summary {
-  margin: 10px 0 0;
-  color: #c4d0ef;
+.mission-shell .radial-ring-content span {
+  color: #7A6A8C;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  font-weight: bold;
 }
-
-.mission-main-grid {
-  margin-top: 18px;
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 14px;
+.mission-shell .hub-goal-health {
+  gap: 26px;
+  padding: 22px 26px;
 }
-
-.radar-panel {
-  display: grid;
+.mission-shell .hub-goal-health-meta {
   gap: 12px;
 }
-
-.radar-svg {
-  width: 100%;
-  max-width: 380px;
-  margin: 0 auto;
-  display: block;
-}
-
-.radar-ring {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.17);
-  stroke-width: 1;
-}
-
-.radar-poly {
-  stroke-width: 2;
-}
-
-.radar-poly.coverage {
-  fill: rgba(114, 221, 247, 0.12);
-  stroke: #72ddf7;
-}
-
-.radar-poly.retention {
-  fill: rgba(128, 237, 153, 0.14);
-  stroke: #80ed99;
-}
-
-.radar-poly.performance {
-  fill: rgba(255, 209, 102, 0.15);
-  stroke: #ffd166;
-}
-
-.radar-legend {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  color: #d4dcf7;
-  font-size: 13px;
-}
-
-.radar-dot-coverage { background: #72ddf7; }
-.radar-dot-retention { background: #80ed99; }
-.radar-dot-performance { background: #ffd166; }
-
-.axis-mini-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.axis-mini-card {
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 8px;
-}
-
-.axis-mini-card strong {
-  display: block;
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-
-.axis-bars {
-  display: grid;
-  gap: 4px;
-}
-
-.axis-bars .bar {
-  display: block;
-  height: 6px;
+.mission-shell .hub-trend,
+.mission-shell .hub-streak,
+.mission-shell .hub-risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 8px 14px;
   border-radius: 999px;
+  background: rgba(170, 120, 160, 0.07);
+}
+.mission-shell .hub-streak small {
+  color: #A998B8;
+}
+.mission-shell .hub-trend-flat,
+.mission-shell .hub-streak,
+.mission-shell .hub-streak-inline {
+  color: #3D2C4E;
 }
 
-.axis-bars .bar.coverage { background: #72ddf7; }
-.axis-bars .bar.retention { background: #80ed99; }
-.axis-bars .bar.performance { background: #ffd166; }
-
-.mission-side-stack {
-  display: grid;
-  gap: 14px;
+/* -- Syllabus detail tree -- */
+.mission-shell .syllabus-exam,
+.mission-shell .syllabus-subject,
+.mission-shell .syllabus-topic,
+.mission-shell .syllabus-tests,
+.mission-shell .syllabus-source {
+  border-color: rgba(170, 120, 160, 0.16);
+  background: #FFF9FB;
 }
-
-.leak-list {
-  display: grid;
-  gap: 8px;
+.mission-shell .syllabus-exam > summary,
+.mission-shell .syllabus-subject > summary,
+.mission-shell .syllabus-topic > summary,
+.mission-shell .syllabus-tests > summary,
+.mission-shell .syllabus-source > summary {
+  color: #3D2C4E;
 }
-
-.leak-card {
-  border-radius: 11px;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+.mission-shell .syllabus-test-row {
+  background: rgba(170, 120, 160, 0.06);
+  border-color: rgba(170, 120, 160, 0.14);
 }
-
-.leak-card h4 {
-  margin: 0 0 5px;
+.mission-shell .syllabus-table {
+  color: #3D2C4E;
 }
-
-.leak-card p {
-  margin: 0;
-  color: #d2ddf9;
-  font-size: 13px;
+.mission-shell .syllabus-table th,
+.mission-shell .syllabus-table td {
+  border-color: rgba(170, 120, 160, 0.16);
 }
-
-.leak-card.high {
-  border-color: rgba(255, 107, 107, 0.6);
-  background: rgba(255, 107, 107, 0.15);
+.mission-shell .syllabus-table th {
+  background: rgba(170, 120, 160, 0.1);
+  color: #3D2C4E;
 }
-
-.leak-card.medium {
-  border-color: rgba(255, 209, 102, 0.6);
-  background: rgba(255, 209, 102, 0.14);
-}
-
-.battle-list {
-  display: grid;
-  gap: 8px;
-}
-
-.battle-task {
-  text-align: left;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #eef2ff;
-  padding: 10px;
-  cursor: pointer;
-  display: grid;
-  gap: 4px;
-}
-
-.battle-task.done {
-  border-color: rgba(128, 237, 153, 0.8);
-  background: rgba(128, 237, 153, 0.18);
-  box-shadow: 0 0 16px rgba(128, 237, 153, 0.35);
-}
-
-.battle-type {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #c4cff1;
-}
-
-.battle-progress {
-  margin-top: 10px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.15);
-  overflow: hidden;
-}
-
-.battle-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #80ed99, #ffd166);
-}
-
-.mission-lower-grid {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.decay-strip {
-  display: grid;
-  grid-template-columns: repeat(16, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.decay-block {
-  height: 16px;
-  border-radius: 4px;
-}
-
-.decay-block.green { background: #80ed99; }
-.decay-block.yellow { background: #ffd166; }
-.decay-block.red { background: #ff6b6b; }
-.decay-block.grey { background: #7e86a0; }
 
 .story-grid {
   display: grid;
@@ -3577,89 +3645,97 @@ button:hover {
   font-size: 12px;
 }
 
-.heatmap-group {
-  display: grid;
-  gap: 9px;
+/* ── Progress Hub ───────────────────────────────────────── */
+.hub-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
 }
 
-.heatmap-row {
-  display: grid;
+.hub-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
 }
 
-.heatmap-row strong {
-  font-size: 12px;
+.hub-tab-icon {
+  font-size: 14px;
 }
 
-.heatmap-grid {
-  display: grid;
-  grid-template-columns: repeat(15, minmax(0, 1fr));
-  gap: 3px;
-}
-
-.heat-cell {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.09);
-}
-
-.heat-cell.level-1 { background: rgba(114, 221, 247, 0.35); }
-.heat-cell.level-2 { background: rgba(114, 221, 247, 0.55); }
-.heat-cell.level-3 { background: rgba(128, 237, 153, 0.7); }
-.heat-cell.level-4 { background: rgba(128, 237, 153, 0.95); }
-
-.identity-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.identity-grid h4 {
-  margin: 0 0 6px;
-}
-
-.identity-grid ul {
-  margin: 0;
-  padding-left: 16px;
-  color: #d2dcf8;
-}
-
-.identity-delta {
+.progress-card-grid {
   margin-top: 10px;
-  color: #ffe7a0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.progress-card {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 12px;
+}
+
+.progress-card-head {
+  margin-bottom: 10px;
+}
+
+.progress-card-head h4 {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+
+.progress-card-kind {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.1);
+  color: #c4d0ef;
 }
 
-.trajectory-status {
-  font-size: 24px;
-  font-weight: 800;
-  color: #ffe7a0;
-}
+.progress-card-kind.kind-course { background: rgba(114, 221, 247, 0.18); color: #9be9fb; }
+.progress-card-kind.kind-book { background: rgba(128, 237, 153, 0.18); color: #aaf3bd; }
+.progress-card-kind.kind-random { background: rgba(255, 209, 102, 0.18); color: #ffe2a3; }
+.progress-card-kind.kind-test { background: rgba(255, 107, 107, 0.18); color: #ffb3b3; }
 
-.trajectory-cols {
-  margin-top: 10px;
+.progress-card-bars {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
-.trajectory-cols h4 {
-  margin: 0 0 5px;
-}
-
-.trajectory-cols ul {
-  margin: 0;
-  padding-left: 16px;
-  color: #d1dbf6;
-}
-
-.projection-panel ul {
-  margin: 0;
-  padding-left: 18px;
+.progress-card-row {
   display: grid;
-  gap: 7px;
-  color: #dae4ff;
+  grid-template-columns: 80px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #c6d2f1;
 }
+
+.progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.progress-fill.coverage { background: #72ddf7; }
+.progress-fill.retention { background: #80ed99; }
+.progress-fill.performance { background: #ffd166; }
 
 .agent-v2-wrap {
   position: fixed;
@@ -3868,20 +3944,6 @@ button:hover {
   text-align: center;
 }
 
-@media (max-width: 1040px) {
-  .mission-status-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .mission-main-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .mission-lower-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 640px) {
   .agent-v2-wrap {
     right: 10px;
@@ -3892,20 +3954,407 @@ button:hover {
     width: min(94vw, 430px);
   }
 
-  .mission-status-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .progress-card-row {
+    grid-template-columns: 64px 1fr 40px;
   }
+}
 
-  .summit-metrics {
-    grid-template-columns: 1fr;
+/* ── Journey (Mission redesign) ────────────────────────────── */
+
+.milestone-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.step-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.step-dot.active {
+  background: #72ddf7;
+  transform: scale(1.3);
+}
+
+.step-dot.done {
+  background: #80ed99;
+}
+
+.task-modal-overlay.sheet-overlay {
+  align-items: flex-end;
+}
+
+.task-modal.bottom-sheet {
+  width: min(640px, 100%);
+  border-radius: 20px 20px 0 0;
+  animation: liftIn 0.25s ease;
+}
+
+.journey-empty-state {
+  margin-top: 20px;
+  text-align: center;
+  padding: 48px 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.journey-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.journey-empty-state h2 {
+  margin: 0 0 8px;
+}
+
+.journey-empty-state p {
+  margin: 0 auto 18px;
+  max-width: 420px;
+  color: var(--muted);
+}
+
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 8px;
+  margin: 8px 0 14px;
+}
+
+.icon-picker-option {
+  font-size: 22px;
+  padding: 8px 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.icon-picker-option:hover {
+  transform: translateY(-2px);
+}
+
+.icon-picker-option.active {
+  border-color: #72ddf7;
+  box-shadow: 0 0 0 2px rgba(114, 221, 247, 0.25);
+}
+
+.category-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 14px;
+}
+
+.category-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.category-chip.active {
+  border-color: #72ddf7;
+  color: #d6f6ff;
+  background: rgba(114, 221, 247, 0.15);
+}
+
+@media (max-width: 640px) {
+  .icon-picker {
+    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
   }
+}
 
-  .axis-mini-grid {
-    grid-template-columns: 1fr;
-  }
+/* ── Wizard area builder (friendly card-based areas step) ─── */
+.area-step-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
 
-  .identity-grid {
-    grid-template-columns: 1fr;
+.area-step-icon {
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.area-step-head h4 {
+  margin: 0 0 4px;
+}
+
+.area-step-head p {
+  margin: 0;
+}
+
+.area-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.area-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.area-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.area-card-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.area-card-stats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.area-stat-chip {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.area-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.area-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.area-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.area-icon-btn.danger:hover {
+  background: rgba(248, 113, 113, 0.18);
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.area-empty {
+  text-align: center;
+  padding: 18px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  opacity: 0.7;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.area-add-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1.5px dashed rgba(114, 221, 247, 0.4);
+  background: rgba(114, 221, 247, 0.06);
+  color: #9be8f7;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.area-add-btn:hover {
+  background: rgba(114, 221, 247, 0.12);
+}
+
+/* ── Journey tree builder ─── */
+.tree-builder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tree-builder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tree-builder-depth {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tree-builder-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.tree-builder-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.tree-builder-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tree-builder-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tree-builder-btn.danger:hover {
+  background: rgba(248, 113, 113, 0.18);
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.area-form {
+  border-radius: 14px;
+  border: 1.5px solid rgba(114, 221, 247, 0.35);
+  background: rgba(114, 221, 247, 0.06);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.area-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.area-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.area-form-field label {
+  font-size: 12px;
+  opacity: 0.75;
+  font-weight: 600;
+}
+
+.area-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.course-card {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.course-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.course-card-head .area-card-title {
+  font-size: 16px;
+}
+
+.subject-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.subject-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.subject-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.subject-row-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .area-card,
+  .subject-row {
+    flex-wrap: wrap;
   }
 }
 
@@ -5230,4 +5679,1272 @@ button:hover {
   font-weight: 600;
   padding: 0.4rem 0.75rem;
   text-align: center;
+}
+
+/* ============================================================
+   Journey ("The Trail") + Progress Hub ("Your Growth Story")
+   ============================================================ */
+
+/* -- Radial ring (shared) -- */
+.radial-ring {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.radial-ring svg {
+  display: block;
+}
+
+.radial-ring-track {
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.radial-ring-progress {
+  transition: stroke-dashoffset 0.8s ease;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.radial-ring-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.radial-ring-content strong {
+  font-family: var(--font-bebas), sans-serif;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.radial-ring-content span {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+/* -- Journey list -- */
+.journey-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.journey-list .journey-hero-card {
+  margin-top: 0;
+}
+
+.journey-streak-banner {
+  margin: 20px 0 0;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+/* -- Journey hero -- */
+.journey-hero-card {
+  position: relative;
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: linear-gradient(135deg, rgba(114, 221, 247, 0.12), rgba(128, 237, 153, 0.06));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 22px;
+  padding: 22px;
+  animation: rise 0.85s ease;
+}
+
+.journey-hero-icon {
+  flex-shrink: 0;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.journey-hero-menu {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.journey-hero-menu .menu-dropdown {
+  right: 0;
+  left: auto;
+}
+
+.mission-shell .journey-hero-menu .ellipsis-btn {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(170, 120, 160, 0.25);
+  color: #3D2C4E;
+}
+
+.mission-shell .journey-hero-menu .ellipsis-btn:hover {
+  background: rgba(170, 120, 160, 0.14);
+  border-color: rgba(170, 120, 160, 0.4);
+}
+
+.mission-shell .menu-dropdown {
+  background: linear-gradient(160deg, #FFFFFF, #FFF6FB);
+  border-color: rgba(170, 120, 160, 0.25);
+  box-shadow: 0 16px 28px rgba(170, 120, 160, 0.18);
+}
+
+.mission-shell .menu-item {
+  color: #3D2C4E;
+}
+
+.mission-shell .menu-item:hover {
+  border-color: rgba(114, 221, 247, 0.5);
+  background: rgba(114, 221, 247, 0.16);
+}
+
+.menu-item.danger {
+  color: #ff7b72;
+}
+
+.menu-item.danger:hover {
+  border-color: rgba(255, 123, 114, 0.6);
+  background: rgba(255, 123, 114, 0.14);
+}
+
+.journey-hero-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.journey-hero-eyebrow {
+  margin: 0 0 12px;
+  font-family: var(--font-bebas), sans-serif;
+  font-size: clamp(24px, 4vw, 34px);
+  letter-spacing: 0.04em;
+}
+
+.journey-hero-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.journey-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.journey-stat-streak {
+  background: rgba(255, 209, 102, 0.15);
+  border-color: rgba(255, 209, 102, 0.35);
+  color: #ffe2a3;
+}
+
+.journey-stat-paused {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #c7c7d1;
+}
+
+.journey-trajectory-closer-to-goal {
+  background: rgba(128, 237, 153, 0.16);
+  border-color: rgba(128, 237, 153, 0.4);
+  color: #aaf3bd;
+}
+
+.journey-trajectory-stable {
+  background: rgba(114, 221, 247, 0.16);
+  border-color: rgba(114, 221, 247, 0.4);
+  color: #9be9fb;
+}
+
+.journey-trajectory-drifting {
+  background: rgba(255, 209, 102, 0.16);
+  border-color: rgba(255, 209, 102, 0.4);
+  color: #ffe2a3;
+}
+
+.journey-trajectory-falling-behind {
+  background: rgba(255, 107, 107, 0.16);
+  border-color: rgba(255, 107, 107, 0.4);
+  color: #ffb3b3;
+}
+
+@media (max-width: 640px) {
+  .journey-hero-card {
+    flex-direction: column;
+    text-align: center;
+    gap: 14px;
+    padding: 18px;
+  }
+  .journey-hero-stats {
+    justify-content: center;
+  }
+  .journey-hero-menu .menu-dropdown {
+    position: fixed;
+    top: auto;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    min-width: 0;
+  }
+}
+
+/* -- Journey card click-through -- */
+.journey-hero-card.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.journey-hero-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(114, 221, 247, 0.18);
+}
+
+/* -- Journey tree view (org chart) -- */
+.journey-tree-section {
+  margin-top: 24px;
+}
+
+.journey-tree-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.journey-tree-toolbar h2 {
+  margin: 0;
+  font-family: var(--font-bebas), sans-serif;
+  font-size: clamp(20px, 3vw, 28px);
+  letter-spacing: 0.04em;
+}
+
+.journey-back-link {
+  margin-top: 12px;
+  align-self: flex-start;
+}
+
+.journey-org-chart-wrap {
+  overflow: auto;
+  max-width: 100%;
+  padding: 28px 16px 40px;
+}
+
+.org-chart,
+.org-chart ul {
+  display: flex;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.org-chart {
+  width: max-content;
+  min-width: 100%;
+  margin: 0 auto;
+}
+
+.org-chart ul {
+  padding-top: 28px;
+}
+
+.org-chart li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  position: relative;
+  padding: 28px 10px 0;
+}
+
+/* horizontal connector to the left + right of each node, vertical drop into the node */
+.org-chart li::before,
+.org-chart li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 28px;
+  border-top: 2px solid var(--card-border);
+}
+
+.org-chart li::before {
+  right: 50%;
+}
+
+.org-chart li::after {
+  left: 50%;
+  border-left: 2px solid var(--card-border);
+}
+
+.org-chart li:first-child::before,
+.org-chart li:last-child::after {
+  border-top: none;
+}
+
+.org-chart li:last-child::before {
+  border-right: 2px solid var(--card-border);
+}
+
+/* only child: straight drop, no sideways connector */
+.org-chart li:only-child {
+  padding-top: 0;
+}
+
+.org-chart li:only-child::before,
+.org-chart li:only-child::after {
+  display: none;
+}
+
+/* vertical trunk line from a node down to its children row */
+.org-chart ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 28px;
+  border-left: 2px solid var(--card-border);
+}
+
+/* the journey-root node has no incoming connector */
+.org-chart.org-chart-root {
+  padding-top: 0;
+}
+
+.org-chart.org-chart-root::before {
+  display: none;
+}
+
+.org-chart.org-chart-root > li {
+  padding-top: 0;
+}
+
+.org-chart.org-chart-root > li::before,
+.org-chart.org-chart-root > li::after {
+  display: none;
+}
+
+.org-node {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+}
+
+.org-node-root {
+  background: linear-gradient(145deg, rgba(114, 221, 247, 0.9), rgba(128, 237, 153, 0.55));
+  border-color: rgba(114, 221, 247, 0.5);
+  color: #10212a;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 14px 22px;
+}
+
+.org-node-collapsed > .org-node {
+  border-style: dashed;
+}
+
+.org-node-toggle {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.org-node-label {
+  white-space: normal;
+  max-width: 220px;
+  text-align: left;
+}
+
+.org-node-menu {
+  position: relative;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+}
+
+.org-node-menu .ellipsis-btn {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+}
+
+.mission-shell .org-node .ellipsis-btn {
+  background: rgba(170, 120, 160, 0.1);
+  border-color: rgba(170, 120, 160, 0.25);
+  color: #3D2C4E;
+}
+
+.mission-shell .org-node .ellipsis-btn:hover {
+  background: rgba(170, 120, 160, 0.18);
+  border-color: rgba(170, 120, 160, 0.4);
+}
+
+.org-node-menu .menu-dropdown {
+  left: auto;
+  right: 0;
+  top: calc(100% + 6px);
+}
+
+/* rendered via portal to document.body, so it's outside .mission-shell —
+   give it its own self-contained light theme instead of relying on that ancestor */
+.org-node-dropdown {
+  background: linear-gradient(160deg, #ffffff, #fff6fb);
+  border-color: rgba(170, 120, 160, 0.25);
+  box-shadow: 0 16px 28px rgba(170, 120, 160, 0.18);
+}
+
+.org-node-dropdown .menu-item {
+  color: #3D2C4E;
+}
+
+.org-node-dropdown .menu-item:hover {
+  border-color: rgba(114, 221, 247, 0.5);
+  background: rgba(114, 221, 247, 0.16);
+}
+
+.org-node-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.org-node-counter-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(114, 221, 247, 0.16);
+  border: 1px solid rgba(114, 221, 247, 0.35);
+  color: #3D2C4E;
+  white-space: nowrap;
+}
+
+.counter-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.counter-manage-row {
+  display: grid;
+  grid-template-columns: 1fr 90px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.counter-manage-key {
+  font-weight: 700;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counter-add-row {
+  display: grid;
+  grid-template-columns: 1fr 90px auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 740px) {
+  .journey-org-chart-wrap {
+    max-height: 70vh;
+  }
+  .org-node-label {
+    max-width: 140px;
+  }
+  .counter-manage-row,
+  .counter-add-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* -- Today's Move -- */
+.today-move {
+  margin-top: 16px;
+  animation: rise 0.9s ease;
+}
+
+.today-move-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.today-move-bolt {
+  filter: drop-shadow(0 0 6px rgba(255, 209, 102, 0.7));
+}
+
+.today-move-card {
+  position: relative;
+  border-radius: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(255, 209, 102, 0.18), rgba(255, 107, 107, 0.08));
+  border: 1px solid rgba(255, 209, 102, 0.35);
+  box-shadow: 0 12px 30px rgba(255, 209, 102, 0.08);
+  transition: opacity 0.3s ease;
+}
+
+.today-move-card.done {
+  background: linear-gradient(135deg, rgba(128, 237, 153, 0.18), rgba(114, 221, 247, 0.06));
+  border-color: rgba(128, 237, 153, 0.4);
+  opacity: 0.75;
+}
+
+.today-move-type {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+
+.today-move-text {
+  margin: 0 0 16px;
+  font-size: clamp(17px, 2.4vw, 22px);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.today-move-cta {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 22px;
+  font-weight: 700;
+  font-size: 14px;
+  background: var(--gold);
+  color: #1a1238;
+  cursor: pointer;
+}
+
+.today-move-card.done .today-move-cta {
+  background: var(--mint);
+}
+
+.today-move-extra {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.today-move-extra-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.today-move-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.today-move-chip {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.today-move-chip.done {
+  border-color: rgba(128, 237, 153, 0.4);
+  color: #aaf3bd;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* -- Journey trail -- */
+.journey-trail-card {
+  margin-top: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 22px;
+  padding: 20px;
+  animation: rise 1s ease;
+}
+
+.journey-trail-title {
+  margin: 0 0 2px;
+  font-family: var(--font-bebas), sans-serif;
+  font-size: 28px;
+  letter-spacing: 0.05em;
+}
+
+.journey-trail {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 36px;
+  padding: 40px 8px 24px;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.trail-line {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  top: 50%;
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(128, 237, 153, 0.5), rgba(255, 209, 102, 0.5), rgba(255, 255, 255, 0.12));
+  transform: translateY(-50%);
+  z-index: 0;
+}
+
+.trail-endpoint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  z-index: 1;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 6px;
+}
+
+.trail-endpoint-icon {
+  font-size: 20px;
+}
+
+.trail-node {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 96px;
+  padding: 8px 4px 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  z-index: 1;
+  transition: transform 0.2s ease;
+}
+
+.trail-node:hover {
+  transform: translateY(-4px);
+}
+
+.trail-node.trail-offset {
+  margin-top: 56px;
+}
+
+.trail-node:not(.trail-offset) {
+  margin-bottom: 56px;
+}
+
+.trail-node-dot {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 3px solid rgba(255, 255, 255, 0.18);
+}
+
+.trail-node-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.25;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.trail-node-pct {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.trail-node.trail-done .trail-node-dot {
+  background: rgba(128, 237, 153, 0.18);
+  border-color: var(--mint);
+  color: #aaf3bd;
+  box-shadow: 0 0 16px rgba(128, 237, 153, 0.4);
+}
+
+.trail-node.trail-current .trail-node-dot {
+  border-color: var(--blue);
+  background: rgba(114, 221, 247, 0.18);
+  animation: trail-pulse 2.2s infinite;
+}
+
+.trail-node.trail-decaying .trail-node-dot {
+  border-color: var(--red);
+  background: rgba(255, 107, 107, 0.16);
+  box-shadow: 0 0 16px rgba(255, 107, 107, 0.35);
+}
+
+.trail-node.trail-upcoming .trail-node-dot {
+  opacity: 0.55;
+}
+
+.trail-node.trail-upcoming .trail-node-label,
+.trail-node.trail-upcoming .trail-node-pct {
+  opacity: 0.55;
+}
+
+@keyframes trail-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(114, 221, 247, 0.55); }
+  70% { box-shadow: 0 0 0 14px rgba(114, 221, 247, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(114, 221, 247, 0); }
+}
+
+.trail-here-pin {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #0f1021;
+}
+
+.trail-decay-pin {
+  position: absolute;
+  top: -6px;
+  right: 8px;
+  font-size: 16px;
+  filter: drop-shadow(0 0 4px rgba(255, 107, 107, 0.8));
+}
+
+@media (max-width: 720px) {
+  .journey-trail {
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: visible;
+    padding: 16px 8px;
+    gap: 0;
+  }
+  .trail-line {
+    left: 27px;
+    right: auto;
+    top: 28px;
+    bottom: 28px;
+    height: auto;
+    width: 4px;
+    transform: none;
+    background: linear-gradient(180deg, rgba(128, 237, 153, 0.5), rgba(255, 209, 102, 0.5), rgba(255, 255, 255, 0.12));
+  }
+  .trail-endpoint {
+    flex-direction: row;
+    gap: 8px;
+    justify-content: flex-start;
+    padding-left: 4px;
+  }
+  .trail-node {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left;
+    margin: 10px 0 !important;
+    padding-left: 0;
+  }
+  .trail-node-label {
+    text-align: left;
+    max-width: 160px;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
+  .trail-here-pin {
+    position: static;
+    transform: none;
+    margin-right: 6px;
+  }
+  .trail-decay-pin {
+    position: static;
+    margin-left: 6px;
+  }
+}
+
+/* -- Milestone detail sheet status chips -- */
+.sheet-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.sheet-title-row h3 {
+  margin: 0;
+}
+
+.sheet-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.sheet-chip-decay {
+  background: rgba(255, 107, 107, 0.18);
+  color: #ffb3b3;
+}
+
+.sheet-chip-done {
+  background: rgba(128, 237, 153, 0.18);
+  color: #aaf3bd;
+}
+
+.sheet-chip-current {
+  background: rgba(114, 221, 247, 0.18);
+  color: #9be9fb;
+}
+
+/* -- Progress Hub bento grid -- */
+.hub-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.hub-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  padding: 18px;
+  animation: rise 0.9s ease;
+}
+
+.hub-card h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.hub-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.hub-card-head h3 {
+  margin: 0;
+}
+
+.hub-span-2 {
+  grid-column: span 2;
+}
+
+.hub-span-3 {
+  grid-column: span 3;
+}
+
+@media (max-width: 900px) {
+  .hub-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .hub-span-2,
+  .hub-span-3 {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 620px) {
+  .hub-grid {
+    grid-template-columns: 1fr;
+  }
+  .hub-span-2,
+  .hub-span-3 {
+    grid-column: span 1;
+  }
+}
+
+/* -- Goal health hero -- */
+.hub-goal-health {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.hub-goal-health-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hub-trend {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.hub-trend-up { color: #aaf3bd; }
+.hub-trend-down { color: #ffb3b3; }
+.hub-trend-flat { color: var(--muted); }
+
+.hub-streak {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.hub-streak small {
+  opacity: 0.8;
+}
+
+.hub-risk {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hub-streak-inline {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* -- Week pulse -- */
+.week-pulse-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 100px;
+}
+
+.week-pulse-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+}
+
+.week-pulse-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.week-pulse-bar {
+  width: 100%;
+  border-radius: 8px 8px 2px 2px;
+  background: linear-gradient(180deg, var(--blue), rgba(114, 221, 247, 0.25));
+  min-height: 4px;
+}
+
+.week-pulse-day {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* -- Contribution calendar -- */
+.hub-calendar {
+  overflow: hidden;
+}
+
+.cal-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.cal-grid-wrap {
+  min-width: 480px;
+}
+
+.cal-months {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 13px;
+  gap: 3px;
+  margin-left: 30px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cal-body {
+  display: flex;
+  gap: 6px;
+}
+
+.cal-dow-labels {
+  display: grid;
+  grid-template-rows: repeat(7, 13px);
+  gap: 3px;
+  font-size: 10px;
+  color: var(--muted);
+  width: 24px;
+  text-align: right;
+  line-height: 13px;
+}
+
+.cal-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 13px;
+  gap: 3px;
+}
+
+.cal-col {
+  display: grid;
+  grid-template-rows: repeat(7, 13px);
+  gap: 3px;
+}
+
+.cal-cell {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cal-cell.level-1 { background: rgba(114, 221, 247, 0.28); }
+.cal-cell.level-2 { background: rgba(114, 221, 247, 0.5); }
+.cal-cell.level-3 { background: rgba(128, 237, 153, 0.65); }
+.cal-cell.level-4 {
+  background: rgba(128, 237, 153, 0.95);
+  box-shadow: 0 0 6px rgba(128, 237, 153, 0.6);
+}
+.cal-cell.level-future {
+  background: transparent;
+}
+
+.cal-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cal-legend .cal-cell {
+  width: 11px;
+  height: 11px;
+}
+
+/* -- Focus balance -- */
+.balance-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.balance-row,
+.balance-axis-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 48px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.balance-axis-row {
+  grid-template-columns: 1fr 1fr 48px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.balance-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.balance-track.small {
+  height: 6px;
+}
+
+.balance-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.balance-fill.coverage { background: linear-gradient(90deg, #72ddf7, #9be9fb); }
+.balance-fill.retention { background: linear-gradient(90deg, #80ed99, #aaf3bd); }
+.balance-fill.performance { background: linear-gradient(90deg, #ffd166, #ffe2a3); }
+.balance-fill.readiness { background: linear-gradient(90deg, #c792ea, #f7b2e0); }
+
+.balance-axes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.balance-axis-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -- Needs attention -- */
+.attention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.attention-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border-left: 3px solid var(--mint);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+}
+
+.attention-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.attention-row.attention-high { border-left-color: var(--red); }
+.attention-row.attention-medium { border-left-color: var(--gold); }
+.attention-row.attention-low { border-left-color: var(--mint); }
+
+/* -- Coach note -- */
+.hub-coach {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(199, 146, 234, 0.14), rgba(114, 221, 247, 0.06));
+  border-color: rgba(199, 146, 234, 0.3);
+}
+
+.hub-coach-icon {
+  font-size: 22px;
+}
+
+.hub-coach p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* -- Achievements -- */
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.badge-chip.earned {
+  opacity: 1;
+  color: #1a1238;
+  background: linear-gradient(135deg, var(--gold), #ffe2a3);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.badge-chip-icon {
+  font-size: 14px;
 }
