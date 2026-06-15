@@ -252,25 +252,25 @@ export default function ProgressHubPage() {
 
       {activeTab === "overview" ? (
         <div role="tabpanel" aria-label="Overview" className="hub-grid">
-          <GoalHealthHero mission={mission} streaks={streaks} weekPulse={weekPulse} />
+          {/* <GoalHealthHero mission={mission} streaks={streaks} weekPulse={weekPulse} /> */}
           <div className="hub-span-2">
             <CoachNote mission={mission} />
           </div>
           <WeekPulse weekPulse={weekPulse} />
+          <NeedsAttention mission={mission} />
           <div className="hub-span-2">
             <ContributionCalendar activityByDate={activityByDate} streaks={streaks} />
           </div>
-          <div className="hub-span-2">
+          {/* <div className="hub-span-2">
             <FocusBalance mission={mission} />
-          </div>
-          <NeedsAttention mission={mission} />
-          <div className="hub-span-3">
+          </div> */}
+          {/* <div className="hub-span-3">
             <Achievements mission={mission} streaks={streaks} />
-          </div>
+          </div> */}
         </div>
       ) : null}
 
-      {activeTab === "tests" ? (
+      {activeTab === "update" ? (
         <div role="tabpanel" aria-label="Tests">
           <TestStoryPanel mission={mission} />
         </div>
