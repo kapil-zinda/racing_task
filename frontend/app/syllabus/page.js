@@ -18,7 +18,7 @@ import CoachNote from "../components/progress-hub/CoachNote";
 import Achievements from "../components/progress-hub/Achievements";
 import ProgressUpdatesPanel from "../components/progress-hub/ProgressUpdatesPanel";
 import DimensionProgressGrid from "../components/progress-hub/DimensionProgressGrid";
-import SyllabusTree from "../components/progress-hub/SyllabusTree";
+import JourneyDetailTable from "../components/progress-hub/JourneyDetailTable";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -29,10 +29,6 @@ const HUB_TABS = [
   { key: "detail", label: "Detail", icon: "📚" },
 ];
 
-function norm(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
 export default function ProgressHubPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -41,15 +37,53 @@ export default function ProgressHubPage() {
   const [missionConfig, setMissionConfig] = useState(null);
   const [usingDummy, setUsingDummy] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
-  const [playbackByKey, setPlaybackByKey] = useState({});
-  const [playbackLoadingKey, setPlaybackLoadingKey] = useState("");
+  const [journeys, setJourneys] = useState([]);
+  const [progressByJourney, setProgressByJourney] = useState({});
 
   const applyDummyData = () => {
     const dummy = buildDummyMissionControl();
     setSyllabus(dummy.syllabus);
     setActivityByDate(dummy.activity_by_date);
     setMissionConfig(dummy.mission);
+    setJourneys([]);
+    setProgressByJourney({});
     setUsingDummy(true);
+  };
+
+  const loadJourneys = async () => {
+    if (!API_BASE_URL) {
+      setJourneys([]);
+      setProgressByJourney({});
+      return;
+    }
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/journeys`);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`Journey API failed: ${res.status} ${txt}`);
+      }
+      const payload = await res.json();
+      const list = Array.isArray(payload?.journeys) ? payload.journeys : [];
+      setJourneys(list);
+
+      const entries = await Promise.all(
+        list.map(async (journey) => {
+          try {
+            const pRes = await apiFetch(`${API_BASE_URL}/journeys/${encodeURIComponent(journey.id)}/progress`);
+            if (!pRes.ok) return [journey.id, []];
+            const pPayload = await pRes.json();
+            return [journey.id, pPayload?.completions || []];
+          } catch {
+            return [journey.id, []];
+          }
+        }),
+      );
+      setProgressByJourney(Object.fromEntries(entries));
+    } catch (err) {
+      setError(String(err.message || err));
+      setJourneys([]);
+      setProgressByJourney({});
+    }
   };
 
   const loadProgress = async () => {
@@ -78,7 +112,7 @@ export default function ProgressHubPage() {
         setMissionConfig(liveMission);
         setUsingDummy(false);
       }
-      setPlaybackByKey({});
+      await loadJourneys();
     } catch (err) {
       setError(String(err.message || err));
       applyDummyData();
@@ -105,128 +139,6 @@ export default function ProgressHubPage() {
   const streaks = useMemo(() => buildStreaks(activityByDate), [activityByDate]);
   const weekPulse = useMemo(() => buildWeekPulse(activityByDate), [activityByDate]);
   const dailyUpdates = useMemo(() => buildDailyLeafNodeSeries(planExecution), [planExecution]);
-
-  const globalTestsBySource = useMemo(() => {
-    const exams = Array.isArray(syllabus?.exams) ? syllabus.exams : [];
-    const bySource = new Map();
-    const recordingIndex = new Map();
-
-    exams.forEach((exam) => {
-      const examName = exam?.exam || "General";
-      (exam?.subjects || []).forEach((subject) => {
-        const subjectName = subject?.subject || "General";
-        (subject?.topics || []).forEach((topic) => {
-          const topicName = topic?.topic || "General";
-          const recordings = (topic?.recordings || [])
-            .filter((rec) => rec?.session_id && rec?.default_media_type)
-            .map((rec, idx) => ({
-              key: `test-rec-${norm(examName)}-${norm(subjectName)}-${norm(topicName)}-${idx}-${rec.session_id}`,
-              note: rec.note || topicName,
-              date: rec.date || "",
-              session_id: rec.session_id,
-              default_media_type: rec.default_media_type,
-            }));
-          if (recordings.length > 0) {
-            recordingIndex.set(`${norm(examName)}||${norm(subjectName)}||${norm(topicName)}`, recordings);
-          }
-        });
-      });
-    });
-
-    exams.forEach((exam) => {
-      const examName = exam?.exam || "General";
-      (exam?.tests || []).forEach((sourceBlock) => {
-        const sourceName = sourceBlock?.source || "General";
-        if (!bySource.has(sourceName)) bySource.set(sourceName, []);
-
-        (sourceBlock?.tests || []).forEach((test) => {
-          const testNumber = String(test?.test_number || "").trim();
-          const testName = String(test?.test_name || "").trim();
-          const dedupeKey = `${norm(examName)}||${norm(sourceName)}||${norm(testNumber)}||${norm(testName)}`;
-          const list = bySource.get(sourceName);
-          if (list.some((row) => row._dedupeKey === dedupeKey)) return;
-
-          const directRecordings = Array.isArray(test?.recordings)
-            ? test.recordings
-                .filter((rec) => rec?.session_id && rec?.default_media_type)
-                .map((rec, idx) => ({
-                  key: `test-row-rec-${norm(examName)}-${norm(sourceName)}-${norm(testNumber)}-${idx}-${rec.session_id}`,
-                  note: rec.note || testName || `Test ${testNumber}`,
-                  date: rec.date || "",
-                  session_id: rec.session_id,
-                  default_media_type: rec.default_media_type,
-                }))
-            : [];
-
-          let linkedRecordings = directRecordings;
-          if (linkedRecordings.length === 0) {
-            const candidates = [testName, `Test ${testNumber}`, testNumber].filter((v) => v && v.trim());
-            for (const candidate of candidates) {
-              const hit = recordingIndex.get(`${norm(examName)}||${norm(sourceName)}||${norm(candidate)}`);
-              if (hit?.length) {
-                linkedRecordings = hit;
-                break;
-              }
-            }
-          }
-
-          list.push({
-            _dedupeKey: dedupeKey,
-            exam: examName,
-            test_name: testName,
-            test_number: testNumber,
-            note: test?.note || "",
-            test_given_date: test?.test_given_date || "",
-            analysis_done_date: test?.analysis_done_date || "",
-            revision_date: test?.revision_date || "",
-            second_revision_date: test?.second_revision_date || "",
-            recordings: linkedRecordings,
-          });
-        });
-      });
-    });
-
-    return Array.from(bySource.entries())
-      .map(([source, tests]) => ({
-        source,
-        tests: tests
-          .slice()
-          .sort((a, b) => {
-            const aNum = Number(a.test_number);
-            const bNum = Number(b.test_number);
-            if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
-            return String(a.test_number).localeCompare(String(b.test_number));
-          }),
-      }))
-      .sort((a, b) => a.source.localeCompare(b.source));
-  }, [syllabus]);
-
-  const playRecording = async (rec) => {
-    if (!API_BASE_URL || !rec.session_id || !rec.default_media_type) return;
-    setPlaybackLoadingKey(rec.key);
-    setError("");
-    try {
-      const res = await apiFetch(
-        `${API_BASE_URL}/sessions/${encodeURIComponent(rec.session_id)}/playback-url?media_type=${encodeURIComponent(rec.default_media_type)}`
-      );
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`Playback API failed: ${res.status} ${txt}`);
-      }
-      const json = await res.json();
-      setPlaybackByKey((prev) => ({
-        ...prev,
-        [rec.key]: {
-          url: json.playback_url || "",
-          mediaType: rec.default_media_type,
-        },
-      }));
-    } catch (err) {
-      setError(String(err.message || err));
-    } finally {
-      setPlaybackLoadingKey("");
-    }
-  };
 
   return (
     <main className="app-shell mission-shell">
@@ -291,15 +203,9 @@ export default function ProgressHubPage() {
             <DimensionProgressGrid dimensions={planExecution.dimensions || []} />
           </article>
           <article className="milestone-panel">
-            <h2>Syllabus Detail</h2>
-            <p className="day-state">Expand to see class dates, revisions, notes, and recordings.</p>
-            <SyllabusTree
-              data={syllabus}
-              globalTestsBySource={globalTestsBySource}
-              playbackByKey={playbackByKey}
-              playbackLoadingKey={playbackLoadingKey}
-              onPlay={playRecording}
-            />
+            <h2>Journeys</h2>
+            <p className="day-state">Each task with its directory, progress, and first/last completion dates.</p>
+            <JourneyDetailTable journeys={journeys} progressByJourney={progressByJourney} />
           </article>
         </div>
       ) : null}
