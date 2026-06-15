@@ -5,8 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import { buildMissionExecution, buildMissionModel } from "../lib/missionModel";
 import { buildDummyMissionControl, DUMMY_DATA_NOTICE } from "../lib/dummyData";
-import { buildStreaks, buildWeekPulse } from "../lib/journeyInsights";
+import { buildStreaks, buildWeekPulse, buildDailyLeafNodeSeries } from "../lib/journeyInsights";
 import HubTabs from "../components/progress-hub/HubTabs";
+import JourneyTrail from "../components/journey/JourneyTrail";
+import DailyUpdatesChart from "../components/progress-hub/DailyUpdatesChart";
 import GoalHealthHero from "../components/progress-hub/GoalHealthHero";
 import WeekPulse from "../components/progress-hub/WeekPulse";
 import ContributionCalendar from "../components/progress-hub/ContributionCalendar";
@@ -102,6 +104,7 @@ export default function ProgressHubPage() {
   const mission = useMemo(() => buildMissionModel(planExecution), [planExecution]);
   const streaks = useMemo(() => buildStreaks(activityByDate), [activityByDate]);
   const weekPulse = useMemo(() => buildWeekPulse(activityByDate), [activityByDate]);
+  const dailyUpdates = useMemo(() => buildDailyLeafNodeSeries(planExecution), [planExecution]);
 
   const globalTestsBySource = useMemo(() => {
     const exams = Array.isArray(syllabus?.exams) ? syllabus.exams : [];
@@ -257,9 +260,15 @@ export default function ProgressHubPage() {
             <CoachNote mission={mission} />
           </div>
           <WeekPulse weekPulse={weekPulse} />
-          <NeedsAttention mission={mission} />
           <div className="hub-span-2">
+            <DailyUpdatesChart series={dailyUpdates} />
+          </div>
+          <NeedsAttention mission={mission} />
+          <div className="hub-span-3">
             <ContributionCalendar activityByDate={activityByDate} streaks={streaks} />
+          </div>
+          <div className="hub-span-3">
+            <JourneyTrail dimensions={planExecution.dimensions || []} />
           </div>
           {/* <div className="hub-span-2">
             <FocusBalance mission={mission} />
@@ -270,7 +279,7 @@ export default function ProgressHubPage() {
         </div>
       ) : null}
 
-      {activeTab === "update" ? (
+      {activeTab === "tests" ? (
         <div role="tabpanel" aria-label="Tests">
           <TestStoryPanel mission={mission} />
         </div>

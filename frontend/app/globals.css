@@ -6242,6 +6242,7 @@ body:has(.mission-shell) {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   margin-top: 36px;
   padding: 40px 8px 24px;
@@ -6689,12 +6690,12 @@ body:has(.mission-shell) {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.cal-cell.level-1 { background: rgba(114, 221, 247, 0.28); }
-.cal-cell.level-2 { background: rgba(114, 221, 247, 0.5); }
-.cal-cell.level-3 { background: rgba(128, 237, 153, 0.65); }
+.cal-cell.level-1 { background: #9be9a8; }
+.cal-cell.level-2 { background: #40c463; }
+.cal-cell.level-3 { background: #30a14e; }
 .cal-cell.level-4 {
-  background: rgba(128, 237, 153, 0.95);
-  box-shadow: 0 0 6px rgba(128, 237, 153, 0.6);
+  background: #216e39;
+  box-shadow: 0 0 6px rgba(33, 110, 57, 0.55);
 }
 .cal-cell.level-future {
   background: transparent;

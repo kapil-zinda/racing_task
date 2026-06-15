@@ -84,6 +84,46 @@ export function buildContributionCalendar(activityByDate, weeks = 14) {
   return columns.slice(-weeks);
 }
 
+// Daily count of DISTINCT leaf nodes (topics + test slots) updated on each date.
+// Returns a continuous daily series over the last `lookbackDays` so the line reads as time.
+export function buildDailyLeafNodeSeries(planExecution, lookbackDays = 90) {
+  const topics = Array.isArray(planExecution?.missionTopics) ? planExecution.missionTopics : [];
+  const tests = Array.isArray(planExecution?.missionTestSlots) ? planExecution.missionTestSlots : [];
+
+  // date -> Set of leaf-node keys touched that day
+  const byDate = new Map();
+  const touch = (dateStr, nodeKey) => {
+    if (!dateStr || !nodeKey) return;
+    const d = String(dateStr).slice(0, 10);
+    if (!d) return;
+    if (!byDate.has(d)) byDate.set(d, new Set());
+    byDate.get(d).add(nodeKey);
+  };
+
+  topics.forEach((t) => {
+    touch(t.classDate, t.key);
+    (Array.isArray(t.revisionDates) ? t.revisionDates : []).forEach((d) => touch(d, t.key));
+  });
+  tests.forEach((t) => {
+    const key = `test||${t.source}||${t.testName}||${t.testNumber}`;
+    touch(t.testGivenDate, key);
+    touch(t.revisionDate, key);
+    touch(t.secondRevisionDate, key);
+  });
+
+  const today = new Date();
+  const dates = [];
+  const counts = [];
+  for (let i = lookbackDays - 1; i >= 0; i -= 1) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const iso = toIsoDate(d);
+    dates.push(iso);
+    counts.push(byDate.has(iso) ? byDate.get(iso).size : 0);
+  }
+  return { dates, counts };
+}
+
 export function heatLevelFor(total) {
   if (total === null || total === undefined) return "future";
   if (total <= 0) return 0;

@@ -1,0 +1,10 @@
+{"ts":"2026-06-15T17:42:39.123Z","cmd":"goto","args":"http://localhost:3001/syllabus","origin":"http://localhost:3001/syllabus","durationMs":1271,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-06-15T17:42:41.162Z","cmd":"wait","args":"--networkidle","origin":"http://localhost:3001/auth/signin","durationMs":1728,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-06-15T17:42:43.230Z","cmd":"js","args":"document.body.innerText.includes('Daily Updates')","origin":"http://localhost:3001/auth/signin","durationMs":4,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-06-15T17:42:43.284Z","cmd":"js","args":"document.body.innerText.includes('No updates recorded yet')","origin":"http://localhost:3001/auth/signin","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-06-15T17:42:43.337Z","cmd":"js","args":"document.querySelectorAll('.js-plotly-plot').length","origin":"http://localhost:3001/auth/signin","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-06-15T17:42:43.391Z","cmd":"js","args":"document.body.innerText.includes('The Trail')","origin":"http://localhost:3001/auth/signin","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-06-15T17:42:43.444Z","cmd":"js","args":"document.querySelectorAll('.cal-cell').length","origin":"http://localhost:3001/auth/signin","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-06-15T17:42:48.688Z","cmd":"url","args":"","origin":"http://localhost:3001/auth/signin","durationMs":5,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-06-15T17:42:48.756Z","cmd":"js","args":"document.body.innerText.slice(0,600)","origin":"http://localhost:3001/auth/signin","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-06-15T17:42:48.816Z","cmd":"console","args":"--errors","origin":"http://localhost:3001/auth/signin","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
