@@ -68,7 +68,7 @@ export default function JourneyTreeNode({
           />
         )}
       </div>
-      {!isProgress && effectiveCounters.length > 0 ? (
+      {!isProgress && isLeaf && effectiveCounters.length > 0 ? (
         <div className="org-node-counters">
           {effectiveCounters.map((c) => (
             <span className="org-node-counter-badge" key={c.key}>

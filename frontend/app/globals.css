@@ -6191,6 +6191,23 @@ body:has(.mission-shell) {
   white-space: nowrap;
 }
 
+.counter-manage-row.inherited {
+  opacity: 0.65;
+}
+
+.counter-manage-row.inherited .counter-manage-key {
+  font-weight: 600;
+}
+
+.counter-inherited-tag {
+  font-size: 11px;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #9aa0a6);
+  justify-self: center;
+}
+
 .counter-add-row {
   display: grid;
   grid-template-columns: 1fr 90px auto;

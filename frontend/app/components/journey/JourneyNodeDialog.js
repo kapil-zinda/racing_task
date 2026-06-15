@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { findNode } from "./journeyTreeOps";
+import { findNodeWithAncestors, getEffectiveCounters } from "./journeyTreeOps";
 
 export default function JourneyNodeDialog({ dialog, tree, onClose, onRename, onAddChild, onSaveCounters, saving }) {
   const [labelInput, setLabelInput] = useState("");
   const [counters, setCounters] = useState([]);
+  const [ancestors, setAncestors] = useState([]);
   const [newCounterKey, setNewCounterKey] = useState("");
   const [newCounterValue, setNewCounterValue] = useState("");
 
@@ -14,8 +15,9 @@ export default function JourneyNodeDialog({ dialog, tree, onClose, onRename, onA
     if (dialog.mode === "rename") setLabelInput(dialog.initialValue || "");
     if (dialog.mode === "addChild") setLabelInput("");
     if (dialog.mode === "counters") {
-      const node = findNode(tree, dialog.nodeId);
-      setCounters(node?.counters ? node.counters.map((c) => ({ ...c })) : []);
+      const found = findNodeWithAncestors(tree, dialog.nodeId);
+      setCounters(found?.node?.counters ? found.node.counters.map((c) => ({ ...c })) : []);
+      setAncestors(found?.ancestors || []);
       setNewCounterKey("");
       setNewCounterValue("");
     }
@@ -72,6 +74,13 @@ export default function JourneyNodeDialog({ dialog, tree, onClose, onRename, onA
   const updateCounterValue = (key, count) =>
     setCounters((cs) => cs.map((c) => (c.key === key ? { ...c, count: Math.max(0, count) } : c)));
   const removeCounter = (key) => setCounters((cs) => cs.filter((c) => c.key !== key));
+  const overrideCounter = (key, count) => {
+    if (counters.some((c) => c.key === key)) return;
+    setCounters((cs) => [...cs, { key, count }]);
+  };
+
+  const ownKeys = new Set(counters.map((c) => c.key));
+  const inheritedOnly = getEffectiveCounters({ counters: [] }, ancestors).filter((c) => !ownKeys.has(c.key));
 
   return (
     <div className="task-modal-overlay" onClick={onClose}>
@@ -79,7 +88,22 @@ export default function JourneyNodeDialog({ dialog, tree, onClose, onRename, onA
         <h3>Manage counters</h3>
         <p>Add custom key/value badges for this node. Sub-nodes inherit them unless they set their own.</p>
 
-        {counters.length === 0 ? <div className="area-empty">No counters yet.</div> : (
+        {inheritedOnly.length > 0 ? (
+          <div className="counter-manage-list">
+            {inheritedOnly.map((c) => (
+              <div className="counter-manage-row inherited" key={`inherited-${c.key}`}>
+                <span className="counter-manage-key">{c.key}: {c.count}</span>
+                <span className="counter-inherited-tag">inherited</span>
+                <button type="button" className="btn-day secondary" onClick={() => overrideCounter(c.key, c.count)}>
+                  Override
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {counters.length === 0 && inheritedOnly.length === 0 ? <div className="area-empty">No counters yet.</div> : null}
+        {counters.length > 0 ? (
           <div className="counter-manage-list">
             {counters.map((c) => (
               <div className="counter-manage-row" key={c.key}>
@@ -97,7 +121,7 @@ export default function JourneyNodeDialog({ dialog, tree, onClose, onRename, onA
               </div>
             ))}
           </div>
-        )}
+        ) : null}
 
         <div className="counter-add-row">
           <input
