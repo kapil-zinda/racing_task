@@ -16,7 +16,7 @@ import FocusBalance from "../components/progress-hub/FocusBalance";
 import NeedsAttention from "../components/progress-hub/NeedsAttention";
 import CoachNote from "../components/progress-hub/CoachNote";
 import Achievements from "../components/progress-hub/Achievements";
-import TestStoryPanel from "../components/progress-hub/TestStoryPanel";
+import ProgressUpdatesPanel from "../components/progress-hub/ProgressUpdatesPanel";
 import DimensionProgressGrid from "../components/progress-hub/DimensionProgressGrid";
 import SyllabusTree from "../components/progress-hub/SyllabusTree";
 
@@ -25,7 +25,7 @@ const NOTICE_TTL_MS = 15000;
 
 const HUB_TABS = [
   { key: "overview", label: "Overview", icon: "📊" },
-  { key: "tests", label: "Tests", icon: "📝" },
+  { key: "updates", label: "Updates", icon: "✅" },
   { key: "detail", label: "Detail", icon: "📚" },
 ];
 
@@ -279,10 +279,8 @@ export default function ProgressHubPage() {
         </div>
       ) : null}
 
-      {activeTab === "tests" ? (
-        <div role="tabpanel" aria-label="Tests">
-          <TestStoryPanel mission={mission} />
-        </div>
+      {activeTab === "updates" ? (
+        <ProgressUpdatesPanel apiBaseUrl={API_BASE_URL} />
       ) : null}
 
       {activeTab === "detail" ? (

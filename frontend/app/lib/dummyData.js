@@ -45,15 +45,43 @@ export function buildDummyJourneys() {
           {
             label: "GS Foundation",
             children: [
-              { label: "Polity", children: [] },
-              { label: "History", children: [] },
+              {
+                label: "Polity",
+                children: [],
+                counters: [
+                  { key: "Study", count: 1 },
+                  { key: "Revision", count: 4 },
+                  { key: "Test", count: 2 },
+                ],
+              },
+              {
+                label: "History",
+                children: [],
+                counters: [
+                  { key: "Study", count: 1 },
+                  { key: "Revision", count: 3 },
+                ],
+              },
             ],
           },
           {
             label: "Books",
-            children: [{ label: "Laxmikanth", children: [] }],
+            children: [
+              {
+                label: "Laxmikanth",
+                children: [],
+                counters: [
+                  { key: "Study", count: 1 },
+                  { key: "Revision", count: 2 },
+                ],
+              },
+            ],
           },
-          { label: "Current Affairs", children: [] },
+          {
+            label: "Current Affairs",
+            children: [],
+            counters: [{ key: "Study", count: 5 }],
+          },
         ],
       },
     },

@@ -71,6 +71,7 @@ from .pdf_search_domain import (
 )
 from .qna_domain import ask_qna_in_session, create_qna_session, get_qna_messages, list_qna_sessions
 from .journey_domain import create_journey, delete_journey, list_journeys, update_journey
+from .journey_progress_domain import get_journey_progress, record_progress_action
 from .mission_domain import get_or_create_mission, mission_progress_payload, mission_selector_options, upsert_mission
 from .schemas import (
     ActivityCategoryRequest,
@@ -100,6 +101,7 @@ from .schemas import (
     MissionUpsertRequest,
     JourneyCreateRequest,
     JourneyUpdateRequest,
+    JourneyProgressActionRequest,
     AgentV2ChatRequest,
     AgentV2CreateRequest,
     AgentV2EntryRequest,
@@ -443,6 +445,20 @@ def create_app() -> FastAPI:
             return delete_journey(_req_user_id(request), journey_id)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "DELETE /journeys/{journey_id}")
+
+    @app.get("/journeys/{journey_id}/progress")
+    def get_user_journey_progress(journey_id: str, request: Request):
+        try:
+            return get_journey_progress(_req_user_id(request), journey_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /journeys/{journey_id}/progress")
+
+    @app.post("/journeys/{journey_id}/progress")
+    def record_user_journey_progress(journey_id: str, request: Request, payload: JourneyProgressActionRequest):
+        try:
+            return record_progress_action(_req_user_id(request), journey_id, payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /journeys/{journey_id}/progress")
 
     @app.get("/mission/options")
     def get_mission_options(request: Request):

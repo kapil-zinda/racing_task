@@ -192,6 +192,14 @@ class JourneyUpdateRequest(BaseModel):
     plan: dict | None = None
 
 
+class JourneyProgressActionRequest(BaseModel):
+    node_id: str
+    node_label: str = ""
+    counter_key: str
+    occurrence: int
+    action: str
+
+
 class AgentV2CreateRequest(BaseModel):
     user_id: str = ""
     mode: str = "supportive"

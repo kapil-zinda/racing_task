@@ -5,7 +5,7 @@ import { daysUntil } from "../../lib/dateUtils";
 import JourneyActionsMenu from "./JourneyActionsMenu";
 import { countTreeNodes } from "./JourneyTreeBuilder";
 
-export default function JourneyHero({ journey, onTogglePause, onDelete, busy }) {
+export default function JourneyHero({ journey, onTogglePause, onDelete, busy, onOpen, showActions = true }) {
   const router = useRouter();
   const title = journey?.title || "Your Journey";
   const icon = journey?.icon || "🎯";
@@ -22,6 +22,10 @@ export default function JourneyHero({ journey, onTogglePause, onDelete, busy }) 
   }
 
   const handleCardClick = () => {
+    if (onOpen) {
+      onOpen(journey);
+      return;
+    }
     if (journey?.id) router.push(`/mission/${journey.id}`);
   };
 
@@ -35,7 +39,9 @@ export default function JourneyHero({ journey, onTogglePause, onDelete, busy }) 
         if (e.key === "Enter" || e.key === " ") handleCardClick();
       }}
     >
-      <JourneyActionsMenu status={journey?.status} onTogglePause={onTogglePause} onDelete={onDelete} busy={busy} />
+      {showActions ? (
+        <JourneyActionsMenu status={journey?.status} onTogglePause={onTogglePause} onDelete={onDelete} busy={busy} />
+      ) : null}
       <div className="journey-hero-icon" aria-hidden="true">{icon}</div>
       <div className="journey-hero-body">
         <p className="journey-hero-eyebrow">

@@ -6068,6 +6068,107 @@ body:has(.mission-shell) {
   white-space: nowrap;
 }
 
+/* Progress Hub — Updates tab */
+.org-node-progress-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(120, 214, 168, 0.18);
+  border: 1px solid rgba(120, 214, 168, 0.45);
+  color: #1f5c3d;
+  white-space: nowrap;
+}
+
+.progress-occurrence-menu {
+  padding: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.progress-occurrence-menu-title {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #3D2C4E;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  margin-bottom: 4px;
+}
+
+.progress-occurrence-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: #6b6b6b;
+}
+
+.progress-entry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.progress-entry-row.is-done {
+  background: rgba(120, 214, 168, 0.14);
+}
+
+.progress-entry-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #3D2C4E;
+}
+
+.progress-entry-count {
+  font-weight: 700;
+  color: #6b6b6b;
+  font-size: 12px;
+}
+
+.progress-entry-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-entry-btn {
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  cursor: pointer;
+  line-height: 1.4;
+  color: #3D2C4E;
+}
+
+.progress-entry-btn.done {
+  background: rgba(120, 214, 168, 0.22);
+  border-color: rgba(120, 214, 168, 0.5);
+  color: #1f5c3d;
+}
+
+.progress-entry-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.org-node-progress-badge:not(.has-progress) {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #6b6b6b;
+}
+
+.progress-updates-panel .journey-list {
+  margin-top: 14px;
+}
+
 .counter-manage-list {
   display: flex;
   flex-direction: column;
