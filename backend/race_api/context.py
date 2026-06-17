@@ -78,6 +78,8 @@ def settings() -> Dict[str, Any]:
         "mailjet_secret_key": os.getenv("MAILJET_SECRET_KEY", ""),
         "mongodb_day_activities_collection": os.getenv("MONGODB_DAY_ACTIVITIES_COLLECTION", "day_activities"),
         "mongodb_activity_categories_collection": os.getenv("MONGODB_ACTIVITY_CATEGORIES_COLLECTION", "activity_categories"),
+        "mongodb_journeys_collection": os.getenv("MONGODB_JOURNEYS_COLLECTION", "journeys"),
+        "mongodb_journey_progress_collection": os.getenv("MONGODB_JOURNEY_PROGRESS_COLLECTION", "journey_progress"),
     }
 
 
@@ -203,6 +205,16 @@ def day_activities_collection():
 def activity_categories_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_activity_categories_collection"]]
+
+
+def journeys_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_journeys_collection"]]
+
+
+def journey_progress_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_journey_progress_collection"]]
 
 
 def s3_client():

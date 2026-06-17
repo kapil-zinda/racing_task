@@ -70,6 +70,8 @@ from .pdf_search_domain import (
     search_pdf,
 )
 from .qna_domain import ask_qna_in_session, create_qna_session, get_qna_messages, list_qna_sessions
+from .journey_domain import create_journey, delete_journey, list_journeys, update_journey
+from .journey_progress_domain import get_journey_progress, record_progress_action
 from .mission_domain import get_or_create_mission, mission_progress_payload, mission_selector_options, upsert_mission
 from .schemas import (
     ActivityCategoryRequest,
@@ -100,6 +102,9 @@ from .schemas import (
     QnaAskRequest,
     QnaSessionCreateRequest,
     MissionUpsertRequest,
+    JourneyCreateRequest,
+    JourneyUpdateRequest,
+    JourneyProgressActionRequest,
     AgentV2ChatRequest,
     AgentV2CreateRequest,
     AgentV2EntryRequest,
@@ -405,6 +410,8 @@ def create_app() -> FastAPI:
                 title=payload.title,
                 target_date=payload.target_date,
                 status=payload.status,
+                icon=payload.icon,
+                category=payload.category,
                 weights=payload.weights,
                 targets=payload.targets,
                 plan=payload.plan,
@@ -417,6 +424,48 @@ def create_app() -> FastAPI:
             }
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "PUT /mission")
+
+    @app.get("/journeys")
+    def list_user_journeys(request: Request):
+        try:
+            return {"journeys": list_journeys(_req_user_id(request))}
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /journeys")
+
+    @app.post("/journeys")
+    def create_user_journey(request: Request, payload: JourneyCreateRequest):
+        try:
+            return create_journey(_req_user_id(request), payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /journeys")
+
+    @app.put("/journeys/{journey_id}")
+    def update_user_journey(journey_id: str, request: Request, payload: JourneyUpdateRequest):
+        try:
+            return update_journey(_req_user_id(request), journey_id, payload.model_dump(exclude_none=True))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "PUT /journeys/{journey_id}")
+
+    @app.delete("/journeys/{journey_id}")
+    def delete_user_journey(journey_id: str, request: Request):
+        try:
+            return delete_journey(_req_user_id(request), journey_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "DELETE /journeys/{journey_id}")
+
+    @app.get("/journeys/{journey_id}/progress")
+    def get_user_journey_progress(journey_id: str, request: Request):
+        try:
+            return get_journey_progress(_req_user_id(request), journey_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /journeys/{journey_id}/progress")
+
+    @app.post("/journeys/{journey_id}/progress")
+    def record_user_journey_progress(journey_id: str, request: Request, payload: JourneyProgressActionRequest):
+        try:
+            return record_progress_action(_req_user_id(request), journey_id, payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /journeys/{journey_id}/progress")
 
     @app.get("/mission/options")
     def get_mission_options(request: Request):

@@ -30,6 +30,8 @@ def _default_mission(user_id: str) -> Dict[str, Any]:
         "title": "UPSC Selection Mission",
         "target_date": _default_target_date(),
         "status": "active",
+        "icon": "🎯",
+        "category": "General",
         "weights": {
             "study": 30,
             "revision": 30,
@@ -305,6 +307,8 @@ def upsert_mission(
     title: str,
     target_date: str,
     status: str,
+    icon: str | None = None,
+    category: str | None = None,
     weights: Dict[str, Any] | None,
     targets: Dict[str, Any] | None,
     plan: Dict[str, Any] | None,
@@ -317,6 +321,8 @@ def upsert_mission(
     next_status = (status or "").strip().lower() or mission.get("status") or "active"
     if next_status not in {"active", "paused"}:
         next_status = "active"
+    next_icon = (icon or "").strip() or mission.get("icon") or "🎯"
+    next_category = (category or "").strip() or mission.get("category") or "General"
 
     next_weights = _normalize_weights(weights if weights is not None else mission.get("weights"))
     next_targets = _normalize_targets(targets if targets is not None else mission.get("targets"))
@@ -328,6 +334,8 @@ def upsert_mission(
         "title": next_title,
         "target_date": next_target_date,
         "status": next_status,
+        "icon": next_icon,
+        "category": next_category,
         "weights": next_weights,
         "targets": next_targets,
         "plan": next_plan,

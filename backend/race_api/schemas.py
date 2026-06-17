@@ -188,9 +188,32 @@ class MissionUpsertRequest(BaseModel):
     title: str = ""
     target_date: str = ""
     status: str = "active"
+    icon: str = ""
+    category: str = ""
     weights: dict = {}
     targets: dict | None = None
     plan: dict = {}
+
+
+class JourneyCreateRequest(BaseModel):
+    title: str
+    target_date: str = ""
+    plan: dict = {}
+
+
+class JourneyUpdateRequest(BaseModel):
+    title: str | None = None
+    target_date: str | None = None
+    status: str | None = None
+    plan: dict | None = None
+
+
+class JourneyProgressActionRequest(BaseModel):
+    node_id: str
+    node_label: str = ""
+    counter_key: str
+    occurrence: int
+    action: str
 
 
 class AgentV2CreateRequest(BaseModel):
