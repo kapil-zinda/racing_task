@@ -1,19 +1,23 @@
 "use client";
 
-export default function NeedsAttention({ mission }) {
-  const leaks = Array.isArray(mission?.leaks) ? mission.leaks : [];
-
+export default function NeedsAttention({ attentionNodes = [] }) {
   return (
     <article className="hub-card hub-attention">
       <h3>⚠ Needs Attention</h3>
-      {leaks.length === 0 ? (
+      {attentionNodes.length === 0 ? (
         <p className="day-state">Nothing slipping right now — keep the rhythm going.</p>
       ) : (
         <div className="attention-list">
-          {leaks.map((leak, idx) => (
-            <div key={`${leak.title}-${idx}`} className={`attention-row attention-${leak.severity}`}>
-              <strong>{leak.title}</strong>
-              <span>{leak.detail}</span>
+          {attentionNodes.map((node, idx) => (
+            <div
+              key={`${node.journeyName}-${node.label}-${idx}`}
+              className={`attention-row attention-${node.neverStarted ? "medium" : node.daysSince > 7 ? "high" : "medium"}`}
+            >
+              <strong>{node.label}</strong>
+              {node.neverStarted
+                ? <span>{node.journeyName} — not started yet</span>
+                : <span>{node.journeyName} — not touched for {node.daysSince} day{node.daysSince !== 1 ? "s" : ""}</span>
+              }
             </div>
           ))}
         </div>

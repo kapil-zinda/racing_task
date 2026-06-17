@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import { buildMissionExecution, buildMissionModel } from "../lib/missionModel";
 import { buildDummyMissionControl, DUMMY_DATA_NOTICE } from "../lib/dummyData";
-import { buildStreaks, buildWeekPulse, buildDailyLeafNodeSeries } from "../lib/journeyInsights";
+import { buildStreaks, buildWeekPulse, buildDailyLeafNodeSeries, buildJourneyActivityByDate, buildJourneyDailySeries, buildJourneyAttentionNodes } from "../lib/journeyInsights";
 import HubTabs from "../components/progress-hub/HubTabs";
 import JourneyTrail from "../components/journey/JourneyTrail";
 import DailyUpdatesChart from "../components/progress-hub/DailyUpdatesChart";
@@ -136,9 +136,29 @@ export default function ProgressHubPage() {
     [missionConfig?.plan, syllabus],
   );
   const mission = useMemo(() => buildMissionModel(planExecution), [planExecution]);
-  const streaks = useMemo(() => buildStreaks(activityByDate), [activityByDate]);
-  const weekPulse = useMemo(() => buildWeekPulse(activityByDate), [activityByDate]);
-  const dailyUpdates = useMemo(() => buildDailyLeafNodeSeries(planExecution), [planExecution]);
+
+  const journeyActivityByDate = useMemo(
+    () => buildJourneyActivityByDate(journeys, progressByJourney),
+    [journeys, progressByJourney],
+  );
+  const mergedActivityByDate = useMemo(() => {
+    const merged = { ...activityByDate };
+    Object.entries(journeyActivityByDate).forEach(([date, counts]) => {
+      merged[date] = { ...(merged[date] || {}), ...counts };
+    });
+    return merged;
+  }, [activityByDate, journeyActivityByDate]);
+
+  const streaks = useMemo(() => buildStreaks(mergedActivityByDate), [mergedActivityByDate]);
+  const weekPulse = useMemo(() => buildWeekPulse(mergedActivityByDate), [mergedActivityByDate]);
+  const journeyDailySeries = useMemo(
+    () => buildJourneyDailySeries(journeys, progressByJourney),
+    [journeys, progressByJourney],
+  );
+  const attentionNodes = useMemo(
+    () => buildJourneyAttentionNodes(journeys, progressByJourney),
+    [journeys, progressByJourney],
+  );
 
   return (
     <main className="app-shell mission-shell">
@@ -173,11 +193,11 @@ export default function ProgressHubPage() {
           </div>
           <WeekPulse weekPulse={weekPulse} />
           <div className="hub-span-2">
-            <DailyUpdatesChart series={dailyUpdates} />
+            <DailyUpdatesChart series={journeyDailySeries} />
           </div>
-          <NeedsAttention mission={mission} />
+          <NeedsAttention attentionNodes={attentionNodes} />
           <div className="hub-span-3">
-            <ContributionCalendar activityByDate={activityByDate} streaks={streaks} />
+            <ContributionCalendar activityByDate={mergedActivityByDate} streaks={streaks} />
           </div>
           <div className="hub-span-3">
             <JourneyTrail dimensions={planExecution.dimensions || []} />

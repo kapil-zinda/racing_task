@@ -29,8 +29,13 @@ function completionDates(nodeId, completions) {
 
 function JourneySection({ journey, completions }) {
   const structure = ensureNodeIds(journey?.plan?.structure || []);
-  const tasks = collectLeafTasks(structure);
+  const allTasks = collectLeafTasks(structure);
   const doneSet = buildDoneSet(completions);
+  const tasks = allTasks.filter(({ leaf, ancestors }) => {
+    const effectiveCounters = getEffectiveCounters(leaf, ancestors);
+    const { total } = leafProgress(leaf.id, effectiveCounters, doneSet);
+    return total > 0;
+  });
 
   return (
     <details className="syllabus-exam" open>
