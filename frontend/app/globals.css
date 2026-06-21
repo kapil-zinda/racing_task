@@ -5346,3 +5346,10 @@ button:hover {
   border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); color: #eaf0ff; cursor: pointer; }
 .ae-history-item:hover { border-color: rgba(114,221,247,0.5); }
 .ae-hist-meta { color: var(--muted); font-size: 13px; }
+
+.ae-tabs { margin-bottom: 16px; }
+.ae-back { margin-bottom: 14px; font-size: 13px; }
+
+.ae-hist-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ae-hist-date { font-size: 11px; color: var(--muted); }
+.ae-history-item { align-items: center; }
