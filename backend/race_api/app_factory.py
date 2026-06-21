@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Optional
+
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -197,7 +201,7 @@ def create_app() -> FastAPI:
         return user
 
     @app.get("/state")
-    def get_state(date: str | None = Query(default=None)):
+    def get_state(date: Optional[str] = Query(default=None)):
         try:
             return get_state_payload(date)
         except Exception as err:  # noqa: BLE001
@@ -220,11 +224,11 @@ def create_app() -> FastAPI:
     @app.get("/content/list")
     def content_list(
         request: Request,
-        folder_id: str | None = Query(default=None),
-        q: str | None = Query(default=None),
-        sort_by: str | None = Query(default="name"),
-        sort_dir: str | None = Query(default="asc"),
-        view_mode: str | None = Query(default="all"),
+        folder_id: Optional[str] = Query(default=None),
+        q: Optional[str] = Query(default=None),
+        sort_by: Optional[str] = Query(default="name"),
+        sort_dir: Optional[str] = Query(default="asc"),
+        view_mode: Optional[str] = Query(default="all"),
     ):
         try:
             return list_content(folder_id, q, sort_by, sort_dir, view_mode, user_id=_require_auth(request))
@@ -234,8 +238,8 @@ def create_app() -> FastAPI:
     @app.get("/content/tree")
     def content_tree(
         request: Request,
-        parent_id: str | None = Query(default=None),
-        view_mode: str | None = Query(default="all"),
+        parent_id: Optional[str] = Query(default=None),
+        view_mode: Optional[str] = Query(default="all"),
     ):
         try:
             return list_folder_tree(parent_id, view_mode, user_id=_require_auth(request))
@@ -331,7 +335,7 @@ def create_app() -> FastAPI:
         request: Request,
         q: str = Query(...),
         limit: int = Query(default=20, ge=1, le=100),
-        course: str | None = Query(default=None),
+        course: Optional[str] = Query(default=None),
     ):
         try:
             return search_pdf(q, limit, course, user_id=_require_auth(request))
@@ -470,7 +474,7 @@ def create_app() -> FastAPI:
     @app.get("/agent-v2/context")
     def agent_v2_context(
         request: Request,
-        date: str | None = Query(default=None),
+        date: Optional[str] = Query(default=None),
         lookback_days: int = Query(default=14, ge=1, le=365),
         x_days: int = Query(default=7, ge=1, le=60),
         y_days: int = Query(default=15, ge=1, le=90),
@@ -500,7 +504,7 @@ def create_app() -> FastAPI:
         x_days: int = Query(default=7, ge=1, le=60),
         y_days: int = Query(default=15, ge=1, le=90),
         limit: int = Query(default=200, ge=1, le=1000),
-        reference_date: str | None = Query(default=None),
+        reference_date: Optional[str] = Query(default=None),
     ):
         try:
             return report_revision_gaps_payload(_req_user_id(request), x_days, y_days, limit, reference_date)
@@ -525,8 +529,8 @@ def create_app() -> FastAPI:
     def agent_v2_search_unified(
         request: Request,
         q: str = Query(...),
-        course: str | None = Query(default=None),
-        types: str | None = Query(default=None),
+        course: Optional[str] = Query(default=None),
+        types: Optional[str] = Query(default=None),
         limit: int = Query(default=20, ge=1, le=100),
     ):
         try:
@@ -537,7 +541,7 @@ def create_app() -> FastAPI:
     @app.get("/agent-v2/search/suggest")
     def agent_v2_search_suggest(
         request: Request,
-        q: str | None = Query(default=None),
+        q: Optional[str] = Query(default=None),
         limit: int = Query(default=12, ge=1, le=50),
     ):
         try:
@@ -560,8 +564,8 @@ def create_app() -> FastAPI:
     @app.post("/agent-v2/aggregates/rebuild")
     def agent_v2_rebuild_aggregates(
         request: Request,
-        from_date: str | None = Query(default=None, alias="from"),
-        to_date: str | None = Query(default=None, alias="to"),
+        from_date: Optional[str] = Query(default=None, alias="from"),
+        to_date: Optional[str] = Query(default=None, alias="to"),
     ):
         try:
             return rebuild_daily_aggregates_payload(from_date, to_date, _req_user_id(request) or None)
@@ -569,7 +573,7 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /agent-v2/aggregates/rebuild")
 
     @app.post("/agent-v2/aggregates/refresh")
-    def agent_v2_refresh_aggregates(date: str | None = Query(default=None)):
+    def agent_v2_refresh_aggregates(date: Optional[str] = Query(default=None)):
         try:
             return refresh_daily_aggregates_for_date(date or current_date_str())
         except Exception as err:  # noqa: BLE001
@@ -695,7 +699,7 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /agent-v2/entries/log")
 
     @app.get("/extras")
-    def get_extras(request: Request, date: str | None = Query(default=None)):
+    def get_extras(request: Request, date: Optional[str] = Query(default=None)):
         try:
             return get_extras_payload(_req_user_id(request), date)
         except Exception as err:  # noqa: BLE001
@@ -773,8 +777,8 @@ def create_app() -> FastAPI:
     @app.get("/sessions")
     def list_sessions(
         request: Request,
-        date: str | None = Query(default=None),
-        scope: str | None = Query(default=None),
+        date: Optional[str] = Query(default=None),
+        scope: Optional[str] = Query(default=None),
     ):
         try:
             return list_sessions_payload(date, _req_user_id(request), scope)
@@ -863,7 +867,7 @@ def create_app() -> FastAPI:
 
     # ── Day Activity Tracker ──────────────────────────────────────────────
     @app.get("/tracker/activities")
-    def tracker_get_activities(request: Request, date: str | None = Query(default=None)):
+    def tracker_get_activities(request: Request, date: Optional[str] = Query(default=None)):
         try:
             return {"activities": get_activities(_req_user_id(request), date or "")}
         except Exception as err:

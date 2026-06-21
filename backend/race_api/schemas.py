@@ -1,4 +1,6 @@
-from typing import List
+from __future__ import annotations
+
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -175,7 +177,7 @@ class MissionUpsertRequest(BaseModel):
     icon: str = ""
     category: str = ""
     weights: dict = {}
-    targets: dict | None = None
+    targets: Optional[dict] = None
     plan: dict = {}
 
 
@@ -186,10 +188,10 @@ class JourneyCreateRequest(BaseModel):
 
 
 class JourneyUpdateRequest(BaseModel):
-    title: str | None = None
-    target_date: str | None = None
-    status: str | None = None
-    plan: dict | None = None
+    title: Optional[str] = None
+    target_date: Optional[str] = None
+    status: Optional[str] = None
+    plan: Optional[dict] = None
 
 
 class JourneyProgressActionRequest(BaseModel):
@@ -265,4 +267,3 @@ class ActivityUpsertRequest(BaseModel):
 class ActivityCategoryRequest(BaseModel):
     name: str
     color: str = "#6366f1"
-
