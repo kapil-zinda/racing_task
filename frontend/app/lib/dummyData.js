@@ -31,6 +31,63 @@ export function buildDummyMission() {
   };
 }
 
+export function buildDummyJourneys() {
+  return [
+    {
+      id: "dummy-1",
+      title: "UPSC Selection Mission",
+      target_date: daysAgo(-180),
+      status: "active",
+      icon: "🎯",
+      category: "General",
+      plan: {
+        structure: [
+          {
+            label: "GS Foundation",
+            children: [
+              {
+                label: "Polity",
+                children: [],
+                counters: [
+                  { key: "Study", count: 1 },
+                  { key: "Revision", count: 4 },
+                  { key: "Test", count: 2 },
+                ],
+              },
+              {
+                label: "History",
+                children: [],
+                counters: [
+                  { key: "Study", count: 1 },
+                  { key: "Revision", count: 3 },
+                ],
+              },
+            ],
+          },
+          {
+            label: "Books",
+            children: [
+              {
+                label: "Laxmikanth",
+                children: [],
+                counters: [
+                  { key: "Study", count: 1 },
+                  { key: "Revision", count: 2 },
+                ],
+              },
+            ],
+          },
+          {
+            label: "Current Affairs",
+            children: [],
+            counters: [{ key: "Study", count: 5 }],
+          },
+        ],
+      },
+    },
+  ];
+}
+
 export function buildDummySyllabus() {
   return {
     exams: [

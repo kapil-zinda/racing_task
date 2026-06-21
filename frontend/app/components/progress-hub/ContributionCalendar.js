@@ -5,7 +5,7 @@ import { buildContributionCalendar, heatLevelFor } from "../../lib/journeyInsigh
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DOW_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
 
-export default function ContributionCalendar({ activityByDate, weeks = 14, streaks }) {
+export default function ContributionCalendar({ activityByDate, weeks = 35, streaks }) {
   const columns = buildContributionCalendar(activityByDate, weeks);
 
   let lastMonth = -1;

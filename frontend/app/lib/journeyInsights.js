@@ -1,9 +1,95 @@
-import { toIsoDate } from "./dateUtils";
+import { toIsoDate, daysSince } from "./dateUtils";
 import { dimensionCompletion } from "./missionModel";
+import { ensureNodeIds } from "../components/journey/journeyTreeOps";
 
 function dayTotal(activityByDate, date) {
   const a = (activityByDate || {})[date] || {};
-  return Number(a.study || 0) + Number(a.revision || 0) + Number(a.practice || 0);
+  return Number(a.study || 0) + Number(a.revision || 0) + Number(a.practice || 0) + Number(a.journey || 0);
+}
+
+function collectLeafNodes(nodes, journeyName, result = [], ancestors = []) {
+  (nodes || []).forEach((node) => {
+    if (!node.children || node.children.length === 0) {
+      const counterMap = new Map();
+      [...ancestors, node].forEach((n) => {
+        (n.counters || []).forEach((c) => counterMap.set(c.key, Number(c.count || 0)));
+      });
+      const totalOccurrences = Array.from(counterMap.values()).reduce((sum, v) => sum + v, 0);
+      result.push({ nodeId: node.id, label: node.label, journeyName, totalOccurrences });
+    } else {
+      collectLeafNodes(node.children, journeyName, result, [...ancestors, node]);
+    }
+  });
+  return result;
+}
+
+export function buildJourneyActivityByDate(journeys, progressByJourney) {
+  const byDate = {};
+  Object.values(progressByJourney || {}).forEach((completions) => {
+    (completions || []).forEach((c) => {
+      if (!c.updated_at) return;
+      const date = String(c.updated_at).slice(0, 10);
+      if (!date) return;
+      if (!byDate[date]) byDate[date] = { journey: 0 };
+      byDate[date].journey += 1;
+    });
+  });
+  return byDate;
+}
+
+export function buildJourneyDailySeries(journeys, progressByJourney, lookbackDays = 90) {
+  const byDate = new Map();
+  Object.entries(progressByJourney || {}).forEach(([, completions]) => {
+    (completions || []).forEach((c) => {
+      if (!c.updated_at || !c.node_id) return;
+      const date = String(c.updated_at).slice(0, 10);
+      if (!date) return;
+      if (!byDate.has(date)) byDate.set(date, new Set());
+      byDate.get(date).add(c.node_id);
+    });
+  });
+
+  const today = new Date();
+  const dates = [];
+  const counts = [];
+  for (let i = lookbackDays - 1; i >= 0; i -= 1) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const iso = toIsoDate(d);
+    dates.push(iso);
+    counts.push(byDate.has(iso) ? byDate.get(iso).size : 0);
+  }
+  return { dates, counts };
+}
+
+export function buildJourneyAttentionNodes(journeys, progressByJourney) {
+  const list = [];
+  (journeys || []).forEach((journey) => {
+    const treeNodes = ensureNodeIds(Array.isArray(journey.plan?.structure) ? journey.plan.structure : []);
+    const leaves = collectLeafNodes(treeNodes, journey.title || journey.id);
+    const completions = progressByJourney?.[journey.id] || [];
+
+    leaves.forEach(({ nodeId, label, journeyName, totalOccurrences }) => {
+      if (totalOccurrences === 0) return;
+      const nodeCompletions = completions.filter((c) => c.node_id === nodeId);
+      if (nodeCompletions.length === 0) {
+        list.push({ journeyName, label, lastTouched: null, daysSince: null, neverStarted: true });
+        return;
+      }
+      const lastTouched = nodeCompletions.reduce((best, c) => {
+        if (!c.updated_at) return best;
+        return !best || c.updated_at > best ? c.updated_at : best;
+      }, null);
+      const ds = daysSince(lastTouched);
+      if (ds >= 4) list.push({ journeyName, label, lastTouched, daysSince: ds, neverStarted: false });
+    });
+  });
+  return list
+    .sort((a, b) => {
+      if (a.neverStarted !== b.neverStarted) return a.neverStarted ? 1 : -1;
+      return (b.daysSince || 0) - (a.daysSince || 0);
+    })
+    .slice(0, 8);
 }
 
 // Current streak = consecutive active days ending today; longest = best run in the window.
@@ -82,6 +168,46 @@ export function buildContributionCalendar(activityByDate, weeks = 14) {
     columns.push(col);
   }
   return columns.slice(-weeks);
+}
+
+// Daily count of DISTINCT leaf nodes (topics + test slots) updated on each date.
+// Returns a continuous daily series over the last `lookbackDays` so the line reads as time.
+export function buildDailyLeafNodeSeries(planExecution, lookbackDays = 90) {
+  const topics = Array.isArray(planExecution?.missionTopics) ? planExecution.missionTopics : [];
+  const tests = Array.isArray(planExecution?.missionTestSlots) ? planExecution.missionTestSlots : [];
+
+  // date -> Set of leaf-node keys touched that day
+  const byDate = new Map();
+  const touch = (dateStr, nodeKey) => {
+    if (!dateStr || !nodeKey) return;
+    const d = String(dateStr).slice(0, 10);
+    if (!d) return;
+    if (!byDate.has(d)) byDate.set(d, new Set());
+    byDate.get(d).add(nodeKey);
+  };
+
+  topics.forEach((t) => {
+    touch(t.classDate, t.key);
+    (Array.isArray(t.revisionDates) ? t.revisionDates : []).forEach((d) => touch(d, t.key));
+  });
+  tests.forEach((t) => {
+    const key = `test||${t.source}||${t.testName}||${t.testNumber}`;
+    touch(t.testGivenDate, key);
+    touch(t.revisionDate, key);
+    touch(t.secondRevisionDate, key);
+  });
+
+  const today = new Date();
+  const dates = [];
+  const counts = [];
+  for (let i = lookbackDays - 1; i >= 0; i -= 1) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const iso = toIsoDate(d);
+    dates.push(iso);
+    counts.push(byDate.has(iso) ? byDate.get(iso).size : 0);
+  }
+  return { dates, counts };
 }
 
 export function heatLevelFor(total) {

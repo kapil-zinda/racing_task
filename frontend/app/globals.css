@@ -3123,6 +3123,8 @@ button:hover {
 
 .mission-shell {
   max-width: 1240px;
+  min-height: 100vh;
+  background: linear-gradient(160deg, #FFF6F0, #FDEEF6, #F0F1FF);
   --text: #3D2C4E;
   --muted: #7A6A8C;
   --card: #FFFFFF;
@@ -3363,6 +3365,21 @@ body:has(.mission-shell) {
 .mission-shell .journey-trajectory-falling-behind {
   background: rgba(255, 107, 107, 0.22);
   color: #B23A3A;
+}
+
+.mission-shell .journey-hero-icon {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(170, 120, 160, 0.2);
+}
+
+.mission-shell .journey-stat-paused {
+  background: rgba(170, 120, 160, 0.1);
+  border-color: rgba(170, 120, 160, 0.18);
+  color: #6B5B7C;
+}
+
+.mission-shell .journey-streak-banner {
+  color: #8A6300;
 }
 
 /* -- Today's Move -- */
@@ -4191,6 +4208,68 @@ body:has(.mission-shell) {
 
 .area-add-btn:hover {
   background: rgba(114, 221, 247, 0.12);
+}
+
+/* ── Journey tree builder ─── */
+.tree-builder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tree-builder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tree-builder-depth {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tree-builder-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.tree-builder-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.tree-builder-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tree-builder-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tree-builder-btn.danger:hover {
+  background: rgba(248, 113, 113, 0.18);
+  border-color: rgba(248, 113, 113, 0.4);
 }
 
 .area-form {
@@ -5771,8 +5850,28 @@ body:has(.mission-shell) {
   margin-top: 2px;
 }
 
+/* -- Journey list -- */
+.journey-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.journey-list .journey-hero-card {
+  margin-top: 0;
+}
+
+.journey-streak-banner {
+  margin: 20px 0 0;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
 /* -- Journey hero -- */
 .journey-hero-card {
+  position: relative;
   margin-top: 20px;
   display: flex;
   align-items: center;
@@ -5782,6 +5881,65 @@ body:has(.mission-shell) {
   border-radius: 22px;
   padding: 22px;
   animation: rise 0.85s ease;
+}
+
+.journey-hero-icon {
+  flex-shrink: 0;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.journey-hero-menu {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.journey-hero-menu .menu-dropdown {
+  right: 0;
+  left: auto;
+}
+
+.mission-shell .journey-hero-menu .ellipsis-btn {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(170, 120, 160, 0.25);
+  color: #3D2C4E;
+}
+
+.mission-shell .journey-hero-menu .ellipsis-btn:hover {
+  background: rgba(170, 120, 160, 0.14);
+  border-color: rgba(170, 120, 160, 0.4);
+}
+
+.mission-shell .menu-dropdown {
+  background: linear-gradient(160deg, #FFFFFF, #FFF6FB);
+  border-color: rgba(170, 120, 160, 0.25);
+  box-shadow: 0 16px 28px rgba(170, 120, 160, 0.18);
+}
+
+.mission-shell .menu-item {
+  color: #3D2C4E;
+}
+
+.mission-shell .menu-item:hover {
+  border-color: rgba(114, 221, 247, 0.5);
+  background: rgba(114, 221, 247, 0.16);
+}
+
+.menu-item.danger {
+  color: #ff7b72;
+}
+
+.menu-item.danger:hover {
+  border-color: rgba(255, 123, 114, 0.6);
+  background: rgba(255, 123, 114, 0.14);
 }
 
 .journey-hero-body {
@@ -5820,6 +5978,12 @@ body:has(.mission-shell) {
   color: #ffe2a3;
 }
 
+.journey-stat-paused {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #c7c7d1;
+}
+
 .journey-trajectory-closer-to-goal {
   background: rgba(128, 237, 153, 0.16);
   border-color: rgba(128, 237, 153, 0.4);
@@ -5853,6 +6017,436 @@ body:has(.mission-shell) {
   }
   .journey-hero-stats {
     justify-content: center;
+  }
+  .journey-hero-menu .menu-dropdown {
+    position: fixed;
+    top: auto;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    min-width: 0;
+  }
+}
+
+/* -- Journey card click-through -- */
+.journey-hero-card.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.journey-hero-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(114, 221, 247, 0.18);
+}
+
+/* -- Journey tree view (org chart) -- */
+.journey-tree-section {
+  margin-top: 24px;
+}
+
+.journey-tree-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.journey-tree-toolbar h2 {
+  margin: 0;
+  font-family: var(--font-bebas), sans-serif;
+  font-size: clamp(20px, 3vw, 28px);
+  letter-spacing: 0.04em;
+}
+
+.journey-back-link {
+  margin-top: 12px;
+  align-self: flex-start;
+}
+
+.journey-org-chart-wrap {
+  overflow: auto;
+  max-width: 100%;
+  padding: 28px 16px 40px;
+}
+
+.org-chart,
+.org-chart ul {
+  display: flex;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.org-chart {
+  width: max-content;
+  min-width: 100%;
+  margin: 0 auto;
+}
+
+.org-chart ul {
+  padding-top: 28px;
+}
+
+.org-chart li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  position: relative;
+  padding: 28px 10px 0;
+}
+
+/* horizontal connector to the left + right of each node, vertical drop into the node */
+.org-chart li::before,
+.org-chart li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 28px;
+  border-top: 2px solid var(--card-border);
+}
+
+.org-chart li::before {
+  right: 50%;
+}
+
+.org-chart li::after {
+  left: 50%;
+  border-left: 2px solid var(--card-border);
+}
+
+.org-chart li:first-child::before,
+.org-chart li:last-child::after {
+  border-top: none;
+}
+
+.org-chart li:last-child::before {
+  border-right: 2px solid var(--card-border);
+}
+
+/* only child: straight drop, no sideways connector */
+.org-chart li:only-child {
+  padding-top: 0;
+}
+
+.org-chart li:only-child::before,
+.org-chart li:only-child::after {
+  display: none;
+}
+
+/* vertical trunk line from a node down to its children row */
+.org-chart ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 28px;
+  border-left: 2px solid var(--card-border);
+}
+
+/* the journey-root node has no incoming connector */
+.org-chart.org-chart-root {
+  padding-top: 0;
+}
+
+.org-chart.org-chart-root::before {
+  display: none;
+}
+
+.org-chart.org-chart-root > li {
+  padding-top: 0;
+}
+
+.org-chart.org-chart-root > li::before,
+.org-chart.org-chart-root > li::after {
+  display: none;
+}
+
+.org-node {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+}
+
+.org-node-root {
+  background: linear-gradient(145deg, rgba(114, 221, 247, 0.9), rgba(128, 237, 153, 0.55));
+  border-color: rgba(114, 221, 247, 0.5);
+  color: #10212a;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 14px 22px;
+}
+
+.org-node-collapsed > .org-node {
+  border-style: dashed;
+}
+
+.org-node-toggle {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.org-node-label {
+  white-space: normal;
+  max-width: 220px;
+  text-align: left;
+}
+
+.org-node-menu {
+  position: relative;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+}
+
+.org-node-menu .ellipsis-btn {
+  width: 22px;
+  height: 22px;
+  font-size: 14px;
+}
+
+.mission-shell .org-node .ellipsis-btn {
+  background: rgba(170, 120, 160, 0.1);
+  border-color: rgba(170, 120, 160, 0.25);
+  color: #3D2C4E;
+}
+
+.mission-shell .org-node .ellipsis-btn:hover {
+  background: rgba(170, 120, 160, 0.18);
+  border-color: rgba(170, 120, 160, 0.4);
+}
+
+.org-node-menu .menu-dropdown {
+  left: auto;
+  right: 0;
+  top: calc(100% + 6px);
+}
+
+/* rendered via portal to document.body, so it's outside .mission-shell —
+   give it its own self-contained light theme instead of relying on that ancestor */
+.org-node-dropdown {
+  background: linear-gradient(160deg, #ffffff, #fff6fb);
+  border-color: rgba(170, 120, 160, 0.25);
+  box-shadow: 0 16px 28px rgba(170, 120, 160, 0.18);
+}
+
+.org-node-dropdown .menu-item {
+  color: #3D2C4E;
+}
+
+.org-node-dropdown .menu-item:hover {
+  border-color: rgba(114, 221, 247, 0.5);
+  background: rgba(114, 221, 247, 0.16);
+}
+
+.org-node-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.org-node-counter-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(114, 221, 247, 0.16);
+  border: 1px solid rgba(114, 221, 247, 0.35);
+  color: #3D2C4E;
+  white-space: nowrap;
+}
+
+/* Progress Hub — Updates tab */
+.org-node-progress-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(120, 214, 168, 0.18);
+  border: 1px solid rgba(120, 214, 168, 0.45);
+  color: #1f5c3d;
+  white-space: nowrap;
+}
+
+.progress-occurrence-menu {
+  padding: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.progress-occurrence-menu-title {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #3D2C4E;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  margin-bottom: 4px;
+}
+
+.progress-occurrence-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: #6b6b6b;
+}
+
+.progress-entry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.progress-entry-row.is-done {
+  background: rgba(120, 214, 168, 0.14);
+}
+
+.progress-entry-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #3D2C4E;
+}
+
+.progress-entry-count {
+  font-weight: 700;
+  color: #6b6b6b;
+  font-size: 12px;
+}
+
+.progress-entry-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-entry-btn {
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 9px;
+  cursor: pointer;
+  line-height: 1.4;
+  color: #3D2C4E;
+}
+
+.progress-entry-btn.done {
+  background: rgba(120, 214, 168, 0.22);
+  border-color: rgba(120, 214, 168, 0.5);
+  color: #1f5c3d;
+}
+
+.progress-entry-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.org-node-progress-badge:not(.has-progress) {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #6b6b6b;
+}
+
+.progress-updates-panel .journey-list {
+  margin-top: 14px;
+}
+
+.counter-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.counter-manage-row {
+  display: grid;
+  grid-template-columns: 1fr 90px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.counter-manage-key {
+  font-weight: 700;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counter-manage-row.inherited {
+  opacity: 0.65;
+}
+
+.counter-manage-row.inherited .counter-manage-key {
+  font-weight: 600;
+}
+
+.counter-inherited-tag {
+  font-size: 11px;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted, #9aa0a6);
+  justify-self: center;
+}
+
+.counter-add-row {
+  display: grid;
+  grid-template-columns: 1fr 90px auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 740px) {
+  .journey-org-chart-wrap {
+    max-height: 70vh;
+  }
+  .org-node-label {
+    max-width: 140px;
+  }
+  .counter-manage-row,
+  .counter-add-row {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -5987,6 +6581,7 @@ body:has(.mission-shell) {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   margin-top: 36px;
   padding: 40px 8px 24px;
@@ -6434,12 +7029,12 @@ body:has(.mission-shell) {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.cal-cell.level-1 { background: rgba(114, 221, 247, 0.28); }
-.cal-cell.level-2 { background: rgba(114, 221, 247, 0.5); }
-.cal-cell.level-3 { background: rgba(128, 237, 153, 0.65); }
+.cal-cell.level-1 { background: #9be9a8; }
+.cal-cell.level-2 { background: #40c463; }
+.cal-cell.level-3 { background: #30a14e; }
 .cal-cell.level-4 {
-  background: rgba(128, 237, 153, 0.95);
-  box-shadow: 0 0 6px rgba(128, 237, 153, 0.6);
+  background: #216e39;
+  box-shadow: 0 0 6px rgba(33, 110, 57, 0.55);
 }
 .cal-cell.level-future {
   background: transparent;

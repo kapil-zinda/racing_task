@@ -50,3 +50,4 @@ backend/python/
 .idea/
 *.swp
 *.swo
+.gstack/
