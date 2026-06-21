@@ -8,6 +8,8 @@ import { useAuth } from "../lib/auth";
 const NAV_ITEMS = [
   { key: "home", label: "Home", href: "/", icon: "🏠" },
   { key: "recorder", label: "Recorder", href: "/recorder", icon: "🎙️" },
+  { key: "interview", label: "Interview", href: "/interview", icon: "🧑‍⚖️" },
+  { key: "answer-eval", label: "Answer Eval", href: "/answer-eval", icon: "📝" },
   { key: "syllabus", label: "Syllabus", href: "/syllabus", icon: "📘" },
   { key: "mission", label: "Mission", href: "/mission", icon: "🎯" },
   { key: "qna", label: "QnA", href: "/qna", icon: "💬" },

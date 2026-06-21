@@ -13,4 +13,8 @@ def lambda_handler(event, context):
         from race_api.session_domain import reap_stale_sessions
 
         return reap_stale_sessions()
+    if isinstance(event, dict) and event.get("task") == "evaluate_answer":
+        from race_api.answer_eval_domain import run_evaluate_answer_task
+
+        return run_evaluate_answer_task(event)
     return handler(event, context)

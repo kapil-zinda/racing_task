@@ -64,6 +64,8 @@ def settings() -> Dict[str, Any]:
         "mongodb_agent_v2_messages_collection": os.getenv("MONGODB_AGENT_V2_MESSAGES_COLLECTION", "agent_v2_messages"),
         "mongodb_agent_v2_memory_collection": os.getenv("MONGODB_AGENT_V2_MEMORY_COLLECTION", "agent_v2_memory"),
         "mongodb_agent_v2_nudges_collection": os.getenv("MONGODB_AGENT_V2_NUDGES_COLLECTION", "agent_v2_nudges"),
+        "mongodb_interview_sessions_collection": os.getenv("MONGODB_INTERVIEW_SESSIONS_COLLECTION", "interview_sessions"),
+        "mongodb_answer_evaluations_collection": os.getenv("MONGODB_ANSWER_EVALUATIONS_COLLECTION", "answer_evaluations"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
         "aws_region": os.getenv("AWS_REGION", "ap-south-1"),
         "recording_bucket": os.getenv("RECORDING_BUCKET", ""),
@@ -126,6 +128,16 @@ def sessions_collection():
 def events_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_events_collection"]]
+
+
+def interview_sessions_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_interview_sessions_collection"]]
+
+
+def answer_evaluations_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_answer_evaluations_collection"]]
 
 
 def pdf_docs_collection():

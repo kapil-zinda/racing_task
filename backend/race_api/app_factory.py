@@ -24,7 +24,19 @@ from .content_domain import (
     preview_by_id,
     rename_item,
 )
+from .answer_eval_domain import (
+    evaluate_answer_payload,
+    get_answer_eval_payload,
+    list_answer_evals_payload,
+    presign_answer_upload_payload,
+)
 from .extras_domain import get_extras_payload, save_extras_payload
+from .interview_domain import (
+    finalize_report_payload,
+    get_interview_payload,
+    start_interview_payload,
+    submit_answer_payload,
+)
 from .activity_tracker_domain import (
     create_activity,
     create_category,
@@ -87,9 +99,13 @@ from .schemas import (
     ContentPresignUploadRequest,
     ContentRenameRequest,
     ContentMoveRequest,
+    AnswerEvalEvaluateRequest,
+    AnswerEvalPresignRequest,
     ChunkConcatRequest,
     ChunkPresignRequest,
     CreateSessionRequest,
+    InterviewAnswerRequest,
+    InterviewStartRequest,
     SessionNotesRequest,
     ExtrasUpsertRequest,
     MultipartAbortRequest,
@@ -872,6 +888,70 @@ def create_app() -> FastAPI:
             return record_session_heartbeat_payload(session_id)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /sessions/{id}/heartbeat")
+
+    # ── UPSC mock interview (virtual panel) ───────────────────────────────
+    @app.post("/interview/start")
+    def interview_start(request: Request, payload: InterviewStartRequest):
+        try:
+            return start_interview_payload(_req_user_id(request), payload.daf)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /interview/start")
+
+    @app.post("/interview/{session_id}/answer")
+    def interview_answer(session_id: str, payload: InterviewAnswerRequest):
+        try:
+            return submit_answer_payload(
+                session_id,
+                text=payload.text,
+                audio_base64=payload.audio_base64,
+                audio_mime_type=payload.audio_mime_type,
+                latency_ms=payload.latency_ms,
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /interview/{id}/answer")
+
+    @app.post("/interview/{session_id}/report")
+    def interview_report(session_id: str):
+        try:
+            return finalize_report_payload(session_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /interview/{id}/report")
+
+    @app.get("/interview/{session_id}")
+    def interview_get(session_id: str):
+        try:
+            return get_interview_payload(session_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /interview/{id}")
+
+    # ── UPSC Mains answer evaluation ──────────────────────────────────────
+    @app.post("/answer-eval/presign")
+    def answer_eval_presign(request: Request, payload: AnswerEvalPresignRequest):
+        try:
+            return presign_answer_upload_payload(_req_user_id(request), payload.filename, payload.content_type)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /answer-eval/presign")
+
+    @app.post("/answer-eval/{eval_id}/evaluate")
+    def answer_eval_evaluate(eval_id: str, payload: AnswerEvalEvaluateRequest):
+        try:
+            return evaluate_answer_payload(eval_id, payload.question, payload.max_marks)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /answer-eval/{id}/evaluate")
+
+    @app.get("/answer-eval/{eval_id}")
+    def answer_eval_get(eval_id: str):
+        try:
+            return get_answer_eval_payload(eval_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /answer-eval/{id}")
+
+    @app.get("/answer-eval")
+    def answer_eval_list(request: Request):
+        try:
+            return list_answer_evals_payload(_req_user_id(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /answer-eval")
 
     # ── Day Activity Tracker ──────────────────────────────────────────────
     @app.get("/tracker/activities")

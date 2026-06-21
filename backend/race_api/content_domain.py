@@ -834,6 +834,15 @@ def move_item(item_id: str, item_type: str, destination_folder_id: str, scope: s
     return {"message": "Folder moved", "item": _folder_node(folders.find_one({"_id": iid}))}
 
 
+def _download_disposition(name: str) -> str:
+    """Content-Disposition that forces the browser to save (not open) the file.
+    Cross-origin S3 URLs ignore the HTML download attribute, so the header is the
+    only reliable way to download instead of redirecting/opening in a tab."""
+    safe = (name or "download").strip() or "download"
+    safe = safe.replace("\\", "").replace('"', "").replace("\r", "").replace("\n", "")
+    return f'attachment; filename="{safe}"'
+
+
 def download_item(item_id: str, item_type: str, recursive: bool = True, user_id: str = "") -> Dict[str, Any]:
     _ensure_indexes()
     iid = (item_id or "").strip()
@@ -855,7 +864,11 @@ def download_item(item_id: str, item_type: str, recursive: bool = True, user_id:
         if not key:
             raise ValueError("File key is missing")
         file_bucket = str(doc.get("bucket", "") or "").strip() or _bucket()
-        url = s3.generate_presigned_url("get_object", Params={"Bucket": file_bucket, "Key": key}, ExpiresIn=expires)
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": file_bucket, "Key": key, "ResponseContentDisposition": _download_disposition(doc.get("name", ""))},
+            ExpiresIn=expires,
+        )
         return {"type": "file", "file": _file_node(doc), "download_url": url, "expires_in": expires}
 
     folder = folders.find_one({"_id": iid})
@@ -889,7 +902,11 @@ def download_item(item_id: str, item_type: str, recursive: bool = True, user_id:
         if base_name:
             rel_path = f"{base_name}/{rel_path}".strip("/")
         file_bucket = str(fdoc.get("bucket", "") or "").strip() or _bucket()
-        url = s3.generate_presigned_url("get_object", Params={"Bucket": file_bucket, "Key": key}, ExpiresIn=expires)
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": file_bucket, "Key": key, "ResponseContentDisposition": _download_disposition(fdoc.get("name", ""))},
+            ExpiresIn=expires,
+        )
         downloads.append({
             "file_id": fdoc.get("_id"),
             "name": fdoc.get("name", ""),

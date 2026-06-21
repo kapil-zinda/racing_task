@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -70,6 +70,27 @@ class MultipartCompleteRequest(BaseModel):
 class MultipartAbortRequest(BaseModel):
     media_type: str  # audio | video | screen | attachment
     upload_id: str
+
+
+class InterviewStartRequest(BaseModel):
+    daf: Optional[dict] = None
+
+
+class AnswerEvalPresignRequest(BaseModel):
+    filename: str = "answer.pdf"
+    content_type: str = "application/pdf"
+
+
+class AnswerEvalEvaluateRequest(BaseModel):
+    question: str = ""
+    max_marks: int = 0
+
+
+class InterviewAnswerRequest(BaseModel):
+    text: str = ""
+    audio_base64: str = ""
+    audio_mime_type: str = "audio/webm"
+    latency_ms: int = 0
 
 
 class ChunkPresignRequest(BaseModel):
