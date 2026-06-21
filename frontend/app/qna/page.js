@@ -188,9 +188,15 @@ export default function QnaPage() {
         throw new Error(`QnA failed: ${res.status} ${txt}`);
       }
       const data = await res.json();
+      const persistedUserMsg = data.user_message || null;
       const assistantMsg = data.assistant_message || null;
-      if (assistantMsg) {
-        setMessages((prev) => [...prev, assistantMsg]);
+      if (persistedUserMsg || assistantMsg) {
+        setMessages((prev) => {
+          const next = persistedUserMsg
+            ? prev.map((msg) => (msg._id === userMessage._id ? persistedUserMsg : msg))
+            : prev;
+          return assistantMsg ? [...next, assistantMsg] : next;
+        });
       }
       const session = data.session || null;
       if (session?._id) {

@@ -366,16 +366,14 @@ def create_app() -> FastAPI:
     @app.get("/qna/sessions/{session_id}/messages")
     def qna_get_messages(request: Request, session_id: str):
         try:
-            _require_auth(request)
-            return get_qna_messages(session_id)
+            return get_qna_messages(session_id, _require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /qna/sessions/{id}/messages")
 
     @app.post("/qna/ask")
     def qna_ask(request: Request, payload: QnaAskRequest):
         try:
-            _require_auth(request)
-            return ask_qna_in_session(payload.session_id, payload.question, payload.course, payload.limit)
+            return ask_qna_in_session(payload.session_id, payload.question, payload.course, payload.limit, _require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /qna/ask")
 
