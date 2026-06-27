@@ -2,7 +2,7 @@ import "./globals.css";
 import ClientLayout from "./components/ClientLayout";
 
 export const metadata = {
-  title: "Kapil vs Divya Race",
+  title: "SVIAS",
   description: "Milestone reward race app"
 };
 
