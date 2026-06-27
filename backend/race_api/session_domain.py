@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from botocore.exceptions import ClientError
 
@@ -116,7 +118,7 @@ def create_session_payload(payload) -> Dict[str, Any]:
     return {"message": "Session created", "session": doc}
 
 
-def list_sessions_payload(date: str | None, user_id: str | None, scope: str | None = None) -> Dict[str, Any]:
+def list_sessions_payload(date: Optional[str], user_id: Optional[str], scope: Optional[str] = None) -> Dict[str, Any]:
     # Best-effort: clean up this user's abandoned recordings when they reload.
     if (user_id or "").strip():
         try:
@@ -870,7 +872,7 @@ def _finalize_abandoned_session(doc: Dict[str, Any], reason: str) -> None:
     })
 
 
-def reap_stale_sessions(user_id: str | None = None) -> Dict[str, Any]:
+def reap_stale_sessions(user_id: Optional[str] = None) -> Dict[str, Any]:
     """Find recordings stuck active with a stale/missing heartbeat and finalize them.
 
     Runs best-effort on the sessions-list call (so a user's own abandoned session is
@@ -918,7 +920,7 @@ def update_session_notes_payload(session_id_value: str, payload) -> Dict[str, An
 
 
 def create_presigned_playback_url_payload(
-    session_id_value: str, media_type: str, disposition: str | None = None
+    session_id_value: str, media_type: str, disposition: Optional[str] = None
 ) -> Dict[str, Any]:
     if media_type not in MEDIA_TYPES:
         raise ValueError("Invalid media_type")
