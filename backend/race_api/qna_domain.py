@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import json
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pymongo import ASCENDING, DESCENDING
 
@@ -96,11 +98,64 @@ def _extract_answer_text(agent_result: Any) -> str:
     return str(agent_result or "").strip()
 
 
-def _run_grounded_answer(question: str, course: str = "", limit: int = 8, user_id: str = "") -> Dict[str, Any]:
+def _message_text(message: Dict[str, Any], max_chars: int = 500) -> str:
+    text = re.sub(r"\s+", " ", str(message.get("text") or "").strip())
+    if len(text) <= max_chars:
+        return text
+    return f"{text[:max_chars].rstrip()}..."
+
+
+def _conversation_history_text(messages: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    for msg in messages[-12:]:
+        role = str(msg.get("role") or "").strip().lower()
+        if role not in {"user", "assistant"}:
+            continue
+        text = _message_text(msg)
+        if text:
+            lines.append(f"{'User' if role == 'user' else 'Assistant'}: {text}")
+    return "\n".join(lines) if lines else "No prior conversation in this chat."
+
+
+def _retrieval_query(question: str, messages: List[Dict[str, Any]]) -> str:
+    previous_user_questions = [
+        _message_text(msg, max_chars=160)
+        for msg in messages[-6:]
+        if str(msg.get("role") or "").strip().lower() == "user"
+    ]
+    query = " ".join([*previous_user_questions, (question or "").strip()])
+    return re.sub(r"\s+", " ", query).strip()[:1000] or (question or "").strip()
+
+
+def _fallback_title(question: str) -> str:
+    clean = re.sub(r"\s+", " ", (question or "").strip()).strip(" .,:;!?\"'")
+    if not clean:
+        return "Study Chat"
+    title = " ".join(clean.split()[:7])
+    if len(title) > 60:
+        title = title[:60].rsplit(" ", 1)[0].strip() or title[:60].strip()
+    return title or "Study Chat"
+
+
+def _should_update_title(session: Dict[str, Any]) -> bool:
+    title = str(session.get("title") or "").strip().lower()
+    return not title or title == "new chat"
+
+
+def _run_grounded_answer(
+    question: str,
+    course: str = "",
+    limit: int = 8,
+    user_id: str = "",
+    conversation_messages: List[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
     q = (question or "").strip()
     if not q:
         raise ValueError("question is required")
     lim = max(3, min(int(limit or 8), 12))
+    history_messages = conversation_messages or []
+    history_text = _conversation_history_text(history_messages)
+    search_query = _retrieval_query(q, history_messages)
 
     try:
         from langchain.agents import create_agent
@@ -111,7 +166,7 @@ def _run_grounded_answer(question: str, course: str = "", limit: int = 8, user_i
             "LangChain QnA dependencies are missing. Install langchain and langchain-openai in the Lambda layer."
         ) from err
 
-    source_payload = search_pdf(q, lim, course, user_id=user_id)
+    source_payload = search_pdf(search_query, lim, course, user_id=user_id)
     raw_sources = source_payload.get("results", []) or []
     if not raw_sources:
         return {
@@ -120,6 +175,7 @@ def _run_grounded_answer(question: str, course: str = "", limit: int = 8, user_i
             "course": source_payload.get("course", "global"),
             "sources": [],
             "used_source_indices": [],
+            "retrieval_query": search_query,
         }
 
     numbered_sources: List[Dict[str, Any]] = []
@@ -141,12 +197,6 @@ def _run_grounded_answer(question: str, course: str = "", limit: int = 8, user_i
 
     sources_json = json.dumps(numbered_sources, ensure_ascii=True)
 
-    @tool("search_reference_content")
-    def search_reference_content(user_query: str) -> str:
-        """Returns numbered source chunks from indexed study content with links and page numbers."""
-        _ = user_query
-        return sources_json
-
     system_prompt = """
     You are a UPSC preparation buddy who helps the user study from available sources in a clear, conversational, exam-oriented way.
 
@@ -162,23 +212,16 @@ def _run_grounded_answer(question: str, course: str = "", limit: int = 8, user_i
 
     GROUNDING RULE
     - You must answer only from retrieved sources.
+    - Conversation history is only for understanding follow-up questions.
+    - Do not use conversation history as factual source material unless retrieved sources support it.
     - Do not invent facts.
     - Do not add outside knowledge unless it is clearly supported by the retrieved material.
     - If the sources are incomplete, say so honestly and clearly.
 
-    TOOL USAGE
-    - You must call the tool `search_reference_content` before writing the final answer.
-    - Do not stop after one weak search.
-    - Search properly using multiple possible phrasings until you find enough relevant material or can clearly explain what is missing.
-
-    HOW TO SEARCH WELL
-    Whenever the user asks something:
-    1. Search using the user's direct wording.
-    2. Search again using alternate phrasings.
-    3. Search using synonyms, related terms, abbreviations, full forms, official names, and commonly used names.
-    4. For multi-part questions, search each important part separately.
-    5. If results look weak, incomplete, too narrow, or slightly off-topic, search again.
-    6. Prefer enough coverage over rushing into an answer.
+    AVAILABLE SOURCES
+    - The user message will include numbered source chunks retrieved from the user's searchable PDF index.
+    - Use only those numbered source chunks for factual claims.
+    - If the retrieved chunks are weak, incomplete, or off-topic, say what is missing instead of filling gaps.
 
     SEARCH MINDSET
     While searching, think like a sincere UPSC study partner:
@@ -233,7 +276,6 @@ def _run_grounded_answer(question: str, course: str = "", limit: int = 8, user_i
 
     QUALITY CHECK BEFORE FINAL ANSWER
     Before giving the final answer, make sure:
-    - You searched more than one way.
     - You covered the important parts of the question.
     - The answer sounds natural and conversational.
     - The answer is useful for UPSC preparation.
@@ -266,7 +308,14 @@ def _run_grounded_answer(question: str, course: str = "", limit: int = 8, user_i
 
     model = ChatOpenAI(model=_chat_model(), temperature=0)
     agent = create_agent(model=model, tools=[search_reference_content], system_prompt=system_prompt)
-    result = agent.invoke({"messages": [{"role": "user", "content": q}]})
+    user_content = (
+        "Conversation history for context only:\n"
+        f"{history_text}\n\n"
+        "Current user question:\n"
+        f"{q}\n\n"
+        "Answer the current question using only the retrieved sources."
+    )
+    result = agent.invoke({"messages": [{"role": "user", "content": user_content}]})
     content = _extract_answer_text(result)
 
     parsed_answer = content
@@ -302,6 +351,7 @@ def _run_grounded_answer(question: str, course: str = "", limit: int = 8, user_i
         "sources": used_sources,
         "used_source_indices": used_indices,
         "citation_lines": citation_lines,
+        "retrieval_query": search_query,
     }
 
 
@@ -311,11 +361,14 @@ def create_qna_session(user_id: str, title: str = "") -> Dict[str, Any]:
     now = _now()
     sid = _new_session_id()
     clean_title = (title or "").strip() or "New Chat"
+    title_auto_generated = not clean_title or clean_title.lower() == "new chat"
     doc = {
         "_id": sid,
         "doc_type": "qna_session",
         "user_id": uid,
         "title": clean_title,
+        "title_auto_generated": title_auto_generated,
+        "title_source_message_count": 0,
         "last_question": "",
         "message_count": 0,
         "created_at": now,
@@ -336,12 +389,13 @@ def list_qna_sessions(user_id: str) -> Dict[str, Any]:
     return {"sessions": sessions}
 
 
-def get_qna_messages(session_id: str) -> Dict[str, Any]:
+def get_qna_messages(session_id: str, user_id: str) -> Dict[str, Any]:
     _ensure_qna_indexes()
     sid = (session_id or "").strip()
+    uid = _validate_user(user_id)
     if not sid:
         raise ValueError("session_id is required")
-    session = qna_sessions_collection().find_one({"_id": sid, "doc_type": "qna_session"})
+    session = qna_sessions_collection().find_one({"_id": sid, "doc_type": "qna_session", "user_id": uid})
     if not session:
         raise LookupError("QnA session not found")
     messages = list(
@@ -352,17 +406,24 @@ def get_qna_messages(session_id: str) -> Dict[str, Any]:
     return {"session": session, "messages": messages}
 
 
-def ask_qna_in_session(session_id: str, question: str, course: str = "", limit: int = 8) -> Dict[str, Any]:
+def ask_qna_in_session(session_id: str, question: str, course: str = "", limit: int = 8, user_id: str = "") -> Dict[str, Any]:
     _ensure_qna_indexes()
     sid = (session_id or "").strip()
+    uid = _validate_user(user_id)
     if not sid:
         raise ValueError("session_id is required")
-    session = qna_sessions_collection().find_one({"_id": sid, "doc_type": "qna_session"})
+    session = qna_sessions_collection().find_one({"_id": sid, "doc_type": "qna_session", "user_id": uid})
     if not session:
         raise LookupError("QnA session not found")
     q = (question or "").strip()
     if not q:
         raise ValueError("question is required")
+
+    previous_messages = list(
+        qna_messages_collection()
+        .find({"session_id": sid, "doc_type": "qna_message"})
+        .sort("created_at", 1)
+    )
 
     now = _now()
     user_msg = {
@@ -376,8 +437,7 @@ def ask_qna_in_session(session_id: str, question: str, course: str = "", limit: 
     }
     qna_messages_collection().insert_one(user_msg)
 
-    session_user_id = str(session.get("user_id", "") or "").strip()
-    grounded = _run_grounded_answer(q, course, limit, user_id=session_user_id)
+    grounded = _run_grounded_answer(q, course, limit, user_id=uid, conversation_messages=previous_messages)
     assistant_msg = {
         "_id": _new_message_id(),
         "doc_type": "qna_message",
@@ -390,14 +450,17 @@ def ask_qna_in_session(session_id: str, question: str, course: str = "", limit: 
     }
     qna_messages_collection().insert_one(assistant_msg)
 
+    session_set = {
+        "last_question": q,
+        "updated_at": _now(),
+    }
+    if _should_update_title(session):
+        session_set["title"] = _fallback_title(q)
+
     qna_sessions_collection().update_one(
         {"_id": sid},
         {
-            "$set": {
-                "last_question": q,
-                "title": session.get("title") or (q[:60].strip() or "New Chat"),
-                "updated_at": _now(),
-            },
+            "$set": session_set,
             "$inc": {"message_count": 2},
         },
     )

@@ -21,6 +21,19 @@ except ImportError:  # pragma: no cover - runtime packaging concern
 _mongo_client = None
 logger = logging.getLogger("race-api")
 
+# Configure the app logger once. Honour LOG_LEVEL (default INFO). Use our own
+# handler + format and disable propagation so logs appear locally and in
+# CloudWatch (Lambda) without duplicating through the root handler.
+_log_level = (os.environ.get("LOG_LEVEL", "INFO") or "INFO").upper()
+logger.setLevel(getattr(logging, _log_level, logging.INFO))
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s [race-api] %(message)s", "%Y-%m-%d %H:%M:%S")
+    )
+    logger.addHandler(_handler)
+    logger.propagate = False
+
 
 def session_id() -> str:
     return f"session:{uuid.uuid4().hex}"
@@ -51,6 +64,8 @@ def settings() -> Dict[str, Any]:
         "mongodb_agent_v2_messages_collection": os.getenv("MONGODB_AGENT_V2_MESSAGES_COLLECTION", "agent_v2_messages"),
         "mongodb_agent_v2_memory_collection": os.getenv("MONGODB_AGENT_V2_MEMORY_COLLECTION", "agent_v2_memory"),
         "mongodb_agent_v2_nudges_collection": os.getenv("MONGODB_AGENT_V2_NUDGES_COLLECTION", "agent_v2_nudges"),
+        "mongodb_interview_sessions_collection": os.getenv("MONGODB_INTERVIEW_SESSIONS_COLLECTION", "interview_sessions"),
+        "mongodb_answer_evaluations_collection": os.getenv("MONGODB_ANSWER_EVALUATIONS_COLLECTION", "answer_evaluations"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
         "aws_region": os.getenv("AWS_REGION", "ap-south-1"),
         "recording_bucket": os.getenv("RECORDING_BUCKET", ""),
@@ -115,6 +130,16 @@ def sessions_collection():
 def events_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_events_collection"]]
+
+
+def interview_sessions_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_interview_sessions_collection"]]
+
+
+def answer_evaluations_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_answer_evaluations_collection"]]
 
 
 def pdf_docs_collection():

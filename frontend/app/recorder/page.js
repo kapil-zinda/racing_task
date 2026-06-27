@@ -218,6 +218,7 @@ export default function RecorderPage() {
   // Network-loss state: while uploads are failing we buffer chunks, show a blocking
   // overlay, and stop after OFFLINE_MAX_MS if it never recovers.
   const [uploadOffline, setUploadOffline] = useState(false);
+  const [offlineStopped, setOfflineStopped] = useState(false); // popup after auto-stop
   const offlineRef = useRef(false);
   const offlineSinceRef = useRef(0);
   const offlineBufferRef = useRef([]); // [{ mode, seq, blob }]
@@ -1074,6 +1075,34 @@ export default function RecorderPage() {
 
   // Periodic tick while offline: retry the buffered chunks; if they all upload we
   // recover and resume; if we've been offline past the limit, give up and stop.
+  // Short attention beeps (no asset needed) — played when a recording is auto-stopped
+  // due to a prolonged internet outage.
+  const playWarningSound = () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const beep = (start, freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        const t0 = ctx.currentTime + start;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.4);
+      };
+      beep(0, 880);
+      beep(0.45, 660);
+      beep(0.9, 880);
+      setTimeout(() => ctx.close().catch(() => {}), 1700);
+    } catch (_) {}
+  };
+
   const offlineTick = async () => {
     if (offlineTickBusyRef.current) return;
     offlineTickBusyRef.current = true;
@@ -1083,6 +1112,8 @@ export default function RecorderPage() {
         exitOfflineMode(false);
         offlineBufferRef.current = [];
         offlineBytesRef.current = 0;
+        playWarningSound();
+        setOfflineStopped(true);
         await stopSession();
         return;
       }
@@ -1492,6 +1523,7 @@ export default function RecorderPage() {
     offlineBytesRef.current = 0;
     offlinePausedRef.current = false;
     setUploadOffline(false);
+    setOfflineStopped(false);
     const unique = Array.from(new Set(modes || []));
     const screenOnly = unique.includes("screen") && !unique.includes("video");
     console.log("[recorder] initRecorders modes=", unique, "screenOnly=", screenOnly);
@@ -3039,6 +3071,19 @@ export default function RecorderPage() {
             <p className="offline-countdown">
               Will stop &amp; save what we have in <strong>{formatDuration(offlineRemainingSecs)}</strong>
             </p>
+          </div>
+        </div>
+      ) : null}
+      {offlineStopped ? (
+        <div className="offline-overlay">
+          <div className="offline-card">
+            <div className="offline-stop-icon">⚠️</div>
+            <h3 className="offline-title">Recording stopped</h3>
+            <p className="offline-sub">
+              Your internet was down for too long, so the recording was stopped and
+              saved up to the last point that uploaded.
+            </p>
+            <button className="btn-day" onClick={() => setOfflineStopped(false)}>OK</button>
           </div>
         </div>
       ) : null}
