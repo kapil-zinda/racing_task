@@ -17,4 +17,9 @@ def lambda_handler(event, context):
         from race_api.answer_eval_domain import run_evaluate_answer_task
 
         return run_evaluate_answer_task(event)
+    # EventBridge schedule: {"task": "goal_reminders"} fires due reminders + recurring rules.
+    if isinstance(event, dict) and event.get("task") == "goal_reminders":
+        from race_api.goal_schedule_domain import run_due_reminders
+
+        return run_due_reminders()
     return handler(event, context)

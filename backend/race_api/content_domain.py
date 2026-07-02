@@ -8,7 +8,7 @@ from urllib.parse import quote, unquote
 
 from pymongo import ASCENDING
 
-from .context import content_files_collection, content_folders_collection, pdf_docs_collection, s3_client, settings
+from .context import content_files_collection, content_folders_collection, logger, pdf_docs_collection, settings, storage_client
 from .pdf_search_domain import COURSE_OPTIONS, _normalize_course, index_pdf_document
 
 ROOT_FOLDER_ID = "content_root"
@@ -471,6 +471,9 @@ def rename_item(item_id: str, item_type: str, new_name: str, user_id: str = "") 
 
 
 def create_upload_url(folder_id: str, file_name: str, content_type: str, size: int, user_id: str = "") -> Dict[str, Any]:
+    from .storage_domain import assert_storage_available
+
+    assert_storage_available(user_id, int(size or 0))
     _ensure_indexes()
     _ensure_root_folder(user_id)
     uid = (user_id or "").strip()
@@ -513,7 +516,7 @@ def create_upload_url(folder_id: str, file_name: str, content_type: str, size: i
     # Do not bind ContentType in the presigned signature for browser uploads.
     # Browsers may send slightly different Content-Type values, which can cause
     # Signature mismatch / 400 on S3 PUT.
-    url = s3_client().generate_presigned_url(
+    url = storage_client().generate_presigned_url(
         "put_object",
         Params={"Bucket": _bucket(), "Key": s3_key},
         ExpiresIn=3600,
@@ -530,17 +533,25 @@ def complete_upload(file_id: str, etag: str, size: int) -> Dict[str, Any]:
     doc = files.find_one({"_id": fid})
     if not doc:
         raise LookupError("File not found")
+    prev_size = max(int(doc.get("size", 0) or 0), 0)
+    new_size = max(int(size or doc.get("size", 0) or 0), 0)
     files.update_one(
         {"_id": fid},
         {
             "$set": {
                 "etag": (etag or "").strip().strip('"'),
-                "size": max(int(size or doc.get("size", 0) or 0), 0),
+                "size": new_size,
                 "status": "ready",
                 "updated_at": _now(),
             }
         },
     )
+    # Count toward the user's storage quota (delta over any previously-counted size).
+    try:
+        from .storage_domain import incr_storage
+        incr_storage(doc.get("user_id", ""), new_size - prev_size)
+    except Exception:
+        pass
     return {"message": "Upload completed", "file": _file_node(files.find_one({"_id": fid}))}
 
 
@@ -566,7 +577,7 @@ def _copy_object(src_key: str, dst_key: str, src_bucket: str | None = None, dst_
         return
     source_bucket = (src_bucket or "").strip() or _bucket()
     target_bucket = (dst_bucket or "").strip() or _bucket()
-    s3_client().copy_object(
+    storage_client().copy_object(
         Bucket=target_bucket,
         CopySource={"Bucket": source_bucket, "Key": src_key},
         Key=dst_key,
@@ -580,7 +591,7 @@ def _move_object(src_key: str, dst_key: str, src_bucket: str | None = None, dst_
     target_bucket = (dst_bucket or "").strip() or _bucket()
     _copy_object(src_key, dst_key, source_bucket, target_bucket)
     try:
-        s3_client().delete_object(Bucket=source_bucket, Key=src_key)
+        storage_client().delete_object(Bucket=source_bucket, Key=src_key)
     except Exception:  # noqa: BLE001
         pass
 
@@ -855,7 +866,7 @@ def download_item(item_id: str, item_type: str, recursive: bool = True, user_id:
         raise ValueError("id is required")
     files = content_files_collection()
     folders = content_folders_collection()
-    s3 = s3_client()
+    s3 = storage_client()
     expires = 3600
 
     if kind == "file":
@@ -942,7 +953,7 @@ def delete_item(item_id: str, item_type: str, recursive: bool = False, scope: st
 
     files = content_files_collection()
     folders = content_folders_collection()
-    s3 = s3_client()
+    s3 = storage_client()
     bucket = _bucket()
 
     def _hard_delete_file(file_doc: Dict[str, Any]) -> Dict[str, int]:
@@ -955,6 +966,11 @@ def delete_item(item_id: str, item_type: str, recursive: bool = False, scope: st
                 pass
         index_deleted = _delete_search_index_by_file_id(str(file_doc.get("_id", "")))
         files.delete_one({"_id": file_doc.get("_id")})
+        try:
+            from .storage_domain import incr_storage
+            incr_storage(file_doc.get("user_id", ""), -int(file_doc.get("size", 0) or 0))
+        except Exception:
+            pass
         return index_deleted
 
     def _unindex_file_only(file_doc: Dict[str, Any]) -> Dict[str, int]:
@@ -1105,7 +1121,7 @@ def preview_by_id(file_id: str, user_id: str = "") -> Dict[str, Any]:
     if not key:
         raise ValueError("File storage key missing")
     file_bucket = str(doc.get("bucket", "") or "").strip() or _bucket()
-    url = s3_client().generate_presigned_url(
+    url = storage_client().generate_presigned_url(
         "get_object",
         Params={"Bucket": file_bucket, "Key": key},
         ExpiresIn=3600,
@@ -1164,6 +1180,11 @@ def _delete_search_index_by_file_id(file_id: str) -> Dict[str, int]:
         return {"deleted_docs": 0, "deleted_pages": 0}
     delete_pages_result = pages_coll.delete_many({"doc_id": {"$in": doc_ids}})
     delete_docs_result = docs.delete_many({"doc_id": {"$in": doc_ids}})
+    try:
+        from .pdf_search_domain import delete_doc_vectors
+        delete_doc_vectors(doc_ids)
+    except Exception:  # noqa: BLE001 — vector cleanup is best-effort
+        logger.exception("upstash vector cleanup failed for docs %s", doc_ids)
     return {
         "deleted_docs": int(delete_docs_result.deleted_count or 0),
         "deleted_pages": int(delete_pages_result.deleted_count or 0),

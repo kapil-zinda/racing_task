@@ -13,6 +13,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from pymongo import ReturnDocument
+
 from .agent_v2_chat_domain import _chat_model, _openai_client
 from .context import (
     answer_evaluations_collection,
@@ -276,7 +278,9 @@ def _annotate_pdf(pdf_bytes: bytes, result: Dict[str, Any]) -> bytes:
 
 
 # ── Public API ─────────────────────────────────────────────────────────────--
-def presign_answer_upload_payload(user_id: str, filename: str, content_type: str) -> Dict[str, Any]:
+def presign_answer_upload_payload(
+    user_id: str, filename: str, content_type: str, question: str = "", max_marks: int = 0
+) -> Dict[str, Any]:
     bucket = _bucket()
     eval_id = f"answereval:{uuid.uuid4().hex}"
     ext = (filename or "answer.pdf").rsplit(".", 1)[-1].lower()
@@ -289,54 +293,81 @@ def presign_answer_upload_payload(user_id: str, filename: str, content_type: str
         ExpiresIn=3600,
     )
     now = _now_iso()
+    # Status flows: in_queue -> in_process -> completed/failed. Question + marks are
+    # captured now so the S3-triggered worker can evaluate without any further call.
     answer_evaluations_collection().insert_one({
         "_id": eval_id,
         "doc_type": "answer_evaluation",
         "user_id": (user_id or "").strip(),
-        "status": "uploaded",
+        "status": "in_queue",
         "filename": filename or "answer.pdf",
         "original_key": key,
         "marked_key": "",
+        "question": (question or "").strip(),
+        "max_marks": int(max_marks or 0),
         "result": None,
         "created_at": now,
         "updated_at": now,
     })
-    logger.info("answer-eval upload presigned id=%s key=%s", eval_id, key)
-    return {"eval_id": eval_id, "upload_url": url, "key": key}
+    logger.info("answer-eval queued id=%s key=%s", eval_id, key)
+    # When an S3 upload-trigger is wired up, the frontend should NOT call /evaluate
+    # (the object-created event drives it). Otherwise (local dev) it should.
+    auto_evaluate = bool(settings().get("answer_eval_s3_trigger"))
+    return {"eval_id": eval_id, "upload_url": url, "key": key, "auto_evaluate": auto_evaluate}
 
 
 def evaluate_answer_payload(eval_id: str, question: str = "", max_marks: int = 0) -> Dict[str, Any]:
+    """Manual/local trigger. In production the S3 object-created event drives
+    evaluation instead; this stays for local dev and as a fallback (idempotent)."""
     collection = answer_evaluations_collection()
     doc = collection.find_one({"_id": eval_id, "doc_type": "answer_evaluation"})
     if not doc:
         raise LookupError("Evaluation not found")
-    collection.update_one(
-        {"_id": eval_id},
-        {"$set": {"status": "processing", "question": question, "max_marks": int(max_marks or 0), "updated_at": _now_iso()}},
-    )
+    # Persist any question/marks passed here (in case they changed since presign).
+    patch = {}
+    if question:
+        patch["question"] = question.strip()
+    if max_marks:
+        patch["max_marks"] = int(max_marks)
+    if patch:
+        collection.update_one({"_id": eval_id}, {"$set": {**patch, "updated_at": _now_iso()}})
 
     fn = current_lambda_function_name()
     if fn:
         lambda_client().invoke(
             FunctionName=fn,
             InvocationType="Event",
-            Payload=json.dumps({"task": "evaluate_answer", "eval_id": eval_id, "question": question, "max_marks": int(max_marks or 0)}).encode("utf-8"),
+            Payload=json.dumps({"task": "evaluate_answer", "eval_id": eval_id}).encode("utf-8"),
         )
         logger.info("answer-eval queued (async) id=%s", eval_id)
-        return {"eval_id": eval_id, "status": "processing", "async": True}
+        return {"eval_id": eval_id, "status": "in_process", "async": True}
 
     logger.info("answer-eval running (inline) id=%s", eval_id)
-    return _run_evaluation(eval_id, question, int(max_marks or 0))
+    return _run_evaluation(eval_id)
 
 
 def run_evaluate_answer_task(event: Dict[str, Any]) -> Dict[str, Any]:
-    eval_id = str(event.get("eval_id") or "")
-    question = str(event.get("question") or "")
-    max_marks = int(event.get("max_marks") or 0)
+    return _safe_run_evaluation(str(event.get("eval_id") or ""))
+
+
+def evaluate_from_object_key(bucket: str, key: str) -> Dict[str, Any]:
+    """Entry point for the S3 upload trigger: map the uploaded object -> its
+    evaluation record and run it. Ignores non-original / non-answer-eval keys."""
+    key = str(key or "")
+    if "answer-evaluations/" not in key or "/original." not in key:
+        return {"skipped": True, "reason": "not an answer-eval upload", "key": key}
+    doc = answer_evaluations_collection().find_one({"original_key": key, "doc_type": "answer_evaluation"})
+    if not doc:
+        logger.warning("answer-eval S3 trigger: no record for key=%s", key)
+        return {"skipped": True, "reason": "no record", "key": key}
+    return _safe_run_evaluation(doc["_id"])
+
+
+def _safe_run_evaluation(eval_id: str) -> Dict[str, Any]:
     try:
-        return _run_evaluation(eval_id, question, max_marks)
+        return _run_evaluation(eval_id)
     except Exception as err:  # noqa: BLE001
-        logger.exception("answer-eval task failed id=%s", eval_id)
+        logger.exception("answer-eval evaluation failed id=%s", eval_id)
         try:
             answer_evaluations_collection().update_one(
                 {"_id": eval_id},
@@ -347,11 +378,24 @@ def run_evaluate_answer_task(event: Dict[str, Any]) -> Dict[str, Any]:
         return {"eval_id": eval_id, "status": "failed", "error": str(err)}
 
 
-def _run_evaluation(eval_id: str, question: str, max_marks: int) -> Dict[str, Any]:
+def _run_evaluation(eval_id: str) -> Dict[str, Any]:
     collection = answer_evaluations_collection()
-    doc = collection.find_one({"_id": eval_id, "doc_type": "answer_evaluation"})
+    # Atomically claim the job so an S3 trigger + a manual call can't double-run it.
+    doc = collection.find_one_and_update(
+        {"_id": eval_id, "doc_type": "answer_evaluation", "status": {"$in": ["in_queue", "uploaded", "failed"]}},
+        {"$set": {"status": "in_process", "error": "", "updated_at": _now_iso()}},
+        return_document=ReturnDocument.AFTER,
+    )
     if not doc:
-        raise LookupError("Evaluation not found")
+        existing = collection.find_one({"_id": eval_id, "doc_type": "answer_evaluation"})
+        if not existing:
+            raise LookupError("Evaluation not found")
+        logger.info("answer-eval already %s id=%s — skipping", existing.get("status"), eval_id)
+        return {"eval_id": eval_id, "status": existing.get("status"), "skipped": True}
+    logger.info("answer-eval in_process id=%s", eval_id)
+
+    question = str(doc.get("question", "") or "")
+    max_marks = int(doc.get("max_marks") or 0)
     bucket = _bucket()
     original_key = doc["original_key"]
 
@@ -382,6 +426,11 @@ def _run_evaluation(eval_id: str, question: str, max_marks: int) -> Dict[str, An
         }},
     )
     logger.info("answer-eval completed id=%s marks=%s/%s", eval_id, result.get("total_awarded"), result.get("total_max"))
+    try:
+        from .storage_domain import incr_answers_evaluated
+        incr_answers_evaluated(doc.get("user_id", ""), 1)
+    except Exception:
+        logger.exception("usage incr_answers_evaluated failed")
     return {"eval_id": eval_id, "status": "completed", "result": result}
 
 

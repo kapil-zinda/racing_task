@@ -140,6 +140,46 @@ def update_activity(user_id: str, activity_id: str, payload: Dict[str, Any]) -> 
     return {**update, "id": activity_id}
 
 
+def get_activities_summary(user_id: str, start_date: str, end_date: str) -> Dict[str, Any]:
+    uid = _uid(user_id)
+    today = datetime.now(timezone.utc).date().isoformat()
+    end = (end_date or "").strip() or today
+    start = (start_date or "").strip() or end
+    if start > end:
+        start, end = end, start
+    docs = list(
+        day_activities_collection()
+        .find({"user_id": uid, "date": {"$gte": start, "$lte": end}}, {"user_id": 0})
+        .sort([("date", ASCENDING), ("start_time", ASCENDING)])
+    )
+    daily: Dict[str, Dict[str, Any]] = {}
+    by_category: Dict[str, int] = {}
+    total_minutes = 0
+    for doc in docs:
+        doc["id"] = str(doc.pop("_id"))
+        date = doc.get("date") or ""
+        day = daily.setdefault(date, {"date": date, "total_minutes": 0, "by_category": {}, "activities": []})
+        mins = int(doc.get("duration_minutes") or 0)
+        cat = doc.get("category") or "Other"
+        day["total_minutes"] += mins
+        day["by_category"][cat] = day["by_category"].get(cat, 0) + mins
+        day["activities"].append(doc)
+        by_category[cat] = by_category.get(cat, 0) + mins
+        total_minutes += mins
+    breakdown = sorted(daily.values(), key=lambda d: d["date"])
+    days_tracked = len(breakdown)
+    return {
+        "start_date": start,
+        "end_date": end,
+        "days_tracked": days_tracked,
+        "total_minutes": total_minutes,
+        "total_hours": round(total_minutes / 60, 2),
+        "by_category": by_category,
+        "average_per_day": round(total_minutes / days_tracked, 1) if days_tracked else 0,
+        "daily_breakdown": breakdown,
+    }
+
+
 def delete_activity(user_id: str, activity_id: str) -> Dict[str, Any]:
     uid = _uid(user_id)
     try:

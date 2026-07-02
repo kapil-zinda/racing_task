@@ -66,6 +66,7 @@ def settings() -> Dict[str, Any]:
         "mongodb_agent_v2_nudges_collection": os.getenv("MONGODB_AGENT_V2_NUDGES_COLLECTION", "agent_v2_nudges"),
         "mongodb_interview_sessions_collection": os.getenv("MONGODB_INTERVIEW_SESSIONS_COLLECTION", "interview_sessions"),
         "mongodb_answer_evaluations_collection": os.getenv("MONGODB_ANSWER_EVALUATIONS_COLLECTION", "answer_evaluations"),
+        "mongodb_user_usage_collection": os.getenv("MONGODB_USER_USAGE_COLLECTION", "user_usage"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
         "aws_region": os.getenv("AWS_REGION", "ap-south-1"),
         "recording_bucket": os.getenv("RECORDING_BUCKET", ""),
@@ -73,6 +74,12 @@ def settings() -> Dict[str, Any]:
         "pdf_search_prefix": os.getenv("PDF_SEARCH_PREFIX", "pdf-search"),
         "content_bucket": os.getenv("CONTENT_BUCKET", os.getenv("RECORDING_BUCKET", "")),
         "content_prefix": os.getenv("CONTENT_PREFIX", "content"),
+        # Backblaze B2 (S3-compatible) for recordings + content. When set, these
+        # buckets live on B2; PDF-search / answer-eval OCR stay on AWS S3 (Textract).
+        "b2_endpoint": os.getenv("B2_ENDPOINT", ""),          # e.g. https://s3.us-west-004.backblazeb2.com
+        "b2_region": os.getenv("B2_REGION", "us-west-004"),
+        "b2_key_id": os.getenv("B2_KEY_ID", ""),
+        "b2_application_key": os.getenv("B2_APPLICATION_KEY", ""),
         "openai_api_key": os.getenv("OPENAI_API_KEY", ""),
         "openai_chat_model": os.getenv("OPENAI_CHAT_MODEL", "gpt-5.4"),
         "openai_realtime_model": os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime"),
@@ -81,8 +88,14 @@ def settings() -> Dict[str, Any]:
         "openai_tts_model": os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
         "openai_tts_voice": os.getenv("OPENAI_TTS_VOICE", "alloy"),
         "openai_embeddings_model": os.getenv("OPENAI_EMBEDDINGS_MODEL", "text-embedding-3-large"),
-        "openai_embeddings_dimensions": os.getenv("OPENAI_EMBEDDINGS_DIMENSIONS", "512"),
+        "openai_embeddings_dimensions": os.getenv("OPENAI_EMBEDDINGS_DIMENSIONS", "1536"),
         "mongodb_pdf_vector_index_name": os.getenv("MONGODB_PDF_VECTOR_INDEX_NAME", "pdf_embedding_index"),
+        # Upstash Vector (REST) — replaces MongoDB Atlas vector search for PDF search.
+        # The Upstash index must be created with dimensions == openai_embeddings_dimensions.
+        "upstash_vector_rest_url": os.getenv("UPSTASH_VECTOR_REST_URL", ""),
+        "upstash_vector_rest_token": os.getenv("UPSTASH_VECTOR_REST_TOKEN", ""),
+        "answer_eval_s3_trigger": os.getenv("ANSWER_EVAL_S3_TRIGGER", "false").lower() == "true",
+        "user_storage_limit_gb": os.getenv("USER_STORAGE_LIMIT_GB", "10"),
         "textract_enabled": os.getenv("TEXTRACT_ENABLED", "1"),
         "textract_poll_seconds": os.getenv("TEXTRACT_POLL_SECONDS", "2"),
         "textract_timeout_seconds": os.getenv("TEXTRACT_TIMEOUT_SECONDS", "900"),
@@ -93,8 +106,17 @@ def settings() -> Dict[str, Any]:
         "mailjet_secret_key": os.getenv("MAILJET_SECRET_KEY", ""),
         "mongodb_day_activities_collection": os.getenv("MONGODB_DAY_ACTIVITIES_COLLECTION", "day_activities"),
         "mongodb_activity_categories_collection": os.getenv("MONGODB_ACTIVITY_CATEGORIES_COLLECTION", "activity_categories"),
-        "mongodb_journeys_collection": os.getenv("MONGODB_JOURNEYS_COLLECTION", "journeys"),
-        "mongodb_journey_progress_collection": os.getenv("MONGODB_JOURNEY_PROGRESS_COLLECTION", "journey_progress"),
+        "mongodb_mindmaps_collection": os.getenv("MONGODB_MINDMAPS_COLLECTION", "mindmaps"),
+        # Universal Goal OS — generic, metadata-driven collections (replaces journeys).
+        "mongodb_goals_collection": os.getenv("MONGODB_GOALS_COLLECTION", "goals"),
+        "mongodb_goal_nodes_collection": os.getenv("MONGODB_GOAL_NODES_COLLECTION", "goal_nodes"),
+        "mongodb_goal_metrics_collection": os.getenv("MONGODB_GOAL_METRICS_COLLECTION", "goal_metrics"),
+        "mongodb_goal_activity_collection": os.getenv("MONGODB_GOAL_ACTIVITY_COLLECTION", "goal_activity"),
+        "mongodb_goal_attachments_collection": os.getenv("MONGODB_GOAL_ATTACHMENTS_COLLECTION", "goal_attachments"),
+        "mongodb_goal_dependencies_collection": os.getenv("MONGODB_GOAL_DEPENDENCIES_COLLECTION", "goal_dependencies"),
+        "mongodb_goal_recurring_collection": os.getenv("MONGODB_GOAL_RECURRING_COLLECTION", "goal_recurring_rules"),
+        "mongodb_goal_reminders_collection": os.getenv("MONGODB_GOAL_REMINDERS_COLLECTION", "goal_reminders"),
+        "mongodb_goal_templates_collection": os.getenv("MONGODB_GOAL_TEMPLATES_COLLECTION", "goal_templates"),
     }
 
 
@@ -140,6 +162,11 @@ def interview_sessions_collection():
 def answer_evaluations_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_answer_evaluations_collection"]]
+
+
+def user_usage_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_user_usage_collection"]]
 
 
 def pdf_docs_collection():
@@ -232,14 +259,56 @@ def activity_categories_collection():
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_activity_categories_collection"]]
 
 
-def journeys_collection():
+def mindmaps_collection():
     cfg = settings()
-    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_journeys_collection"]]
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_mindmaps_collection"]]
 
 
-def journey_progress_collection():
+# --- Universal Goal OS collections ---
+
+def goals_collection():
     cfg = settings()
-    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_journey_progress_collection"]]
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goals_collection"]]
+
+
+def goal_nodes_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goal_nodes_collection"]]
+
+
+def goal_metrics_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goal_metrics_collection"]]
+
+
+def goal_activity_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goal_activity_collection"]]
+
+
+def goal_attachments_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goal_attachments_collection"]]
+
+
+def goal_dependencies_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goal_dependencies_collection"]]
+
+
+def goal_recurring_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goal_recurring_collection"]]
+
+
+def goal_reminders_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goal_reminders_collection"]]
+
+
+def goal_templates_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goal_templates_collection"]]
 
 
 def s3_client():
@@ -252,6 +321,51 @@ def s3_client():
         region_name=region,
         endpoint_url=f"https://s3.{region}.amazonaws.com",
     )
+
+
+def _b2_configured() -> bool:
+    cfg = settings()
+    return bool((cfg.get("b2_endpoint") or "").strip() and (cfg.get("b2_key_id") or "").strip())
+
+
+def _b2_endpoint_url() -> str:
+    """Normalized B2 endpoint. Accepts the value with or without a scheme
+    (botocore rejects a scheme-less endpoint, e.g. `s3.us-east-005.backblazeb2.com`)."""
+    raw = (settings().get("b2_endpoint") or "").strip().rstrip("/")
+    if raw and "://" not in raw:
+        raw = f"https://{raw}"
+    return raw
+
+
+def storage_client():
+    """S3-compatible client for recordings + content. Uses Backblaze B2 when the
+    B2_* vars are set; otherwise falls back to AWS S3 (so existing setups are
+    unaffected). Textract-backed features keep using s3_client() (AWS-only)."""
+    if boto3 is None:
+        raise RuntimeError("boto3 is not installed")
+    if not _b2_configured():
+        return s3_client()
+    cfg = settings()
+    from botocore.config import Config
+
+    return boto3.client(
+        "s3",
+        endpoint_url=_b2_endpoint_url(),
+        region_name=(cfg.get("b2_region") or "us-west-004").strip(),
+        aws_access_key_id=cfg["b2_key_id"].strip(),
+        aws_secret_access_key=(cfg.get("b2_application_key") or "").strip(),
+        config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
+    )
+
+
+def storage_object_url(bucket: str, key: str) -> str:
+    """Public-style object URL for the storage backend (informational; playback and
+    downloads use presigned URLs)."""
+    cfg = settings()
+    if _b2_configured():
+        scheme, _, host = _b2_endpoint_url().partition("://")
+        return f"{scheme}://{bucket}.{host}/{key}"
+    return f"https://{bucket}.s3.{cfg['aws_region']}.amazonaws.com/{key}"
 
 
 def textract_client():

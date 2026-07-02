@@ -10,11 +10,13 @@ const NAV_ITEMS = [
   { key: "recorder", label: "Recorder", href: "/recorder", icon: "🎙️" },
   { key: "interview", label: "Interview", href: "/interview", icon: "🧑‍⚖️" },
   { key: "answer-eval", label: "Answer Eval", href: "/answer-eval", icon: "📝" },
-  { key: "syllabus", label: "Progress Hub", href: "/syllabus", icon: "📘" },
-  { key: "mission", label: "Journey", href: "/mission", icon: "🎯" },
+  { key: "goals", label: "Goals", href: "/goals", icon: "🎯" },
+  { key: "analytics", label: "Analytics", href: "/analytics", icon: "📊" },
   { key: "qna", label: "QnA", href: "/qna", icon: "💬" },
+  { key: "mindmap", label: "Mind Map", href: "/mindmap", icon: "🧠" },
   { key: "search", label: "Search", href: "/search", icon: "🔍" },
   { key: "content", label: "Content", href: "/content", icon: "📂" },
+  { key: "usage", label: "Usage", href: "/usage", icon: "📊" },
 ];
 
 export default function MainMenu({ active = "" }) {
@@ -65,8 +67,9 @@ export default function MainMenu({ active = "" }) {
 
       <aside className={`side-drawer ${open ? "open" : ""}`} aria-label="Main menu">
         <div className="side-drawer-brand">
-          <span className="brand-mark">KD</span>
-          <span className="brand-text">Race Hub</span>
+          <img className="brand-mark" src="/dias-icon.png" alt="Dias" />
+          <span className="brand-text">Dias</span>
+          <button className="drawer-close-btn" onClick={() => setOpen(false)} aria-label="Close menu">✕</button>
         </div>
         <nav className="side-nav">
           {NAV_ITEMS.map((item, i) => (

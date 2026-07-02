@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
+import TrackerSummary from "./TrackerSummary";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -226,6 +227,7 @@ function TimeField({ label, value, onChange, optional }) {
 const EMPTY_FORM = { title: "", start_time: "", end_time: "", category: "", note: "", date: "" };
 
 export default function DayTracker() {
+  const [view, setView]             = useState("log");
   const [date, setDate]             = useState(todayStr);
   const [activities, setActivities] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -343,17 +345,29 @@ export default function DayTracker() {
       {/* Header */}
       <div className="dt-header">
         <h2 className="dt-title">Day Tracker</h2>
-        <div className="dt-date-nav">
-          <button className="dt-nav-btn" onClick={() => setDate((d) => addDays(d, -1))}>‹</button>
-          <span className="dt-date-label">{fmtDate(date)}</span>
-          <button className="dt-nav-btn" onClick={() => setDate((d) => addDays(d, 1))} disabled={date >= today}>›</button>
-          {date !== today && <button className="dt-today-btn" onClick={() => setDate(today)}>Today</button>}
+        <div className="dt-tabs">
+          <button className={`dt-tab${view === "log" ? " active" : ""}`} onClick={() => setView("log")}>Day Log</button>
+          <button className={`dt-tab${view === "summary" ? " active" : ""}`} onClick={() => setView("summary")}>Summary</button>
         </div>
-        <button className="dt-add-btn" onClick={openAdd}>+ Log Activity</button>
+        {view === "log" && (
+          <>
+            <div className="dt-date-nav">
+              <button className="dt-nav-btn" onClick={() => setDate((d) => addDays(d, -1))}>‹</button>
+              <span className="dt-date-label">{fmtDate(date)}</span>
+              <button className="dt-nav-btn" onClick={() => setDate((d) => addDays(d, 1))} disabled={date >= today}>›</button>
+              {date !== today && <button className="dt-today-btn" onClick={() => setDate(today)}>Today</button>}
+            </div>
+            <button className="dt-add-btn" onClick={openAdd}>+ Log Activity</button>
+          </>
+        )}
       </div>
 
       {error ? <p className="api-state error">{error}</p> : null}
 
+      {view === "summary" ? (
+        <TrackerSummary categories={categories} />
+      ) : (
+        <>
       {/* Summary */}
       <div className="dt-summary">
         <div className="dt-stat">
@@ -452,6 +466,8 @@ export default function DayTracker() {
           </div>
         )}
       </div>
+        </>
+      )}
 
       {/* Modal */}
       {modal.open && (

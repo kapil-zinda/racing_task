@@ -12,11 +12,13 @@ from pymongo import ASCENDING, DESCENDING
 
 from .context import (
     current_date_str,
+    logger,
     pdf_docs_collection,
     pdf_pages_collection,
     s3_client,
     sanitize_key_part,
     settings,
+    storage_client,
     textract_client,
 )
 
@@ -68,6 +70,24 @@ def _pdf_key(doc_id: str, file_name: str, user_id: str = "") -> str:
     return f"{prefix}/{date_part}/{doc_id}/{safe_name}"
 
 
+def _stage_for_textract(
+    doc_id: str, source_bucket: str, source_key: str, file_name: str, user_id: str
+) -> tuple[str, str]:
+    """Textract and the search-result viewer read from AWS S3 only. When the source
+    PDF lives in a different bucket (e.g. Backblaze B2 content storage), copy it into
+    the AWS pdf-search bucket and return that (bucket, key). If it is already in the
+    pdf-search bucket, return it unchanged."""
+    target_bucket = _pdf_bucket()
+    if source_bucket == target_bucket:
+        return source_bucket, source_key
+    body = storage_client().get_object(Bucket=source_bucket, Key=source_key)["Body"].read()
+    target_key = _pdf_key(doc_id, file_name, user_id)
+    s3_client().put_object(
+        Bucket=target_bucket, Key=target_key, Body=body, ContentType="application/pdf"
+    )
+    return target_bucket, target_key
+
+
 def _normalize_course(course: str | None) -> str:
     raw = (course or "").strip().lower().replace("-", "_").replace(" ", "_")
     aliases = {
@@ -101,6 +121,20 @@ def _openai_api_key() -> str:
 
 def _vector_index_name() -> str:
     return (settings().get("mongodb_pdf_vector_index_name") or "pdf_embedding_index").strip()
+
+
+def _page_vector_id(doc_id: str, page_number: int) -> str:
+    return f"{doc_id}::{int(page_number)}"
+
+
+def delete_doc_vectors(doc_ids: List[str]) -> None:
+    """Remove all Upstash vectors belonging to the given PDF documents (best-effort)."""
+    from . import upstash_vector as uv
+    if not uv.is_configured():
+        return
+    for did in doc_ids:
+        if did:
+            uv.delete_by_filter(f"doc_id = '{uv.escape(did)}'")
 
 
 def _embedding_dimensions() -> int:
@@ -172,14 +206,16 @@ def _embed_text_batch(texts: List[str]) -> List[List[float]]:
     vectors = [item.get("embedding", []) for item in data]
     if len(vectors) != len(texts):
         raise RuntimeError("Embedding response size mismatch")
-    return vectors
+    tokens = int((parsed.get("usage") or {}).get("total_tokens", 0) or 0)
+    return vectors, tokens
 
 
 def _embed_texts(texts: List[str], batch_size: int = 64) -> List[List[float]]:
     vectors: List[List[float]] = []
     for start in range(0, len(texts), batch_size):
         chunk = texts[start:start + batch_size]
-        vectors.extend(_embed_text_batch(chunk))
+        vecs, _tokens = _embed_text_batch(chunk)
+        vectors.extend(vecs)
     return vectors
 
 
@@ -232,6 +268,9 @@ def _try_create_vector_index() -> None:
 
 
 def create_pdf_presigned_upload(payload, user_id: str = "") -> Dict[str, Any]:
+    from .storage_domain import assert_storage_available
+
+    assert_storage_available(user_id, 0)
     _ensure_pdf_indexes()
     file_name = (payload.file_name or "").strip()
     if not file_name:
@@ -361,24 +400,49 @@ def index_pdf_document(payload) -> Dict[str, Any]:
     if not doc:
         raise LookupError("PDF document metadata not found")
 
-    bucket = doc.get("bucket") or _pdf_bucket()
-    key = doc.get("key")
+    source_bucket = doc.get("bucket") or _pdf_bucket()
+    source_key = doc.get("key")
     course = _normalize_course(doc.get("course"))
     doc_user_id = str(doc.get("user_id", "") or "").strip()
     if not course:
         raise ValueError("Document course metadata is missing")
-    if not key:
+    if not source_key:
         raise ValueError("PDF key missing for this document")
+
+    # Textract can only read from AWS S3. Content uploaded to Backblaze B2 must be
+    # staged into the AWS pdf-search bucket first; the staged (bucket, key) is what
+    # OCR, size tracking, and the search-result viewer all use from here on.
+    bucket, key = _stage_for_textract(
+        doc_id, source_bucket, source_key, doc.get("file_name") or "document.pdf", doc_user_id
+    )
+    if (bucket, key) != (source_bucket, source_key):
+        pdf_docs_collection().update_one(
+            {"doc_id": doc_id}, {"$set": {"bucket": bucket, "key": key}}
+        )
+
+    # Record the file size for the storage quota (delta over any previously-counted size).
+    try:
+        prev_size = int(doc.get("size", 0) or 0)
+        new_size = int(s3_client().head_object(Bucket=bucket, Key=key).get("ContentLength", 0) or 0)
+        if new_size != prev_size:
+            pdf_docs_collection().update_one({"doc_id": doc_id}, {"$set": {"size": new_size}})
+            from .storage_domain import incr_storage
+            incr_storage(doc_user_id, new_size - prev_size)
+    except Exception:
+        logger.exception("pdf size/usage tracking failed")
 
     pages = _extract_pdf_pages_from_textract(bucket, key)
 
-    pages_coll = pdf_pages_collection()
-    pages_coll.delete_many({"doc_id": doc_id})
-
+    from . import upstash_vector as uv
+    if not uv.is_configured():
+        raise RuntimeError("Upstash Vector is not configured (UPSTASH_VECTOR_REST_URL / _TOKEN)")
     if not _openai_api_key():
         raise RuntimeError("OPENAI_API_KEY is required for vector indexing")
 
-    _try_create_vector_index()
+    pages_coll = pdf_pages_collection()
+    pages_coll.delete_many({"doc_id": doc_id})
+    # Drop any stale vectors for this doc before re-indexing.
+    uv.delete_by_filter(f"doc_id = '{uv.escape(doc_id)}'")
 
     to_embed = []
     vector_indices: List[int] = []
@@ -394,6 +458,7 @@ def index_pdf_document(payload) -> Dict[str, Any]:
         for pos, page_idx in enumerate(vector_indices):
             embedding_map[page_idx] = embedding_vectors[pos]
 
+        # Mongo keeps page text (for management/deletion + display); vectors live in Upstash.
         rows = [
             {
                 "doc_type": "pdf_page",
@@ -406,7 +471,6 @@ def index_pdf_document(payload) -> Dict[str, Any]:
                 "user_id": doc_user_id,
                 "page_number": p["page_number"],
                 "text": p["text"],
-                "embedding": embedding_map.get(i),
                 "embedding_ready": i in embedding_map,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -414,6 +478,28 @@ def index_pdf_document(payload) -> Dict[str, Any]:
             for i, p in enumerate(pages)
         ]
         pages_coll.insert_many(rows)
+
+        # Upsert page vectors to Upstash with the metadata needed to render results.
+        vectors = []
+        for page_idx, vec in embedding_map.items():
+            p = pages[page_idx]
+            vectors.append({
+                "id": _page_vector_id(doc_id, p["page_number"]),
+                "vector": vec,
+                "metadata": {
+                    "doc_id": doc_id,
+                    "user_id": doc_user_id,
+                    "course": course,
+                    "course_label": COURSE_OPTIONS.get(course, course),
+                    "file_name": doc.get("file_name", ""),
+                    "bucket": bucket,
+                    "key": key,
+                    "page_number": p["page_number"],
+                    "text": p.get("text", ""),
+                },
+            })
+        for start in range(0, len(vectors), 100):
+            uv.upsert(vectors[start:start + 100])
 
     pdf_docs_collection().update_one(
         {"doc_id": doc_id},
@@ -456,14 +542,13 @@ def _snippet(text: str, query: str) -> str:
     return text[start:end]
 
 
-def search_pdf(query: str, limit: int = 20, course: str | None = None, user_id: str = "") -> Dict[str, Any]:
+def search_pdf(query: str, limit: int = 20, course: str | None = None, user_id: str = "", track_search: bool = False, include_text: bool = False) -> Dict[str, Any]:
     _ensure_pdf_indexes()
     q = (query or "").strip()
     if not q:
         raise ValueError("query is required")
 
     lim = max(1, min(int(limit or 20), 100))
-    coll = pdf_pages_collection()
     selected_course = _normalize_course(course)
     if course and not selected_course:
         allowed = ", ".join(COURSE_OPTIONS.values())
@@ -473,85 +558,61 @@ def search_pdf(query: str, limit: int = 20, course: str | None = None, user_id: 
     if not _openai_api_key():
         raise RuntimeError("OPENAI_API_KEY is required for vector search")
 
-    query_vector = _embed_text_batch([q])[0]
-    vector_stage: Dict[str, Any] = {
-        "index": _vector_index_name(),
-        "path": "embedding",
-        "queryVector": query_vector,
-        "numCandidates": max(100, lim * 15),
-        "limit": lim,
-    }
-    vector_filter: Dict[str, Any] = {}
-    if selected_course:
-        vector_filter["course"] = selected_course
-    if uid:
-        vector_filter["user_id"] = uid
-    if vector_filter:
-        vector_stage["filter"] = vector_filter
+    _qvecs, _embed_tokens = _embed_text_batch([q])
+    query_vector = _qvecs[0]
+    if track_search and uid:
+        try:
+            from .storage_domain import add_llm_tokens
+            add_llm_tokens(uid, "search", _embed_tokens)
+        except Exception:
+            logger.exception("usage add_llm_tokens (search) failed")
+    from . import upstash_vector as uv
+    if not uv.is_configured():
+        raise RuntimeError("Upstash Vector is not configured (UPSTASH_VECTOR_REST_URL / _TOKEN)")
 
-    try:
-        rows: List[Dict[str, Any]] = list(
-            coll.aggregate(
-                [
-                    {
-                        "$vectorSearch": vector_stage
-                    },
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "doc_id": 1,
-                            "file_name": 1,
-                            "bucket": 1,
-                            "key": 1,
-                            "course": 1,
-                            "course_label": 1,
-                            "page_number": 1,
-                            "text": 1,
-                            "score": {"$meta": "vectorSearchScore"},
-                        }
-                    },
-                ]
-            )
-        )
-    except Exception as err:  # noqa: BLE001
-        message = str(err)
-        if "needs to be indexed as filter" in message and "course" in message:
-            raise RuntimeError(
-                "Vector index is stale. Update Atlas index "
-                f"'{_vector_index_name()}' with filter field 'course' and vector field "
-                f"'embedding' (numDimensions={_embedding_dimensions()})."
-            ) from err
-        raise
+    # Metadata filter: always scope to the user; optionally to a course.
+    clauses = []
+    if uid:
+        clauses.append(f"user_id = '{uv.escape(uid)}'")
+    if selected_course:
+        clauses.append(f"course = '{uv.escape(selected_course)}'")
+    flt = " AND ".join(clauses) if clauses else None
+
+    matches = uv.query(query_vector, top_k=lim, flt=flt, include_metadata=True)
 
     url_cache: Dict[str, str] = {}
     result_rows = []
-    for row in rows:
-        key = row.get("key", "")
-        bucket = row.get("bucket") or _pdf_bucket()
+    for m in matches:
+        md = m.get("metadata") or {}
+        key = md.get("key", "")
+        bucket = md.get("bucket") or _pdf_bucket()
         cache_key = f"{bucket}::{key}"
-        if cache_key not in url_cache:
+        if key and cache_key not in url_cache:
             url_cache[cache_key] = s3_client().generate_presigned_url(
                 "get_object",
                 Params={"Bucket": bucket, "Key": key},
                 ExpiresIn=3600,
             )
-        pdf_url = url_cache[cache_key]
-        result_rows.append(
-            {
-                "doc_id": row.get("doc_id", ""),
-                "file_name": row.get("file_name", ""),
-                "course": row.get("course", ""),
-                "course_label": row.get("course_label", row.get("course", "")),
-                "page_number": int(row.get("page_number", 1) or 1),
-                "snippet": _snippet(row.get("text", ""), q),
-                "pdf_url": pdf_url,
-            }
-        )
+        text = md.get("text", "")
+        result_row = {
+            "doc_id": md.get("doc_id", ""),
+            "file_name": md.get("file_name", ""),
+            "course": md.get("course", ""),
+            "course_label": md.get("course_label", md.get("course", "")),
+            "page_number": int(md.get("page_number", 1) or 1),
+            "snippet": _snippet(text, q),
+            "pdf_url": url_cache.get(cache_key, ""),
+            "score": m.get("score"),
+        }
+        if include_text:
+            # Full page text for grounding (QnA); callers that only display snippets omit this.
+            result_row["text"] = text
+        result_rows.append(result_row)
 
     return {
         "query": q,
         "course": selected_course or "global",
-        "search_mode": "vector",
+        "search_mode": "upstash_vector",
         "count": len(result_rows),
         "results": result_rows,
     }

@@ -60,8 +60,8 @@ function VerifyOtpInner() {
       <div className="auth-center">
         <div className="auth-card">
           <div className="auth-brand">
-            <span className="brand-mark">KD</span>
-            <span className="brand-text">Race Hub</span>
+            <img className="brand-mark" src="/dias-icon.png" alt="Dias" />
+            <span className="brand-text">Dias</span>
           </div>
           <h1 className="auth-title">Verify email</h1>
           <p className="auth-sub">Enter the 6-digit code sent to<br /><strong>{email}</strong></p>

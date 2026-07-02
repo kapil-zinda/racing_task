@@ -12,13 +12,14 @@ from .context import (
     current_lambda_function_name,
     lambda_client,
     logger,
-    s3_client,
     session_id,
     session_media_chunk_key,
     session_media_chunk_prefix,
     session_media_key,
     sessions_collection,
     settings,
+    storage_client,
+    storage_object_url,
 )
 from .ledger_domain import log_activity
 
@@ -60,6 +61,9 @@ def _normalize_modes(recorder_type: str, modes: List[str]) -> tuple[str, List[st
 def create_session_payload(payload) -> Dict[str, Any]:
     if not (payload.user_id or "").strip():
         raise ValueError("Invalid user_id")
+    from .storage_domain import assert_storage_available
+
+    assert_storage_available(payload.user_id, 0)  # block new recordings when over quota
     if payload.session_type not in {"study", "revision", "analysis", "test"}:
         raise ValueError("session_type must be study, revision or analysis")
 
@@ -171,6 +175,12 @@ def delete_session_payload(session_id_value: str) -> Dict[str, Any]:
         raise LookupError("Session not found")
 
     logger.info("session deleted id=%s (kept %d S3 file(s))", sid, len(retained_s3_keys))
+    try:
+        freed = sum(int(i.get("bytes", 0) or 0) for i in (uploads or {}).values() if isinstance(i, dict))
+        from .storage_domain import incr_storage
+        incr_storage(doc.get("user_id", ""), -freed)
+    except Exception:
+        logger.exception("usage incr_storage (delete) failed")
     _record_activity(doc, "recording_deleted", meta={"session_id": sid, "kept_s3_keys": len(retained_s3_keys)})
     return {
         "message": "Session deleted from app data. Recording files in S3 were kept.",
@@ -189,7 +199,7 @@ def _best_effort_finalize_multipart_uploads(collection, session_doc: Dict[str, A
     uploads = session_doc.get("uploads", {}) or {}
     now_iso = datetime.now(timezone.utc).isoformat()
     set_fields: Dict[str, Any] = {}
-    client = s3_client()
+    client = storage_client()
 
     for media_type in MEDIA_TYPES:
         info = uploads.get(media_type) or {}
@@ -223,7 +233,7 @@ def _best_effort_finalize_multipart_uploads(collection, session_doc: Dict[str, A
                     UploadId=upload_id,
                     MultipartUpload={"Parts": complete_parts},
                 )
-                object_url = f"https://{bucket}.s3.{cfg['aws_region']}.amazonaws.com/{key}"
+                object_url = storage_object_url(bucket, key)
                 set_fields[f"uploads.{media_type}"] = {
                     "key": key,
                     "content_type": info.get("content_type", "application/octet-stream"),
@@ -378,13 +388,13 @@ def create_presigned_upload_payload(session_id_value: str, payload) -> Dict[str,
         raise LookupError("Session not found")
 
     key = session_media_key(doc, payload.media_type, ext)
-    upload_url = s3_client().generate_presigned_url(
+    upload_url = storage_client().generate_presigned_url(
         "put_object",
         Params={"Bucket": bucket, "Key": key, "ContentType": payload.content_type},
         ExpiresIn=3600,
     )
 
-    object_url = f"https://{bucket}.s3.{cfg['aws_region']}.amazonaws.com/{key}"
+    object_url = storage_object_url(bucket, key)
     collection.update_one(
         {"_id": session_id_value},
         {
@@ -418,7 +428,7 @@ def start_multipart_upload_payload(session_id_value: str, payload) -> Dict[str, 
         raise LookupError("Session not found")
 
     key = session_media_key(doc, payload.media_type, ext)
-    resp = s3_client().create_multipart_upload(Bucket=bucket, Key=key, ContentType=payload.content_type)
+    resp = storage_client().create_multipart_upload(Bucket=bucket, Key=key, ContentType=payload.content_type)
     upload_id = resp.get("UploadId", "")
     if not upload_id:
         raise RuntimeError("Failed to initialize multipart upload")
@@ -464,7 +474,7 @@ def presign_multipart_part_payload(session_id_value: str, payload) -> Dict[str, 
     if upload_id != payload.upload_id:
         raise ValueError("upload_id mismatch")
 
-    upload_url = s3_client().generate_presigned_url(
+    upload_url = storage_client().generate_presigned_url(
         "upload_part",
         Params={"Bucket": bucket, "Key": key, "UploadId": payload.upload_id, "PartNumber": payload.part_number},
         ExpiresIn=3600,
@@ -500,7 +510,7 @@ def complete_multipart_upload_payload(session_id_value: str, payload) -> Dict[st
         [{"ETag": p.etag, "PartNumber": p.part_number} for p in payload.parts],
         key=lambda item: item["PartNumber"],
     )
-    s3_client().complete_multipart_upload(
+    storage_client().complete_multipart_upload(
         Bucket=bucket,
         Key=key,
         UploadId=payload.upload_id,
@@ -509,7 +519,14 @@ def complete_multipart_upload_payload(session_id_value: str, payload) -> Dict[st
     logger.info("multipart upload completed id=%s media=%s parts=%d key=%s", session_id_value, payload.media_type, len(parts), key)
     _record_activity(doc, "recording_uploaded", meta={"session_id": session_id_value, "media_type": payload.media_type, "key": key})
 
-    object_url = f"https://{bucket}.s3.{cfg['aws_region']}.amazonaws.com/{key}"
+    # Determine final object size for the storage quota.
+    uploaded_bytes = 0
+    try:
+        uploaded_bytes = int(storage_client().head_object(Bucket=bucket, Key=key).get("ContentLength", 0) or 0)
+    except Exception:
+        logger.exception("head_object for size failed key=%s", key)
+
+    object_url = storage_object_url(bucket, key)
     collection.update_one(
         {"_id": session_id_value},
         {
@@ -519,6 +536,7 @@ def complete_multipart_upload_payload(session_id_value: str, payload) -> Dict[st
                     "content_type": upload_info.get("content_type", "application/octet-stream"),
                     "object_url": object_url,
                     "status": "completed",
+                    "bytes": uploaded_bytes,
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
@@ -526,6 +544,11 @@ def complete_multipart_upload_payload(session_id_value: str, payload) -> Dict[st
             }
         },
     )
+    try:
+        from .storage_domain import incr_storage
+        incr_storage(doc.get("user_id", ""), uploaded_bytes)
+    except Exception:
+        logger.exception("usage incr_storage (multipart) failed")
     return {"message": "Multipart upload completed", "media_type": payload.media_type, "object_url": object_url}
 
 
@@ -550,7 +573,7 @@ def abort_multipart_upload_payload(session_id_value: str, payload) -> Dict[str, 
     if upload_id != payload.upload_id:
         raise ValueError("upload_id mismatch")
 
-    s3_client().abort_multipart_upload(Bucket=bucket, Key=key, UploadId=payload.upload_id)
+    storage_client().abort_multipart_upload(Bucket=bucket, Key=key, UploadId=payload.upload_id)
     collection.update_one(
         {"_id": session_id_value},
         {
@@ -583,7 +606,7 @@ def presign_chunk_upload_payload(session_id_value: str, payload) -> Dict[str, An
         raise LookupError("Session not found")
 
     key = session_media_chunk_key(doc, payload.media_type, payload.seq)
-    upload_url = s3_client().generate_presigned_url(
+    upload_url = storage_client().generate_presigned_url(
         "put_object",
         Params={"Bucket": bucket, "Key": key, "ContentType": payload.content_type},
         ExpiresIn=3600,
@@ -700,7 +723,7 @@ def _run_chunk_concat(session_id_value: str, media_type: str, content_type: str,
     if not doc:
         raise LookupError("Session not found")
 
-    client = s3_client()
+    client = storage_client()
     prefix = session_media_chunk_prefix(doc, media_type)
 
     # Collect all chunk objects under the prefix, ordered by their numeric seq.
@@ -776,7 +799,7 @@ def _run_chunk_concat(session_id_value: str, media_type: str, content_type: str,
     except Exception:
         logger.exception("Failed to clean up chunk objects under %s", prefix)
 
-    object_url = f"https://{bucket}.s3.{cfg['aws_region']}.amazonaws.com/{final_key}"
+    object_url = storage_object_url(bucket, final_key)
     collection.update_one(
         {"_id": session_id_value},
         {
@@ -786,6 +809,7 @@ def _run_chunk_concat(session_id_value: str, media_type: str, content_type: str,
                     "content_type": content_type,
                     "object_url": object_url,
                     "status": "completed",
+                    "bytes": total_bytes,
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
@@ -801,6 +825,11 @@ def _run_chunk_concat(session_id_value: str, media_type: str, content_type: str,
         "session_id": session_id_value, "media_type": media_type,
         "chunks": len(chunk_keys), "bytes": total_bytes, "key": final_key,
     })
+    try:
+        from .storage_domain import incr_storage
+        incr_storage(doc.get("user_id", ""), total_bytes)
+    except Exception:
+        logger.exception("usage incr_storage (concat) failed")
     return {
         "message": "Chunks concatenated",
         "media_type": media_type,
@@ -832,7 +861,7 @@ def record_session_heartbeat_payload(session_id_value: str) -> Dict[str, Any]:
 
 def _media_has_chunks(bucket: str, doc: Dict[str, Any], media_type: str) -> bool:
     prefix = session_media_chunk_prefix(doc, media_type)
-    resp = s3_client().list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=1)
+    resp = storage_client().list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=1)
     return resp.get("KeyCount", 0) > 0
 
 
@@ -939,7 +968,7 @@ def create_presigned_playback_url_payload(
     if not key:
         raise FileNotFoundError(f"No {media_type} recording found for this session")
 
-    client = s3_client()
+    client = storage_client()
     try:
         client.head_object(Bucket=bucket, Key=key)
     except ClientError as err:

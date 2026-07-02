@@ -9,8 +9,8 @@ from typing import Any, Dict, List, Optional
 from pymongo import ASCENDING, DESCENDING
 
 from .constants import PLAYERS
-from .context import qna_messages_collection, qna_sessions_collection, settings
-from .pdf_search_domain import search_pdf
+from .context import logger, qna_messages_collection, qna_sessions_collection, settings
+from .pdf_search_domain import _normalize_course, search_pdf
 
 _qna_indexes_ensured = False
 
@@ -166,36 +166,69 @@ def _run_grounded_answer(
             "LangChain QnA dependencies are missing. Install langchain and langchain-openai in the Lambda layer."
         ) from err
 
-    source_payload = search_pdf(search_query, lim, course, user_id=user_id)
-    raw_sources = source_payload.get("results", []) or []
-    if not raw_sources:
-        return {
-            "question": q,
-            "answer": "I could not find relevant references in your indexed content.",
-            "course": source_payload.get("course", "global"),
-            "sources": [],
-            "used_source_indices": [],
-            "retrieval_query": search_query,
-        }
+    # Sources are discovered by the agent through the search tool below, not pre-fetched.
+    # We keep a registry so each retrieved chunk gets a stable index the model can cite
+    # as <source n>, and so we can map those citations back to full source records after
+    # the run. The same chunk (doc + page) reuses its index across repeated searches.
+    source_registry: List[Dict[str, Any]] = []
+    seen_keys: Dict[str, int] = {}
 
-    numbered_sources: List[Dict[str, Any]] = []
-    for idx, src in enumerate(raw_sources, start=1):
-        numbered_sources.append(
-            {
-                "index": idx,
-                "doc_id": src.get("doc_id", ""),
-                "file_name": src.get("file_name", ""),
-                "course": src.get("course", ""),
-                "course_label": src.get("course_label", src.get("course", "")),
-                "page_number": int(src.get("page_number", 1) or 1),
-                "snippet": src.get("snippet", ""),
-                "pdf_url": src.get("pdf_url", ""),
-                "source_url": src.get("pdf_url", ""),
-                "source_type": "pdf",
-            }
-        )
+    @tool
+    def search_reference_content(query: str) -> str:
+        """Search the user's indexed reference material (their searchable PDFs) and
+        return matching source chunks as JSON.
 
-    sources_json = json.dumps(numbered_sources, ensure_ascii=True)
+        Pass a focused, self-contained query. Resolve pronouns and follow-ups into a
+        standalone question FIRST — e.g. turn "what about now?" into "What is the user's
+        current role?" — because the search matches meaning, not the literal words.
+        Call this multiple times with different phrasings or sub-questions if the first
+        results are weak or only partially cover the question.
+
+        Each returned chunk has an integer `index`. Cite supported claims inline as
+        <source n> using those indices. Only chunks returned by this tool may be used as
+        factual sources.
+        """
+        found = search_pdf((query or "").strip(), lim, course, user_id=user_id, include_text=True)
+        results = found.get("results", []) or []
+        numbered: List[Dict[str, Any]] = []
+        for src in results:
+            key = f"{src.get('doc_id', '')}::{int(src.get('page_number', 0) or 0)}"
+            idx = seen_keys.get(key)
+            if idx is None:
+                idx = len(source_registry) + 1
+                seen_keys[key] = idx
+                source_registry.append(
+                    {
+                        "index": idx,
+                        "doc_id": src.get("doc_id", ""),
+                        "file_name": src.get("file_name", ""),
+                        "course": src.get("course", ""),
+                        "course_label": src.get("course_label", src.get("course", "")),
+                        "page_number": int(src.get("page_number", 1) or 1),
+                        "snippet": src.get("snippet", ""),
+                        "pdf_url": src.get("pdf_url", ""),
+                        "source_url": src.get("pdf_url", ""),
+                        "source_type": "pdf",
+                    }
+                )
+            numbered.append(
+                {
+                    "index": idx,
+                    "file_name": src.get("file_name", ""),
+                    "page_number": int(src.get("page_number", 1) or 1),
+                    "course_label": src.get("course_label", src.get("course", "")),
+                    # Full page text so the model grounds on complete context, not a 240-char snippet.
+                    "text": src.get("text") or src.get("snippet", ""),
+                }
+            )
+        if not numbered:
+            return json.dumps(
+                {
+                    "results": [],
+                    "note": "No matching reference chunks were found for this query. Try a different phrasing or narrower sub-questions; if nothing is found, tell the user the material is unavailable.",
+                }
+            )
+        return json.dumps({"results": numbered}, ensure_ascii=True)
 
     system_prompt = """
     You are a UPSC preparation buddy who helps the user study from available sources in a clear, conversational, exam-oriented way.
@@ -218,17 +251,26 @@ def _run_grounded_answer(
     - Do not add outside knowledge unless it is clearly supported by the retrieved material.
     - If the sources are incomplete, say so honestly and clearly.
 
-    AVAILABLE SOURCES
-    - The user message will include numbered source chunks retrieved from the user's searchable PDF index.
-    - Use only those numbered source chunks for factual claims.
-    - If the retrieved chunks are weak, incomplete, or off-topic, say what is missing instead of filling gaps.
+    HOW TO GET SOURCES
+    - You have one tool: search_reference_content(query). It searches the user's indexed
+      PDFs and returns numbered source chunks. It is your ONLY source of facts.
+    - You MUST call it at least once before answering. The conversation history is only
+      for understanding the question — never treat it as factual source material.
+    - Before searching, rewrite the user's question into a focused, standalone query.
+      Resolve pronouns and follow-ups (e.g. "what about now?" -> "What is the user's
+      current role?"). The search matches meaning, not literal words.
+    - If the first results are weak, incomplete, or off-topic, call the tool again with
+      different phrasing, or with separate sub-queries for the parts you still need.
+    - Use only the chunks returned by the tool for factual claims. If, after searching,
+      the material still does not cover the question, say clearly what is missing instead
+      of filling gaps with outside knowledge.
 
     SEARCH MINDSET
-    While searching, think like a sincere UPSC study partner:
+    Before and between searches, think like a sincere UPSC study partner:
     - What exact thing is the user trying to understand?
     - What sub-parts are needed for a proper answer?
-    - What terms might appear differently in source material?
-    - What supporting context is needed so the answer becomes useful for revision?
+    - What terms might appear differently in the source material?
+    - What supporting context makes the answer genuinely useful for revision?
 
     ANSWER STYLE
     Your answer should:
@@ -309,14 +351,16 @@ def _run_grounded_answer(
     model = ChatOpenAI(model=_chat_model(), temperature=0)
     agent = create_agent(model=model, tools=[search_reference_content], system_prompt=system_prompt)
     user_content = (
-        "Conversation history for context only:\n"
+        "Conversation history (for understanding the question only, not a source of facts):\n"
         f"{history_text}\n\n"
         "Current user question:\n"
         f"{q}\n\n"
-        "Answer the current question using only the retrieved sources."
+        "First call search_reference_content with a focused, standalone query, then "
+        "answer using only the chunks it returns."
     )
     result = agent.invoke({"messages": [{"role": "user", "content": user_content}]})
     content = _extract_answer_text(result)
+    llm_tokens = _sum_llm_tokens(result)
 
     parsed_answer = content
     used_indices: List[int] = []
@@ -327,15 +371,15 @@ def _run_grounded_answer(
             candidate_answer = parsed.get("answer")
             if isinstance(candidate_answer, str) and candidate_answer.strip():
                 parsed_answer = candidate_answer.strip()
-            used_indices = _normalize_indices(parsed.get("source_indices"), len(numbered_sources))
-            citation_lines = _normalize_citation_lines(parsed.get("answer_lines"), len(numbered_sources))
+            used_indices = _normalize_indices(parsed.get("source_indices"), len(source_registry))
+            citation_lines = _normalize_citation_lines(parsed.get("answer_lines"), len(source_registry))
     except Exception:  # noqa: BLE001
         used_indices = []
         citation_lines = []
 
     if not used_indices:
-        used_indices = [src["index"] for src in numbered_sources[: min(3, len(numbered_sources))]]
-    used_sources = [src for src in numbered_sources if src["index"] in set(used_indices)]
+        used_indices = [src["index"] for src in source_registry[: min(3, len(source_registry))]]
+    used_sources = [src for src in source_registry if src["index"] in set(used_indices)]
     if not citation_lines and parsed_answer:
         first_source = used_indices[0] if used_indices else 1
         lines = [ln.strip() for ln in parsed_answer.split("\n") if ln.strip()]
@@ -347,12 +391,26 @@ def _run_grounded_answer(
     return {
         "question": q,
         "answer": parsed_answer,
-        "course": source_payload.get("course", "global"),
+        "course": _normalize_course(course) or "global",
         "sources": used_sources,
         "used_source_indices": used_indices,
         "citation_lines": citation_lines,
         "retrieval_query": search_query,
+        "llm_tokens": llm_tokens,
     }
+
+
+def _sum_llm_tokens(result: Any) -> int:
+    total = 0
+    for m in (result or {}).get("messages", []) or []:
+        um = getattr(m, "usage_metadata", None)
+        if isinstance(um, dict):
+            total += int(um.get("total_tokens", 0) or 0)
+            continue
+        rm = getattr(m, "response_metadata", None) or {}
+        tu = rm.get("token_usage") or rm.get("usage") or {}
+        total += int((tu or {}).get("total_tokens", 0) or 0)
+    return total
 
 
 def create_qna_session(user_id: str, title: str = "") -> Dict[str, Any]:
@@ -438,6 +496,11 @@ def ask_qna_in_session(session_id: str, question: str, course: str = "", limit: 
     qna_messages_collection().insert_one(user_msg)
 
     grounded = _run_grounded_answer(q, course, limit, user_id=uid, conversation_messages=previous_messages)
+    try:
+        from .storage_domain import add_llm_tokens
+        add_llm_tokens(uid, "qna", grounded.get("llm_tokens", 0))
+    except Exception:
+        logger.exception("usage add_llm_tokens (qna) failed")
     assistant_msg = {
         "_id": _new_message_id(),
         "doc_type": "qna_message",
