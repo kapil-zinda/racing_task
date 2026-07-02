@@ -1,0 +1,958 @@
+UNIVERSAL GOAL OS
+Product Overview
+
+Build a modern Goal Operating System capable of representing any type of goal, from simple habits to extremely complex hierarchical goals.
+
+Examples
+
+UPSC Preparation
+Gym
+Diet
+Reading Books
+Learning Languages
+Company OKRs
+Software Projects
+Personal Finance
+Skill Learning
+Daily Habits
+
+The system must NEVER hardcode goal types.
+
+Everything should be configurable through metadata.
+
+The architecture should support unlimited nesting.
+
+Example
+
+Goal
+
+    Subject
+
+        Topic
+
+            Lecture
+
+                Video
+
+                Notes
+
+                Revision
+
+                MCQ
+
+
+or
+
+Goal
+
+    Week
+
+        Day
+
+            Exercise
+
+                Set
+
+
+Everything is simply a Goal Node.
+
+
+CORE PRINCIPLE
+
+Everything is
+
+Goal
+
+↓
+
+Goal Node
+
+↓
+
+Children
+
+↓
+
+Metrics
+
+↓
+
+Logs
+
+
+Never create
+
+Study Table
+
+Gym Table
+
+Diet Table
+
+There should only be generic tables.
+
+DATABASE DESIGN
+Goal
+id
+
+name
+
+description
+
+icon
+
+coverImage
+
+color
+
+status
+
+category
+
+priority
+
+ownerId
+
+startDate
+
+endDate
+
+visibility
+
+progress
+
+estimatedHours
+
+actualHours
+
+settings(json)
+
+createdAt
+
+updatedAt
+GoalNode
+
+Recursive Tree
+
+id
+
+goalId
+
+parentId
+
+title
+
+description
+
+type
+
+order
+
+status
+
+weight
+
+estimatedValue
+
+actualValue
+
+unit
+
+formula
+
+metadata(json)
+
+createdAt
+
+updatedAt
+
+Examples
+
+Subject
+
+Topic
+
+Lecture
+
+Exercise
+
+Meal
+
+Book
+
+Chapter
+
+Task
+
+Revision
+
+Video
+
+Notes
+
+MCQ
+
+
+Unlimited depth.
+
+Metric
+id
+
+nodeId
+
+name
+
+type
+
+unit
+
+targetValue
+
+currentValue
+
+minValue
+
+maxValue
+
+
+Examples
+
+Weight
+
+Calories
+
+Pages
+
+Hours
+
+Videos
+
+Reps
+
+Sets
+
+Protein
+
+Accuracy
+
+Activity Log
+id
+
+goalId
+
+nodeId
+
+action
+
+oldValue
+
+newValue
+
+performedBy
+
+createdAt
+
+Everything user does is logged.
+
+Attachments
+id
+
+nodeId
+
+type
+
+url
+
+name
+
+
+Supports
+
+PDF
+
+Image
+
+Video
+
+Audio
+
+Links
+
+Dependencies
+id
+
+sourceNodeId
+
+targetNodeId
+
+dependencyType
+
+Example
+
+Lecture 2 depends on Lecture 1
+
+Recurring Rules
+id
+
+goalId
+
+frequency
+
+cron
+
+startDate
+
+endDate
+Reminders
+id
+
+goalId
+
+nodeId
+
+time
+
+type
+
+status
+Goal Templates
+id
+
+name
+
+description
+
+thumbnail
+
+schema(json)
+
+Everything stored as JSON template.
+
+PROGRESS ENGINE
+
+Every node calculates
+
+Completed Children
+
+Weighted Average
+
+Manual Formula
+
+Metric Formula
+
+Boolean Completion
+
+
+Formula examples
+
+(Video × 30)
+
++
+
+(Notes × 20)
+
++
+
+(Revision × 20)
+
++
+
+(MCQ × 30)
+
+
+Progress automatically propagates upward.
+
+Leaf
+
+↓
+
+Topic
+
+↓
+
+Subject
+
+↓
+
+Goal
+
+FRONTEND
+Navigation
+Sidebar
+
+Dashboard
+
+Goals
+
+Templates
+
+Analytics
+
+Calendar
+
+Timeline
+
+Settings
+Dashboard
+
+Cards
+
+Overall Progress
+
+Today's Progress
+
+Current Streak
+
+Time Spent
+
+Upcoming Deadlines
+
+Missed Tasks
+
+Upcoming Reviews
+
+Weekly Score
+
+Below
+
+Calendar Heatmap
+
+Progress Rings
+
+Today's Plan
+
+Recent Activity
+
+AI Suggestions
+
+Quick Actions
+Goal List
+
+Card View
+
+Icon
+
+Name
+
+Progress
+
+Deadline
+
+Hours
+
+Children
+
+Status
+
+
+Actions
+
+Open
+
+Duplicate
+
+Archive
+
+Delete
+
+Share
+
+Goal Details
+
+Split Layout
+
+Left
+
+Goal Tree
+
+Right
+
+Node Details
+
+Tree Example
+
+UPSC
+
+▼ GS1
+
+▼ History
+
+▼ Ancient
+
+Lecture 1
+
+Lecture 2
+
+Lecture 3
+
+
+Tree must support
+
+Drag
+
+Drop
+
+Rename
+
+Collapse
+
+Expand
+
+Search
+
+Multi Select
+
+Copy
+
+Paste
+
+Duplicate
+
+Node Detail
+
+Top
+
+Title
+
+Status
+
+Weight
+
+Progress
+
+Priority
+
+Tabs
+
+Overview
+
+Metrics
+
+Files
+
+Activity
+
+Comments
+
+Dependencies
+
+History
+
+Overview
+
+Description
+
+Checklist
+
+Notes
+
+Time Tracking
+
+Properties
+
+Metrics
+
+Table
+
+Metric
+
+Target
+
+Current
+
+Progress
+
+History
+
+Activity
+
+Timeline
+
+Completed Video
+
+Added Notes
+
+Revision Done
+
+Metric Updated
+
+Goal Creation
+
+Wizard
+
+Step 1
+
+Goal Name
+
+Description
+
+Icon
+
+Color
+
+
+Step 2
+
+Choose
+
+Blank
+
+Template
+
+AI Generate
+
+If AI
+
+User types
+
+Prepare UPSC 2027
+
+↓
+
+Generate hierarchy
+Node Editor
+
+Popup
+
+Title
+
+Description
+
+Weight
+
+Metrics
+
+Formula
+
+Children
+
+Reminder
+
+Dependency
+
+Templates
+
+Grid
+
+UPSC
+
+Gym
+
+Diet
+
+Reading
+
+Coding
+
+Project
+
+Finance
+
+Language
+
+Habit
+
+
+Click
+
+Duplicate Template
+
+Customize
+
+Use
+Calendar
+
+Daily
+
+Weekly
+
+Monthly
+
+Shows
+
+Tasks
+
+Reviews
+
+Deadlines
+
+Recurring Goals
+
+Analytics
+
+Tabs
+
+Progress
+
+Time
+
+Consistency
+
+Predictions
+
+Comparisons
+
+
+Charts
+
+Line
+
+Bar
+
+Pie
+
+Radar
+
+Sunburst
+
+Treemap
+
+Calendar Heatmap
+
+Stacked Area
+
+Timeline
+
+Gantt
+
+Bubble
+
+Scatter
+
+VISUALIZATIONS
+
+Dashboard
+
+Progress Rings
+
+
+Hierarchy
+
+Sunburst
+
+
+Time
+
+Timeline
+
+
+Consistency
+
+GitHub Heatmap
+
+
+Distribution
+
+Treemap
+
+
+Completion
+
+Donut
+
+
+Workload
+
+Stacked Bars
+
+
+Forecast
+
+Burndown
+
+Burnup
+
+Velocity
+
+
+Focus
+
+Radar Chart
+
+
+Dependencies
+
+React Flow Graph
+
+
+Achievements
+
+Timeline
+
+SEARCH
+
+Global search
+
+Search
+
+Goal
+
+Node
+
+Metric
+
+Activity
+
+Attachment
+
+
+Filters
+
+Status
+
+Tags
+
+Date
+
+Priority
+
+Goal
+
+NOTIFICATIONS
+Upcoming Deadlines
+
+Missed Goals
+
+Review Due
+
+Recurring Reminder
+
+Streak Lost
+
+Milestone Completed
+WEBSOCKET
+
+Realtime updates
+
+Progress Changed
+
+Metric Updated
+
+Node Added
+
+Node Deleted
+
+Reminder
+
+Activity Added
+AI FEATURES
+
+Natural Language Goal Generator
+
+Example
+
+Prepare for UPSC 2027.
+
+Subjects:
+History
+Geography
+Economics
+
+Every lecture should contain
+
+Video
+
+Notes
+
+Revision
+
+MCQ
+
+Weekly Test
+
+Monthly Revision
+
+Automatically generates hierarchy.
+
+Weekly Review
+
+Completed
+
+Pending
+
+Missed
+
+Average Hours
+
+Suggestions
+
+Daily Planner
+
+Automatically generates today's work.
+
+Forecast
+
+At current speed
+
+Goal completes in
+
+182 days
+
+Need
+
++42 min/day
+API
+GET /goals
+
+POST /goals
+
+PATCH /goals/:id
+
+DELETE /goals/:id
+
+GET /goals/:id/tree
+
+POST /nodes
+
+PATCH /nodes/:id
+
+DELETE /nodes/:id
+
+POST /metrics
+
+PATCH /metrics
+
+GET /analytics
+
+POST /templates
+
+POST /activity
+
+GET /calendar
+
+POST /ai/generate
+
+POST /forecast
+
+POST /review
+PERFORMANCE
+
+Must support
+
+10,000+ nodes per goal
+Lazy loading for deep trees
+Virtualized lists for large hierarchies
+Optimistic UI updates
+Offline-first editing with background synchronization
+Real-time updates via WebSockets
+Background workers for analytics, reminders, and recurring tasks
+Indexed full-text search
+FUTURE-READY FEATURES
+
+Design the system so these can be added without schema changes:
+
+Team collaboration and shared goals
+Goal templates marketplace
+Public goal sharing
+AI coach and mentor
+Voice input and dictation
+OCR import from handwritten notes
+Wearable integrations (Apple Health, Google Fit)
+Calendar sync
+GitHub and coding platform integrations
+Import from Notion, ClickUp, Todoist
+Gamification (XP, levels, badges)
+Knowledge graph linking between goals
+Mobile applications
+Offline synchronization
+Plugin architecture
+Multi-tenant organizations

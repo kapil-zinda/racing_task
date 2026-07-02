@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import { apiFetch } from "../lib/auth";
 
@@ -82,7 +82,6 @@ export default function AnswerEvalPage() {
   const [error, setError] = useState("");
   const [list, setList] = useState([]);
   const [listLoading, setListLoading] = useState(false);
-  const pollRef = useRef(null);
 
   const loadList = async () => {
     if (!API_BASE_URL) return;
@@ -95,26 +94,7 @@ export default function AnswerEvalPage() {
     }
   };
 
-  useEffect(() => { loadList(); return () => { if (pollRef.current) clearInterval(pollRef.current); }; }, []);
-
-  const pollUntilDone = (id) => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await apiFetch(`${API_BASE_URL}/answer-eval/${id}`);
-        if (!res.ok) return;
-        const d = await res.json();
-        if (d.status === "completed" || d.status === "failed") {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-          setData(d);
-          setStatus(d.status);
-          if (d.status === "failed") setError(d.error || "Evaluation failed");
-          loadList();
-        }
-      } catch (_) {}
-    }, 3000);
-  };
+  useEffect(() => { loadList(); }, []);
 
   const start = async () => {
     if (!file) { setError("Choose a PDF of your answer first."); return; }
@@ -124,35 +104,39 @@ export default function AnswerEvalPage() {
     setStatus("uploading");
     try {
       const contentType = file.type || "application/pdf";
+      // Question + marks are captured now so the upload-triggered worker can evaluate
+      // without any further call.
       const pre = await apiFetch(`${API_BASE_URL}/answer-eval/presign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, content_type: contentType }),
+        body: JSON.stringify({
+          filename: file.name,
+          content_type: contentType,
+          question: question.trim(),
+          max_marks: Number(maxMarks) || 0,
+        }),
       });
       if (!pre.ok) throw new Error(await pre.text());
-      const { eval_id, upload_url } = await pre.json();
+      const { eval_id, upload_url, auto_evaluate } = await pre.json();
 
       const put = await fetch(upload_url, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
       if (!put.ok) throw new Error(`Upload failed: ${put.status}`);
 
-      setStatus("processing");
-      const ev = await apiFetch(`${API_BASE_URL}/answer-eval/${eval_id}/evaluate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: question.trim(), max_marks: Number(maxMarks) || 0 }),
-      });
-      if (!ev.ok) throw new Error(await ev.text());
-      const evData = await ev.json();
-      if (evData.status === "completed" && evData.result) {
-        const got = await apiFetch(`${API_BASE_URL}/answer-eval/${eval_id}`);
-        setData(await got.json());
-        setStatus("completed");
-        loadList();
-      } else {
-        pollUntilDone(eval_id);
+      // With an S3 upload-trigger wired up (prod), the object-created event drives
+      // evaluation — don't call /evaluate. Otherwise (local/dev) kick it manually.
+      if (!auto_evaluate) {
+        await apiFetch(`${API_BASE_URL}/answer-eval/${eval_id}/evaluate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }).catch(() => {});
       }
+      // No polling — evaluation runs in the background. It shows up in "My Answers"
+      // once done; the user just refreshes / reopens it.
+      setStatus("submitted");
+      setFile(null);
+      loadList();
     } catch (err) {
-      setError(`Could not evaluate: ${String(err.message || err)}`);
+      setError(`Could not submit: ${String(err.message || err)}`);
       setStatus("failed");
     }
   };
@@ -161,13 +145,12 @@ export default function AnswerEvalPage() {
     setError("");
     setDetail(true);
     setData(null);
-    setStatus("processing");
+    setStatus("loading");
     try {
       const res = await apiFetch(`${API_BASE_URL}/answer-eval/${id}`);
       const d = await res.json();
       setData(d);
       setStatus(d.status === "completed" ? "completed" : d.status);
-      if (d.status !== "completed" && d.status !== "failed") pollUntilDone(id);
     } catch (err) {
       setError(`Could not load: ${String(err.message || err)}`);
     }
@@ -179,7 +162,7 @@ export default function AnswerEvalPage() {
     if (t === "answers") { setDetail(false); loadList(); }
   };
 
-  const busy = status === "uploading" || status === "processing";
+  const busy = status === "uploading";
 
   return (
     <main className="app-shell">
@@ -231,18 +214,23 @@ export default function AnswerEvalPage() {
                     disabled={busy}
                   />
                   <button className="btn-ticket" onClick={start} disabled={busy || !file}>
-                    {status === "uploading" ? "Uploading…" : status === "processing" ? "Evaluating…" : "Evaluate"}
+                    {status === "uploading" ? "Submitting…" : "Submit for evaluation"}
                   </button>
                 </div>
 
-                {busy ? (
+                {status === "uploading" ? (
                   <div className="ae-loading">
                     <div className="ae-spinner" />
-                    <span>{status === "uploading" ? "Uploading your answer…" : "The examiner is reading and marking your answer (OCR + evaluation)…"}</span>
+                    <span>Uploading your answer…</span>
                   </div>
                 ) : null}
 
-                {status === "completed" && !detail && data?.result ? <EvalResult data={data} /> : null}
+                {status === "submitted" ? (
+                  <div className="ae-submitted">
+                    ✅ Submitted! Your answer is being evaluated in the background. Open the
+                    <strong> My Answers </strong> tab and refresh in a bit to see the marks and comments.
+                  </div>
+                ) : null}
               </>
             ) : null}
 
@@ -251,12 +239,14 @@ export default function AnswerEvalPage() {
               detail ? (
                 <>
                   <button className="btn-cancel ae-back" onClick={() => { setDetail(false); setData(null); }}>← All answers</button>
-                  {busy ? (
-                    <div className="ae-loading"><div className="ae-spinner" /><span>Loading evaluation…</span></div>
+                  {status === "loading" ? (
+                    <div className="ae-loading"><div className="ae-spinner" /><span>Loading…</span></div>
                   ) : data?.result ? (
                     <EvalResult data={data} />
+                  ) : data?.status === "failed" ? (
+                    <p className="day-state">Evaluation failed{data?.error ? `: ${data.error}` : ""}.</p>
                   ) : (
-                    <p className="day-state">This answer is still {data?.status || "processing"}.</p>
+                    <p className="day-state">Still evaluating — refresh in a bit to see the result.</p>
                   )}
                 </>
               ) : (

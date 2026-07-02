@@ -81,6 +81,8 @@ class InterviewStartRequest(BaseModel):
 class AnswerEvalPresignRequest(BaseModel):
     filename: str = "answer.pdf"
     content_type: str = "application/pdf"
+    question: str = ""
+    max_marks: int = 0
 
 
 class AnswerEvalEvaluateRequest(BaseModel):
@@ -218,25 +220,185 @@ class MissionUpsertRequest(BaseModel):
     plan: dict = {}
 
 
-class JourneyCreateRequest(BaseModel):
-    title: str
-    target_date: str = ""
-    plan: dict = {}
+# --- Universal Goal OS ---
+
+class GoalCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    icon: str = ""
+    cover_image: str = ""
+    color: str = ""
+    category: str = ""
+    priority: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    visibility: str = ""
+    estimated_hours: float = 0
+    settings: dict = {}
 
 
-class JourneyUpdateRequest(BaseModel):
-    title: Optional[str] = None
-    target_date: Optional[str] = None
+class GoalUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    cover_image: Optional[str] = None
+    color: Optional[str] = None
     status: Optional[str] = None
-    plan: Optional[dict] = None
+    category: Optional[str] = None
+    priority: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    visibility: Optional[str] = None
+    estimated_hours: Optional[float] = None
+    actual_hours: Optional[float] = None
+    settings: Optional[dict] = None
 
 
-class JourneyProgressActionRequest(BaseModel):
+class GoalNodeCreateRequest(BaseModel):
+    goal_id: str
+    parent_id: Optional[str] = None
+    title: str
+    description: str = ""
+    type: str = ""
+    status: str = "todo"
+    weight: float = 1
+    estimated_value: Optional[float] = None
+    actual_value: Optional[float] = None
+    unit: str = ""
+    progress_mode: str = "children_weighted"
+    formula: str = ""
+    order: Optional[float] = None
+    metadata: dict = {}
+
+
+class GoalNodeUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    type: Optional[str] = None
+    status: Optional[str] = None
+    weight: Optional[float] = None
+    estimated_value: Optional[float] = None
+    actual_value: Optional[float] = None
+    unit: Optional[str] = None
+    progress_mode: Optional[str] = None
+    progress: Optional[float] = None
+    formula: Optional[str] = None
+    order: Optional[float] = None
+    metadata: Optional[dict] = None
+
+
+class GoalNodeMoveRequest(BaseModel):
+    new_parent_id: Optional[str] = None
+    order: Optional[float] = None
+
+
+class GoalMetricTemplateItem(BaseModel):
+    name: str
+    target_value: float = 1
+    unit: str = ""
+    type: str = "number"
+
+
+class GoalNodeBulkCreateRequest(BaseModel):
+    goal_id: str
+    parent_id: Optional[str] = None
+    # Either an explicit list of titles, or a pattern + count.
+    titles: Optional[List[str]] = None
+    name_pattern: Optional[str] = None
+    count: Optional[int] = None
+    start: int = 1
+    type: str = ""
+    weight: float = 1
+    progress_mode: Optional[str] = None
+    metrics: List[GoalMetricTemplateItem] = []
+
+
+class GoalMetricCreateRequest(BaseModel):
     node_id: str
-    node_label: str = ""
-    counter_key: str
-    occurrence: int
-    action: str
+    name: str
+    type: str = "number"
+    unit: str = ""
+    target_value: float = 0
+    current_value: float = 0
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+
+
+class GoalMetricUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    unit: Optional[str] = None
+    target_value: Optional[float] = None
+    current_value: Optional[float] = None
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+
+
+class GoalMetricIncrementRequest(BaseModel):
+    delta: float = 1
+
+
+# --- Goal OS: AI, templates, dependencies, scheduling, attachments ---
+
+class GoalAIGenerateRequest(BaseModel):
+    prompt: str
+
+
+class GoalIdRequest(BaseModel):
+    goal_id: str
+
+
+class GoalDailyPlanRequest(BaseModel):
+    goal_id: str
+    limit: int = 5
+
+
+class GoalTemplateCreateRequest(BaseModel):
+    goal_id: str
+    name: str = ""
+
+
+class GoalTemplateUseRequest(BaseModel):
+    template_id: str
+    name: str = ""
+
+
+class GoalDependencyCreateRequest(BaseModel):
+    goal_id: str
+    source_node_id: str
+    target_node_id: str
+    dependency_type: str = "blocks"
+
+
+class GoalReminderCreateRequest(BaseModel):
+    goal_id: str
+    node_id: Optional[str] = None
+    time: str
+    type: str = "reminder"
+
+
+class GoalRecurringCreateRequest(BaseModel):
+    goal_id: str
+    node_id: Optional[str] = None
+    frequency: str
+    cron: str = ""
+    start_date: str = ""
+    end_date: str = ""
+
+
+class GoalAttachmentPresignRequest(BaseModel):
+    node_id: str
+    name: str
+    content_type: str = ""
+
+
+class GoalAttachmentCreateRequest(BaseModel):
+    node_id: str
+    type: str = "file"
+    name: str = ""
+    url: str = ""
+    key: str = ""
+    size: int = 0
 
 
 class AgentV2CreateRequest(BaseModel):
@@ -304,3 +466,10 @@ class ActivityUpsertRequest(BaseModel):
 class ActivityCategoryRequest(BaseModel):
     name: str
     color: str = "#6366f1"
+
+
+class MindmapUpsertRequest(BaseModel):
+    title: str = ""
+    markdown: str = ""
+    outlineItems: Optional[List[dict]] = None
+    tree: Optional[dict] = None

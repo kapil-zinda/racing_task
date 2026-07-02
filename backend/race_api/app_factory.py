@@ -1,6 +1,6 @@
-import time
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -46,6 +46,7 @@ from .activity_tracker_domain import (
     delete_activity,
     delete_category,
     get_activities,
+    get_activities_summary,
     get_categories,
     update_activity,
 )
@@ -87,12 +88,67 @@ from .pdf_search_domain import (
     search_pdf,
 )
 from .qna_domain import ask_qna_in_session, create_qna_session, get_qna_messages, list_qna_sessions
-from .journey_domain import create_journey, delete_journey, list_journeys, update_journey
-from .journey_progress_domain import get_journey_progress, record_progress_action
+from .goal_domain import (
+    create_goal,
+    delete_goal,
+    get_activity,
+    get_goal,
+    list_goals,
+    update_goal,
+)
+from .goal_node_domain import (
+    bulk_create_children,
+    create_node,
+    delete_node,
+    get_tree,
+    move_node,
+    update_node,
+)
+from .goal_metric_domain import (
+    create_metric,
+    delete_metric,
+    increment_metric,
+    list_metrics,
+    update_metric,
+)
+from .goal_ai_domain import daily_plan, forecast_goal, generate_goal_from_text, weekly_review
+from .goal_template_domain import (
+    create_template_from_goal,
+    delete_template,
+    list_templates,
+    use_template,
+)
+from .goal_analytics_domain import analytics as goal_analytics, calendar as goal_calendar
+from .goal_dependency_domain import create_dependency, delete_dependency, list_dependencies
+from .goal_schedule_domain import (
+    create_recurring,
+    create_reminder,
+    delete_recurring,
+    delete_reminder,
+    list_notifications,
+    list_recurring,
+    list_reminders,
+)
+from .goal_search_domain import search as goal_search
+from .goal_dashboard_domain import dashboard as goal_dashboard
+from .goal_attachment_domain import (
+    create_attachment,
+    delete_attachment,
+    list_attachments,
+    presign_attachment,
+)
 from .mission_domain import get_or_create_mission, mission_progress_payload, mission_selector_options, upsert_mission
+from .mindmap_domain import (
+    create_mindmap,
+    delete_mindmap,
+    get_mindmap,
+    list_mindmaps,
+    update_mindmap,
+)
 from .schemas import (
     ActivityCategoryRequest,
     ActivityUpsertRequest,
+    MindmapUpsertRequest,
     AddPointsRequest,
     DeletePointsEventRequest,
     ContentCreateFolderRequest,
@@ -123,9 +179,25 @@ from .schemas import (
     QnaAskRequest,
     QnaSessionCreateRequest,
     MissionUpsertRequest,
-    JourneyCreateRequest,
-    JourneyUpdateRequest,
-    JourneyProgressActionRequest,
+    GoalCreateRequest,
+    GoalUpdateRequest,
+    GoalNodeCreateRequest,
+    GoalNodeUpdateRequest,
+    GoalNodeMoveRequest,
+    GoalNodeBulkCreateRequest,
+    GoalMetricCreateRequest,
+    GoalMetricUpdateRequest,
+    GoalMetricIncrementRequest,
+    GoalAIGenerateRequest,
+    GoalIdRequest,
+    GoalDailyPlanRequest,
+    GoalTemplateCreateRequest,
+    GoalTemplateUseRequest,
+    GoalDependencyCreateRequest,
+    GoalReminderCreateRequest,
+    GoalRecurringCreateRequest,
+    GoalAttachmentPresignRequest,
+    GoalAttachmentCreateRequest,
     AgentV2ChatRequest,
     AgentV2CreateRequest,
     AgentV2EntryRequest,
@@ -380,7 +452,7 @@ def create_app() -> FastAPI:
         course: Optional[str] = Query(default=None),
     ):
         try:
-            return search_pdf(q, limit, course, user_id=_require_auth(request))
+            return search_pdf(q, limit, course, user_id=_require_auth(request), track_search=True)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /pdf-search/query")
 
@@ -462,47 +534,322 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "PUT /mission")
 
-    @app.get("/journeys")
-    def list_user_journeys(request: Request):
-        try:
-            return {"journeys": list_journeys(_req_user_id(request))}
-        except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "GET /journeys")
+    # --- Universal Goal OS ---
 
-    @app.post("/journeys")
-    def create_user_journey(request: Request, payload: JourneyCreateRequest):
+    @app.get("/goals")
+    def goals_list(request: Request):
         try:
-            return create_journey(_req_user_id(request), payload.model_dump())
+            return list_goals(_require_auth(request))
         except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "POST /journeys")
+            _raise_as_http(err, "GET /goals")
 
-    @app.put("/journeys/{journey_id}")
-    def update_user_journey(journey_id: str, request: Request, payload: JourneyUpdateRequest):
+    @app.post("/goals")
+    def goals_create(request: Request, payload: GoalCreateRequest):
         try:
-            return update_journey(_req_user_id(request), journey_id, payload.model_dump(exclude_none=True))
+            return create_goal(_require_auth(request), payload.model_dump())
         except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "PUT /journeys/{journey_id}")
+            _raise_as_http(err, "POST /goals")
 
-    @app.delete("/journeys/{journey_id}")
-    def delete_user_journey(journey_id: str, request: Request):
+    @app.get("/goals/{goal_id}")
+    def goals_get(goal_id: str, request: Request):
         try:
-            return delete_journey(_req_user_id(request), journey_id)
+            return get_goal(_require_auth(request), goal_id)
         except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "DELETE /journeys/{journey_id}")
+            _raise_as_http(err, "GET /goals/{goal_id}")
 
-    @app.get("/journeys/{journey_id}/progress")
-    def get_user_journey_progress(journey_id: str, request: Request):
+    @app.patch("/goals/{goal_id}")
+    def goals_update(goal_id: str, request: Request, payload: GoalUpdateRequest):
         try:
-            return get_journey_progress(_req_user_id(request), journey_id)
+            return update_goal(_require_auth(request), goal_id, payload.model_dump(exclude_none=True))
         except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "GET /journeys/{journey_id}/progress")
+            _raise_as_http(err, "PATCH /goals/{goal_id}")
 
-    @app.post("/journeys/{journey_id}/progress")
-    def record_user_journey_progress(journey_id: str, request: Request, payload: JourneyProgressActionRequest):
+    @app.delete("/goals/{goal_id}")
+    def goals_delete(goal_id: str, request: Request):
         try:
-            return record_progress_action(_req_user_id(request), journey_id, payload.model_dump())
+            return delete_goal(_require_auth(request), goal_id)
         except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "POST /journeys/{journey_id}/progress")
+            _raise_as_http(err, "DELETE /goals/{goal_id}")
+
+    @app.get("/goals/{goal_id}/tree")
+    def goals_tree(goal_id: str, request: Request,
+                   parent: Optional[str] = Query(default=None),
+                   depth: int = Query(default=0, ge=0, le=12)):
+        try:
+            return get_tree(_require_auth(request), goal_id, parent_id=parent, depth=depth)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /goals/{goal_id}/tree")
+
+    @app.get("/goals/{goal_id}/activity")
+    def goals_activity(goal_id: str, request: Request, limit: int = Query(default=100, ge=1, le=500)):
+        try:
+            return get_activity(_require_auth(request), goal_id, limit=limit)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /goals/{goal_id}/activity")
+
+    @app.post("/nodes")
+    def nodes_create(request: Request, payload: GoalNodeCreateRequest):
+        try:
+            return create_node(_require_auth(request), payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /nodes")
+
+    @app.post("/nodes/bulk")
+    def nodes_bulk_create(request: Request, payload: GoalNodeBulkCreateRequest):
+        try:
+            return bulk_create_children(_require_auth(request), payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /nodes/bulk")
+
+    @app.patch("/nodes/{node_id}")
+    def nodes_update(node_id: str, request: Request, payload: GoalNodeUpdateRequest):
+        try:
+            return update_node(_require_auth(request), node_id, payload.model_dump(exclude_none=True))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "PATCH /nodes/{node_id}")
+
+    @app.delete("/nodes/{node_id}")
+    def nodes_delete(node_id: str, request: Request):
+        try:
+            return delete_node(_require_auth(request), node_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "DELETE /nodes/{node_id}")
+
+    @app.post("/nodes/{node_id}/move")
+    def nodes_move(node_id: str, request: Request, payload: GoalNodeMoveRequest):
+        try:
+            return move_node(_require_auth(request), node_id, payload.new_parent_id, payload.order)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /nodes/{node_id}/move")
+
+    @app.get("/nodes/{node_id}/metrics")
+    def node_metrics_list(node_id: str, request: Request):
+        try:
+            return list_metrics(_require_auth(request), node_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /nodes/{node_id}/metrics")
+
+    @app.post("/metrics")
+    def metrics_create(request: Request, payload: GoalMetricCreateRequest):
+        try:
+            return create_metric(_require_auth(request), payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /metrics")
+
+    @app.patch("/metrics/{metric_id}")
+    def metrics_update(metric_id: str, request: Request, payload: GoalMetricUpdateRequest):
+        try:
+            return update_metric(_require_auth(request), metric_id, payload.model_dump(exclude_none=True))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "PATCH /metrics/{metric_id}")
+
+    @app.post("/metrics/{metric_id}/increment")
+    def metrics_increment(metric_id: str, request: Request, payload: GoalMetricIncrementRequest):
+        try:
+            return increment_metric(_require_auth(request), metric_id, payload.delta)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /metrics/{metric_id}/increment")
+
+    @app.delete("/metrics/{metric_id}")
+    def metrics_delete(metric_id: str, request: Request):
+        try:
+            return delete_metric(_require_auth(request), metric_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "DELETE /metrics/{metric_id}")
+
+    # --- Goal OS: AI, forecast, review, plan ---
+
+    @app.post("/ai/generate")
+    def ai_generate(request: Request, payload: GoalAIGenerateRequest):
+        try:
+            return generate_goal_from_text(_require_auth(request), payload.prompt)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /ai/generate")
+
+    @app.post("/forecast")
+    def goal_forecast(request: Request, payload: GoalIdRequest):
+        try:
+            return forecast_goal(_require_auth(request), payload.goal_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /forecast")
+
+    @app.post("/review")
+    def goal_review(request: Request, payload: GoalIdRequest):
+        try:
+            return weekly_review(_require_auth(request), payload.goal_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /review")
+
+    @app.post("/ai/daily-plan")
+    def goal_daily_plan(request: Request, payload: GoalDailyPlanRequest):
+        try:
+            return daily_plan(_require_auth(request), payload.goal_id, payload.limit)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /ai/daily-plan")
+
+    # --- Goal OS: templates ---
+
+    @app.get("/templates")
+    def templates_list(request: Request):
+        try:
+            return list_templates(_require_auth(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /templates")
+
+    @app.post("/templates")
+    def templates_create(request: Request, payload: GoalTemplateCreateRequest):
+        try:
+            return create_template_from_goal(_require_auth(request), payload.goal_id, payload.name)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /templates")
+
+    @app.post("/templates/use")
+    def templates_use(request: Request, payload: GoalTemplateUseRequest):
+        try:
+            return use_template(_require_auth(request), payload.template_id, payload.name)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /templates/use")
+
+    @app.delete("/templates/{template_id}")
+    def templates_delete(template_id: str, request: Request):
+        try:
+            return delete_template(_require_auth(request), template_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "DELETE /templates/{template_id}")
+
+    # --- Goal OS: analytics + calendar + search ---
+
+    @app.get("/goals/{goal_id}/analytics")
+    def goal_analytics_route(goal_id: str, request: Request):
+        try:
+            return goal_analytics(_require_auth(request), goal_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /goals/{goal_id}/analytics")
+
+    @app.get("/dashboard")
+    def goal_dashboard_route(request: Request):
+        try:
+            return goal_dashboard(_require_auth(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /dashboard")
+
+    @app.get("/calendar")
+    def goal_calendar_route(request: Request, goal_id: str = Query(default="")):
+        try:
+            return goal_calendar(_require_auth(request), goal_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /calendar")
+
+    @app.get("/search")
+    def goal_search_route(request: Request, q: str = Query(default=""), limit: int = Query(default=30, ge=1, le=100)):
+        try:
+            return goal_search(_require_auth(request), q, limit)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /search")
+
+    # --- Goal OS: dependencies ---
+
+    @app.get("/goals/{goal_id}/dependencies")
+    def deps_list(goal_id: str, request: Request):
+        try:
+            return list_dependencies(_require_auth(request), goal_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /goals/{goal_id}/dependencies")
+
+    @app.post("/dependencies")
+    def deps_create(request: Request, payload: GoalDependencyCreateRequest):
+        try:
+            return create_dependency(_require_auth(request), payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /dependencies")
+
+    @app.delete("/dependencies/{dep_id}")
+    def deps_delete(dep_id: str, request: Request):
+        try:
+            return delete_dependency(_require_auth(request), dep_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "DELETE /dependencies/{dep_id}")
+
+    # --- Goal OS: reminders + recurring + notifications ---
+
+    @app.get("/reminders")
+    def reminders_list(request: Request, goal_id: str = Query(default="")):
+        try:
+            return list_reminders(_require_auth(request), goal_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /reminders")
+
+    @app.post("/reminders")
+    def reminders_create(request: Request, payload: GoalReminderCreateRequest):
+        try:
+            return create_reminder(_require_auth(request), payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /reminders")
+
+    @app.delete("/reminders/{reminder_id}")
+    def reminders_delete(reminder_id: str, request: Request):
+        try:
+            return delete_reminder(_require_auth(request), reminder_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "DELETE /reminders/{reminder_id}")
+
+    @app.get("/notifications")
+    def notifications_list(request: Request):
+        try:
+            return list_notifications(_require_auth(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /notifications")
+
+    @app.get("/goals/{goal_id}/recurring")
+    def recurring_list(goal_id: str, request: Request):
+        try:
+            return list_recurring(_require_auth(request), goal_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /goals/{goal_id}/recurring")
+
+    @app.post("/recurring")
+    def recurring_create(request: Request, payload: GoalRecurringCreateRequest):
+        try:
+            return create_recurring(_require_auth(request), payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /recurring")
+
+    @app.delete("/recurring/{rule_id}")
+    def recurring_delete(rule_id: str, request: Request):
+        try:
+            return delete_recurring(_require_auth(request), rule_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "DELETE /recurring/{rule_id}")
+
+    # --- Goal OS: attachments ---
+
+    @app.get("/nodes/{node_id}/attachments")
+    def attachments_list(node_id: str, request: Request):
+        try:
+            return list_attachments(_require_auth(request), node_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /nodes/{node_id}/attachments")
+
+    @app.post("/attachments/presign")
+    def attachments_presign(request: Request, payload: GoalAttachmentPresignRequest):
+        try:
+            return presign_attachment(_require_auth(request), payload.node_id, payload.name, payload.content_type)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /attachments/presign")
+
+    @app.post("/attachments")
+    def attachments_create(request: Request, payload: GoalAttachmentCreateRequest):
+        try:
+            return create_attachment(_require_auth(request), payload.model_dump())
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /attachments")
+
+    @app.delete("/attachments/{attachment_id}")
+    def attachments_delete(attachment_id: str, request: Request):
+        try:
+            return delete_attachment(_require_auth(request), attachment_id)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "DELETE /attachments/{attachment_id}")
 
     @app.get("/mission/options")
     def get_mission_options(request: Request):
@@ -978,7 +1325,9 @@ def create_app() -> FastAPI:
     @app.post("/answer-eval/presign")
     def answer_eval_presign(request: Request, payload: AnswerEvalPresignRequest):
         try:
-            return presign_answer_upload_payload(_req_user_id(request), payload.filename, payload.content_type)
+            return presign_answer_upload_payload(
+                _req_user_id(request), payload.filename, payload.content_type, payload.question, payload.max_marks
+            )
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /answer-eval/presign")
 
@@ -1002,6 +1351,16 @@ def create_app() -> FastAPI:
             return list_answer_evals_payload(_req_user_id(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /answer-eval")
+
+    # ── Storage quota (content + recordings + PDF-search) ─────────────────
+    @app.get("/storage")
+    def storage_status(request: Request):
+        try:
+            from .storage_domain import storage_status_payload
+
+            return storage_status_payload(_req_user_id(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /storage")
 
     # ── Day Activity Tracker ──────────────────────────────────────────────
     @app.get("/tracker/activities")
@@ -1032,6 +1391,17 @@ def create_app() -> FastAPI:
         except Exception as err:
             _raise_as_http(err, "DELETE /tracker/activities/{id}")
 
+    @app.get("/tracker/summary")
+    def tracker_summary(
+        request: Request,
+        start_date: Optional[str] = Query(default=None),
+        end_date: Optional[str] = Query(default=None),
+    ):
+        try:
+            return get_activities_summary(_req_user_id(request), start_date or "", end_date or "")
+        except Exception as err:
+            _raise_as_http(err, "GET /tracker/summary")
+
     @app.get("/tracker/categories")
     def tracker_get_categories(request: Request):
         try:
@@ -1052,6 +1422,46 @@ def create_app() -> FastAPI:
             return delete_category(_req_user_id(request), name)
         except Exception as err:
             _raise_as_http(err, "DELETE /tracker/categories/{name}")
+
+    # ── Mind Map Studio ───────────────────────────────────────────────────
+    @app.get("/mindmaps")
+    def mindmaps_list(
+        request: Request,
+        limit: int = Query(default=5),
+        offset: int = Query(default=0),
+    ):
+        try:
+            return list_mindmaps(_req_user_id(request), limit, offset)
+        except Exception as err:
+            _raise_as_http(err, "GET /mindmaps")
+
+    @app.post("/mindmaps")
+    def mindmaps_create(request: Request, payload: MindmapUpsertRequest):
+        try:
+            return create_mindmap(_req_user_id(request), payload.model_dump())
+        except Exception as err:
+            _raise_as_http(err, "POST /mindmaps")
+
+    @app.get("/mindmaps/{map_id}")
+    def mindmaps_get(map_id: str, request: Request):
+        try:
+            return get_mindmap(_req_user_id(request), map_id)
+        except Exception as err:
+            _raise_as_http(err, "GET /mindmaps/{id}")
+
+    @app.put("/mindmaps/{map_id}")
+    def mindmaps_update(map_id: str, request: Request, payload: MindmapUpsertRequest):
+        try:
+            return update_mindmap(_req_user_id(request), map_id, payload.model_dump())
+        except Exception as err:
+            _raise_as_http(err, "PUT /mindmaps/{id}")
+
+    @app.delete("/mindmaps/{map_id}")
+    def mindmaps_delete(map_id: str, request: Request):
+        try:
+            return delete_mindmap(_req_user_id(request), map_id)
+        except Exception as err:
+            _raise_as_http(err, "DELETE /mindmaps/{id}")
 
     @app.get("/")
     def health():
