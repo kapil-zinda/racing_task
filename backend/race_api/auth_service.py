@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -47,41 +46,34 @@ def _generate_otp() -> str:
 def _send_otp_email(to_email: str, otp: str, name: str) -> bool:
     """Returns True if email was sent successfully, False otherwise."""
     cfg = settings()
-    api_key = cfg.get("mailjet_api_key", "")
-    secret_key = cfg.get("mailjet_secret_key", "")
-    if not api_key or not secret_key:
-        logger.warning("MAILJET_API_KEY/MAILJET_SECRET_KEY not set — OTP not sent (otp=%s)", otp)
+    api_key = cfg.get("resend_api_key", "")
+    if not api_key:
         return False
-    credentials = base64.b64encode(f"{api_key}:{secret_key}".encode()).decode()
     body = json.dumps(
         {
-            "Messages": [
-                {
-                    "From": {"Email": "no_reply@uchhal.in", "Name": "uchhal"},
-                    "To": [{"Email": to_email, "Name": name}],
-                    "Subject": "Your verification code",
-                    "TextPart": f"Hi {name},\n\nYour OTP is: {otp}\n\nIt expires in 5 minutes.",
-                }
-            ]
+            "from": "uchhal <no_reply@uchhal.in>",
+            "to": [to_email],
+            "subject": "Your verification code",
+            "text": f"Hi {name},\n\nYour OTP is: {otp}\n\nIt expires in 5 minutes.",
         }
     ).encode()
     req = urllib.request.Request(
-        "https://api.mailjet.com/v3.1/send",
+        "https://api.resend.com/emails",
         data=body,
         headers={
-            "Authorization": f"Basic {credentials}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
         method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            if resp.status != 200:
-                logger.error("Mailjet error: status=%s", resp.status)
+            if resp.status not in (200, 201):
+                logger.error("Resend error: status=%s", resp.status)
                 return False
             return True
     except Exception as exc:
-        logger.error("Mailjet request failed: %s", exc)
+        logger.error("Resend request failed: %s", exc)
         return False
 
 
@@ -105,11 +97,9 @@ def signup(email: str, name: str, phone: str, password: str) -> dict:
         }
     )
     sent = _send_otp_email(email, otp, name)
-    result = {"message": "OTP sent to your email"}
     if not sent:
-        result["otp"] = otp
-        result["message"] = "Email delivery unavailable — use the OTP below"
-    return result
+        return {"message": "Could not send verification email — please try again"}
+    return {"message": "OTP sent to your email"}
 
 
 def verify_otp(email: str, otp: str) -> dict:
@@ -153,11 +143,9 @@ def resend_otp(email: str) -> dict:
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=_OTP_TTL_SECONDS)
     otps_col.update_one({"email": email}, {"$set": {"otp": otp, "expires_at": expires_at}})
     sent = _send_otp_email(email, otp, record.get("name", ""))
-    result = {"message": "OTP resent"}
     if not sent:
-        result["otp"] = otp
-        result["message"] = "Email delivery unavailable — use the OTP below"
-    return result
+        return {"message": "Could not send verification email — please try again"}
+    return {"message": "OTP resent"}
 
 
 def signin(email: str, password: str) -> dict:
