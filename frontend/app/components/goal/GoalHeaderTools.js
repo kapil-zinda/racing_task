@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { search as apiSearch, listNotifications } from "../../lib/goalApi";
+import Icon from "../Icon";
 
 function GlobalSearch() {
   const router = useRouter();
@@ -26,7 +27,7 @@ function GlobalSearch() {
 
   return (
     <div className="gsearch">
-      <input className="gsearch-input" placeholder="🔍 Search goals & nodes…" value={q}
+      <input className="gsearch-input" placeholder="Search goals & nodes…" value={q}
              onChange={(e) => setQ(e.target.value)} onFocus={() => res && setOpen(true)}
              onBlur={() => setTimeout(() => setOpen(false), 150)} />
       {open && res && (
@@ -34,7 +35,7 @@ function GlobalSearch() {
           {!hasHits && <div className="goal-hint" style={{ padding: 10 }}>No matches.</div>}
           {res.goals?.map((g) => (
             <button key={`g-${g.id}`} className="gsearch-item" onMouseDown={() => go(`/goals/${g.id}`)}>
-              <span>{g.icon} {g.name}</span><span className="gsearch-tag">goal · {g.progress}%</span>
+              <span><Icon name={g.icon} /> {g.name}</span><span className="gsearch-tag">goal · {g.progress}%</span>
             </button>
           ))}
           {res.nodes?.map((n) => (
@@ -62,7 +63,7 @@ function NotificationsBell() {
   return (
     <div className="gbell">
       <button className="goal-btn ghost" onClick={() => { setOpen((v) => !v); if (!open) load(); }} title="Notifications">
-        🔔{items.length > 0 && <span className="gbell-badge">{items.length}</span>}
+        <Icon name="bell" />{items.length > 0 && <span className="gbell-badge">{items.length}</span>}
       </button>
       {open && (
         <div className="gsearch-dropdown gbell-dropdown">
