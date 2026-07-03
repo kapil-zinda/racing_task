@@ -51,7 +51,7 @@ def _send_otp_email(to_email: str, otp: str, name: str) -> bool:
         return False
     body = json.dumps(
         {
-            "from": "uchhal <no_reply@uchhal.in>",
+            "from": "Dias <no_reply@uchhal.in>",
             "to": [to_email],
             "subject": "Your verification code",
             "text": f"Hi {name},\n\nYour OTP is: {otp}\n\nIt expires in 5 minutes.",
