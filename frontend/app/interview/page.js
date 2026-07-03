@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
+import Icon from "../components/Icon";
 import { apiFetch, useAuth } from "../lib/auth";
+import { confirmDialog } from "../lib/dialog";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const MAX_SECONDS = 30 * 60;
@@ -22,6 +24,13 @@ function fmt(total) {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+function fmtDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 const blobToBase64 = (blob) =>
   new Promise((resolve) => {
     const r = new FileReader();
@@ -29,14 +38,113 @@ const blobToBase64 = (blob) =>
     r.readAsDataURL(blob);
   });
 
+// ── Shared report renderer (used by live "report" state and the detail view) ──
+function ReportView({ report }) {
+  if (!report) return null;
+  return (
+    <div className="iv-report">
+      {report.overall ? (
+        <div className="iv-overall">
+          <div className="iv-overall-score">{report.overall.score}/10</div>
+          <p>{report.overall.verdict}</p>
+        </div>
+      ) : null}
+
+      {report.qualities ? (
+        <div className="iv-qualities">
+          {Object.entries(QUALITY_LABELS).map(([key, label]) => {
+            const q = report.qualities[key] || {};
+            const score = Number(q.score || 0);
+            return (
+              <div key={key} className="iv-quality">
+                <div className="iv-quality-head"><span>{label}</span><strong>{score}/10</strong></div>
+                <div className="iv-q-bar"><div className="iv-q-fill" style={{ width: `${score * 10}%` }} /></div>
+                {q.note ? <p className="iv-quality-note">{q.note}</p> : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {report.confidence ? (
+        <div className="iv-block"><h3>Confidence: {report.confidence.score}/100</h3><p>{report.confidence.note}</p></div>
+      ) : null}
+      {Array.isArray(report.interest_areas) && report.interest_areas.length ? (
+        <div className="iv-block"><h3>Interest areas</h3><p>{report.interest_areas.join(", ")}</p></div>
+      ) : null}
+      {Array.isArray(report.strengths) && report.strengths.length ? (
+        <div className="iv-block"><h3>Strengths</h3><ul>{report.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul></div>
+      ) : null}
+      {Array.isArray(report.improvements) && report.improvements.length ? (
+        <div className="iv-block"><h3>Areas to improve</h3><ul>{report.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul></div>
+      ) : null}
+      {Array.isArray(report.contradictions) && report.contradictions.length ? (
+        <div className="iv-block"><h3>Contradictions noticed</h3><ul>{report.contradictions.map((s, i) => <li key={i}>{s}</li>)}</ul></div>
+      ) : null}
+      {report.signals ? (
+        <p className="iv-signals">
+          {report.signals.answers} answers · avg {report.signals.avg_words_per_answer} words ·
+          {report.signals.total_filler_words} filler words
+          {report.signals.avg_response_latency_ms ? ` · avg ${Math.round(report.signals.avg_response_latency_ms / 1000)}s to respond` : ""}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// Pair up the stored messages into question → answer blocks for the detail view.
+function QuestionByQuestion({ messages = [], panel = [] }) {
+  const memberName = (id) => panel.find((m) => m.id === id)?.name || "Board";
+  const blocks = [];
+  let current = null;
+  messages.forEach((m) => {
+    if (m.role === "assistant") {
+      if (current) blocks.push(current);
+      current = { question: m.content, member: m.panel_member, answer: "" };
+    } else if (m.role === "user") {
+      if (!current) current = { question: "", member: "", answer: "" };
+      current.answer = m.content;
+      blocks.push(current);
+      current = null;
+    }
+  });
+  if (current) blocks.push(current);
+  if (!blocks.length) return null;
+  return (
+    <div className="iv-qbq">
+      <h3>Question by question</h3>
+      {blocks.map((b, i) => (
+        <div key={i} className="iv-qbq-item">
+          <div className="iv-qbq-q">
+            <span className="iv-q-who">{memberName(b.member)}</span>
+            <p>{b.question}</p>
+          </div>
+          {b.answer ? (
+            <div className="iv-qbq-a"><span className="iv-q-who">Your answer</span><p>{b.answer}</p></div>
+          ) : <p className="iv-qbq-noans">No answer recorded.</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function InterviewPage() {
   const { auth } = useAuth();
+  const [mode, setMode] = useState("list"); // list | live | detail
+  const [interviews, setInterviews] = useState([]);
+  const [listLoading, setListLoading] = useState(false);
+
+  // detail view
+  const [detail, setDetail] = useState(null); // {session, ...}
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // live interview
   const [status, setStatus] = useState("idle"); // idle | starting | active | ended | report
   const [panel, setPanel] = useState([]);
   const [sessionId, setSessionId] = useState("");
   const [activeMember, setActiveMember] = useState("");
   const [question, setQuestion] = useState("");
-  const [turns, setTurns] = useState([]); // {role:"assistant"|"user", member?, text}
+  const [turns, setTurns] = useState([]);
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -51,6 +159,24 @@ export default function InterviewPage() {
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
   const audioRef = useRef(null);
+
+  const loadInterviews = useCallback(async () => {
+    if (!API_BASE_URL) return;
+    setListLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/interview`);
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setInterviews(Array.isArray(data.interviews) ? data.interviews : []);
+    } catch (err) {
+      setError(`Could not load interviews: ${String(err.message || err)}`);
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadInterviews(); }, [loadInterviews]);
 
   useEffect(() => {
     if (status !== "active") return undefined;
@@ -84,6 +210,7 @@ export default function InterviewPage() {
     setError("");
     setReport(null);
     setTurns([]);
+    setMode("live");
     setStatus("starting");
     try {
       const res = await apiFetch(`${API_BASE_URL}/interview/start`, {
@@ -106,6 +233,7 @@ export default function InterviewPage() {
     } catch (err) {
       setError(`Could not start interview: ${String(err.message || err)}`);
       setStatus("idle");
+      setMode("list");
     }
   };
 
@@ -194,9 +322,35 @@ export default function InterviewPage() {
   };
 
   const endEarly = async () => {
-    if (!window.confirm("End the interview now and get your evaluation?")) return;
+    if (!(await confirmDialog({ title: "End interview", message: "End the interview now and get your evaluation?", confirmLabel: "End & evaluate" }))) return;
     setStatus("ended");
     await fetchReport();
+  };
+
+  const openDetail = async (id) => {
+    if (!id) return;
+    setMode("detail");
+    setDetail(null);
+    setDetailLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/interview/${id}`);
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setDetail(data.session || null);
+    } catch (err) {
+      setError(`Could not load interview: ${String(err.message || err)}`);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const backToList = () => {
+    setMode("list");
+    setStatus("idle");
+    setSessionId("");
+    setDetail(null);
+    loadInterviews();
   };
 
   const remaining = Math.max(0, MAX_SECONDS - elapsed);
@@ -219,152 +373,154 @@ export default function InterviewPage() {
           <>
             {error ? <p className="api-state error">{error}</p> : null}
 
-            {status === "idle" || status === "starting" ? (
-              <div className="iv-start">
-                <p className="iv-intro">
-                  The board (Chairman + four members) will question you on your background, current affairs,
-                  ethics and your optional subject — just like the real personality test. Find a quiet room and
-                  allow the microphone.
-                </p>
-                <button className="btn-ticket" onClick={startInterview} disabled={status === "starting"}>
-                  {status === "starting" ? "Assembling the board…" : "▶ Begin Interview"}
+            {/* ── LIST VIEW ── */}
+            {mode === "list" ? (
+              <div className="iv-list">
+                <button className="iv-list-item iv-list-new" onClick={startInterview}>
+                  <span className="iv-list-new-icon"><Icon name="plus" size={22} /></span>
+                  <span className="iv-list-new-text">
+                    <strong>Start a new interview</strong>
+                    <span>Face the virtual board and get a full personality-test evaluation.</span>
+                  </span>
                 </button>
+
+                {listLoading ? <p className="day-state">Loading interviews…</p> : null}
+                {!listLoading && interviews.length === 0 ? (
+                  <p className="iv-empty">No interviews yet. Start your first one above.</p>
+                ) : null}
+                {interviews.map((it) => (
+                  <button key={it.session_id} className="iv-list-item" onClick={() => openDetail(it.session_id)}>
+                    <span className="iv-list-main">
+                      <strong>{fmtDateTime(it.created_at)}</strong>
+                      <span className="iv-list-sub">
+                        {it.question_count} question{it.question_count === 1 ? "" : "s"}
+                        {" · "}
+                        <span className={`iv-status iv-status-${it.status}`}>{it.status}</span>
+                      </span>
+                    </span>
+                    <span className="iv-list-score">
+                      {it.overall_score != null ? <span className="iv-list-score-num">{it.overall_score}/10</span> : <span className="iv-list-score-num muted">—</span>}
+                      <Icon name="chevron-right" size={18} />
+                    </span>
+                  </button>
+                ))}
               </div>
             ) : null}
 
-            {status !== "idle" && status !== "starting" ? (
-              <>
-                {/* Timer */}
-                <div className="iv-timer">
-                  <div className="iv-timer-row">
-                    <span className="iv-clock">{fmt(elapsed)}</span>
-                    <span className="iv-clock-sub">/ {fmt(MAX_SECONDS)} · {status === "active" ? `~${fmt(remaining)} left` : "ended"}</span>
-                  </div>
-                  <div className="iv-timer-bar"><div className="iv-timer-fill" style={{ width: `${timePct}%` }} /></div>
-                </div>
-
-                {/* Panel */}
-                <div className="iv-panel">
-                  {panel.map((m) => (
-                    <div key={m.id} className={`iv-member ${activeMember === m.id ? "active" : ""} ${activeMember === m.id && speaking ? "speaking" : ""}`}>
-                      <div className="iv-avatar">{m.name.charAt(0)}</div>
-                      <div className="iv-member-name">{m.name}</div>
-                      {activeMember === m.id ? <div className="iv-member-tag">{speaking ? "speaking…" : "asking"}</div> : null}
+            {/* ── DETAIL VIEW ── */}
+            {mode === "detail" ? (
+              <div className="iv-detail">
+                <button className="iv-back" onClick={backToList}><Icon name="arrow-left" size={16} /> Back to interviews</button>
+                {detailLoading ? <p className="day-state">Loading…</p> : null}
+                {!detailLoading && detail ? (
+                  <>
+                    <div className="iv-detail-head">
+                      <h2>Interview · {fmtDateTime(detail.started_at)}</h2>
                     </div>
-                  ))}
-                </div>
-
-                {/* Current question */}
-                {status === "active" || status === "ended" ? (
-                  <div className="iv-question">
-                    <span className="iv-q-who">{memberName(activeMember)}</span>
-                    <p className="iv-q-text">{question}</p>
-                  </div>
-                ) : null}
-
-                {/* Controls */}
-                {status === "active" ? (
-                  <div className="iv-controls">
-                    {!recording ? (
-                      <button className="btn-ticket" onClick={startRecording} disabled={busy || speaking}>
-                        🎙️ {busy ? "Sending…" : speaking ? "Listening to the board…" : "Answer"}
-                      </button>
+                    {detail.report ? (
+                      <ReportView report={detail.report} />
                     ) : (
-                      <button className="meet-end" onClick={stopRecording}>■ Done answering</button>
+                      <p className="iv-empty">This interview has no evaluation report{detail.status === "active" ? " yet — it was left in progress." : "."}</p>
                     )}
-                    <div className="iv-text-fallback">
-                      <input
-                        className="task-input"
-                        placeholder="…or type your answer"
-                        value={textAnswer}
-                        onChange={(e) => setTextAnswer(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
-                        disabled={busy || recording}
-                      />
-                      <button className="btn-day" onClick={sendText} disabled={busy || recording || !textAnswer.trim()}>Send</button>
+                    <QuestionByQuestion messages={detail.messages || []} panel={detail.panel || []} />
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* ── LIVE INTERVIEW ── */}
+            {mode === "live" ? (
+              <>
+                {status === "starting" ? (
+                  <div className="iv-start"><p className="iv-intro">Assembling the board…</p></div>
+                ) : null}
+
+                {status !== "idle" && status !== "starting" ? (
+                  <>
+                    <div className="iv-timer">
+                      <div className="iv-timer-row">
+                        <span className="iv-clock">{fmt(elapsed)}</span>
+                        <span className="iv-clock-sub">/ {fmt(MAX_SECONDS)} · {status === "active" ? `~${fmt(remaining)} left` : "ended"}</span>
+                      </div>
+                      <div className="iv-timer-bar"><div className="iv-timer-fill" style={{ width: `${timePct}%` }} /></div>
                     </div>
-                    <button className="btn-cancel iv-end-early" onClick={endEarly} disabled={busy}>End &amp; evaluate</button>
-                  </div>
-                ) : null}
 
-                {status === "ended" ? (
-                  <div className="iv-controls">
-                    <p className="iv-intro">The interview has concluded.</p>
-                    <button className="btn-ticket" onClick={fetchReport} disabled={busy}>
-                      {busy ? "Evaluating…" : "📋 View my evaluation"}
-                    </button>
-                  </div>
-                ) : null}
+                    <div className="iv-panel">
+                      {panel.map((m) => (
+                        <div key={m.id} className={`iv-member ${activeMember === m.id ? "active" : ""} ${activeMember === m.id && speaking ? "speaking" : ""}`}>
+                          <div className="iv-avatar">{m.name.charAt(0)}</div>
+                          <div className="iv-member-name">{m.name}</div>
+                          {activeMember === m.id ? <div className="iv-member-tag">{speaking ? "speaking…" : "asking"}</div> : null}
+                        </div>
+                      ))}
+                    </div>
 
-                {/* Transcript */}
-                {turns.length > 0 && status !== "report" ? (
-                  <div className="iv-transcript">
-                    {turns.map((t, i) => (
-                      <div key={i} className={`iv-turn ${t.role}`}>
-                        <span className="iv-turn-who">{t.role === "user" ? "You" : memberName(t.member)}</span>
-                        <p>{t.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-
-                {/* Report */}
-                {status === "report" && report ? (
-                  <div className="iv-report">
-                    <h2>Evaluation</h2>
-                    {report.overall ? (
-                      <div className="iv-overall">
-                        <div className="iv-overall-score">{report.overall.score}/10</div>
-                        <p>{report.overall.verdict}</p>
+                    {status === "active" || status === "ended" ? (
+                      <div className="iv-question">
+                        <span className="iv-q-who">{memberName(activeMember)}</span>
+                        <p className="iv-q-text">{question}</p>
                       </div>
                     ) : null}
 
-                    {report.qualities ? (
-                      <div className="iv-qualities">
-                        {Object.entries(QUALITY_LABELS).map(([key, label]) => {
-                          const q = report.qualities[key] || {};
-                          const score = Number(q.score || 0);
-                          return (
-                            <div key={key} className="iv-quality">
-                              <div className="iv-quality-head">
-                                <span>{label}</span><strong>{score}/10</strong>
-                              </div>
-                              <div className="iv-q-bar"><div className="iv-q-fill" style={{ width: `${score * 10}%` }} /></div>
-                              {q.note ? <p className="iv-quality-note">{q.note}</p> : null}
-                            </div>
-                          );
-                        })}
+                    {status === "active" ? (
+                      <div className="iv-controls">
+                        {!recording ? (
+                          <button className="btn-ticket" onClick={startRecording} disabled={busy || speaking}>
+                            <Icon name="mic" size={16} /> {busy ? "Sending…" : speaking ? "Listening to the board…" : "Answer"}
+                          </button>
+                        ) : (
+                          <button className="meet-end" onClick={stopRecording}><Icon name="stop" size={16} /> Done answering</button>
+                        )}
+                        <div className="iv-text-fallback">
+                          <input
+                            className="task-input"
+                            placeholder="…or type your answer"
+                            value={textAnswer}
+                            onChange={(e) => setTextAnswer(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
+                            disabled={busy || recording}
+                          />
+                          <button className="btn-day" onClick={sendText} disabled={busy || recording || !textAnswer.trim()}>Send</button>
+                        </div>
+                        <button className="btn-cancel iv-end-early" onClick={endEarly} disabled={busy}>End &amp; evaluate</button>
                       </div>
                     ) : null}
 
-                    {report.confidence ? (
-                      <div className="iv-block">
-                        <h3>Confidence: {report.confidence.score}/100</h3>
-                        <p>{report.confidence.note}</p>
+                    {status === "ended" ? (
+                      <div className="iv-controls">
+                        <p className="iv-intro">The interview has concluded.</p>
+                        <button className="btn-ticket" onClick={fetchReport} disabled={busy}>
+                          <Icon name="clipboard" size={16} /> {busy ? "Evaluating…" : "View my evaluation"}
+                        </button>
                       </div>
                     ) : null}
-                    {Array.isArray(report.interest_areas) && report.interest_areas.length ? (
-                      <div className="iv-block"><h3>Interest areas</h3><p>{report.interest_areas.join(", ")}</p></div>
-                    ) : null}
-                    {Array.isArray(report.strengths) && report.strengths.length ? (
-                      <div className="iv-block"><h3>Strengths</h3><ul>{report.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul></div>
-                    ) : null}
-                    {Array.isArray(report.improvements) && report.improvements.length ? (
-                      <div className="iv-block"><h3>Areas to improve</h3><ul>{report.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul></div>
-                    ) : null}
-                    {Array.isArray(report.contradictions) && report.contradictions.length ? (
-                      <div className="iv-block"><h3>Contradictions noticed</h3><ul>{report.contradictions.map((s, i) => <li key={i}>{s}</li>)}</ul></div>
-                    ) : null}
-                    {report.signals ? (
-                      <p className="iv-signals">
-                        {report.signals.answers} answers · avg {report.signals.avg_words_per_answer} words ·
-                        {report.signals.total_filler_words} filler words
-                        {report.signals.avg_response_latency_ms ? ` · avg ${Math.round(report.signals.avg_response_latency_ms / 1000)}s to respond` : ""}
-                      </p>
+
+                    {turns.length > 0 && status !== "report" ? (
+                      <div className="iv-transcript">
+                        {turns.map((t, i) => (
+                          <div key={i} className={`iv-turn ${t.role}`}>
+                            <span className="iv-turn-who">{t.role === "user" ? "You" : memberName(t.member)}</span>
+                            <p>{t.text}</p>
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
 
-                    <button className="btn-ticket" onClick={startInterview}>↻ New interview</button>
-                  </div>
+                    {status === "report" && report ? (
+                      <>
+                        <h2 className="iv-report-title">Evaluation</h2>
+                        <ReportView report={report} />
+                        <QuestionByQuestion
+                          messages={turns.map((t) => ({ role: t.role, panel_member: t.member, content: t.text }))}
+                          panel={panel}
+                        />
+                        <div className="iv-controls">
+                          <button className="btn-ticket" onClick={startInterview}><Icon name="refresh" size={16} /> New interview</button>
+                          <button className="btn-cancel" onClick={backToList}>Back to interviews</button>
+                        </div>
+                      </>
+                    ) : null}
+                  </>
                 ) : null}
               </>
             ) : null}
