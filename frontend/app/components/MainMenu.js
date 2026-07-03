@@ -4,19 +4,20 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../lib/auth";
+import Icon from "./Icon";
 
 const NAV_ITEMS = [
-  { key: "home", label: "Home", href: "/", icon: "🏠" },
-  { key: "recorder", label: "Recorder", href: "/recorder", icon: "🎙️" },
-  { key: "interview", label: "Interview", href: "/interview", icon: "🧑‍⚖️" },
-  { key: "answer-eval", label: "Answer Eval", href: "/answer-eval", icon: "📝" },
-  { key: "goals", label: "Goals", href: "/goals", icon: "🎯" },
-  { key: "analytics", label: "Analytics", href: "/analytics", icon: "📊" },
-  { key: "qna", label: "QnA", href: "/qna", icon: "💬" },
-  { key: "mindmap", label: "Mind Map", href: "/mindmap", icon: "🧠" },
-  { key: "search", label: "Search", href: "/search", icon: "🔍" },
-  { key: "content", label: "Content", href: "/content", icon: "📂" },
-  { key: "usage", label: "Usage", href: "/usage", icon: "📊" },
+  { key: "home", label: "Home", href: "/", icon: "home" },
+  { key: "recorder", label: "Recorder", href: "/recorder", icon: "recorder" },
+  { key: "interview", label: "Interview", href: "/interview", icon: "interview" },
+  { key: "answer-eval", label: "Answer Eval", href: "/answer-eval", icon: "answer-eval" },
+  { key: "goals", label: "Goals", href: "/goals", icon: "goals" },
+  { key: "analytics", label: "Analytics", href: "/analytics", icon: "analytics" },
+  { key: "qna", label: "QnA", href: "/qna", icon: "qna" },
+  { key: "mindmap", label: "Mind Map", href: "/mindmap", icon: "mindmap" },
+  { key: "search", label: "Search", href: "/search", icon: "search" },
+  { key: "content", label: "Content", href: "/content", icon: "content" },
+  { key: "usage", label: "Usage", href: "/usage", icon: "usage" },
 ];
 
 export default function MainMenu({ active = "" }) {
@@ -69,7 +70,7 @@ export default function MainMenu({ active = "" }) {
         <div className="side-drawer-brand">
           <img className="brand-mark" src="/dias-icon.png" alt="Dias" />
           <span className="brand-text">Dias</span>
-          <button className="drawer-close-btn" onClick={() => setOpen(false)} aria-label="Close menu">✕</button>
+          <button className="drawer-close-btn" onClick={() => setOpen(false)} aria-label="Close menu"><Icon name="close" size={18} /></button>
         </div>
         <nav className="side-nav">
           {NAV_ITEMS.map((item, i) => (
@@ -80,7 +81,7 @@ export default function MainMenu({ active = "" }) {
               style={{ transitionDelay: open ? `${90 + i * 45}ms` : "0ms" }}
               onClick={() => setOpen(false)}
             >
-              <span className="side-nav-icon" aria-hidden="true">{item.icon}</span>
+              <span className="side-nav-icon" aria-hidden="true"><Icon name={item.icon} size={20} /></span>
               <span className="side-nav-label">{item.label}</span>
               <span className="side-nav-arrow" aria-hidden="true">›</span>
             </Link>
