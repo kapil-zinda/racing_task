@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
+import Icon from "../components/Icon";
 import { apiFetch } from "../lib/auth";
+import { confirmDialog } from "../lib/dialog";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const MAP_PAGE_SIZE = 5;
@@ -415,7 +417,7 @@ function nodeMarkup(node) {
   const noteMarkup = noteLines.map((line) => lineMarkup(line, NOTE_FILL)).join("");
   const toggleMarkup = node.children.length
     ? `<rect x="${node.x + width - 44}" y="${node.y + 14}" width="28" height="20" rx="10" ry="10" fill="${TOGGLE_FILL}" stroke="${NODE_STROKE}" stroke-width="1"></rect>` +
-      `<text x="${node.x + width - 30}" y="${node.y + 24}" fill="${TOGGLE_TEXT}" font-family="${FONT_FAMILY}" font-size="11" font-weight="800" text-anchor="middle" dominant-baseline="middle">${node.collapsed ? "+" : "-"}</text>`
+      `<text x="${node.x + width - 30}" y="${node.y + 24}" fill="${TOGGLE_TEXT}" font-family="${FONT_FAMILY}" font-size="13" font-weight="800" text-anchor="middle" dominant-baseline="central">${node.collapsed ? "+" : "−"}</text>`
     : "";
   return (
     `<g>` +
@@ -475,7 +477,23 @@ function isSubtreeFullyExpanded(node) {
   return node.children.every(isSubtreeFullyExpanded);
 }
 
+function fullyExpandedCopy(sourceTree) {
+  const tree = deserializeTree(serializeTree(sourceTree));
+  tree.collapsed = false;
+  tree.children.forEach((child) => setCollapsedRecursive(child, false));
+  return tree;
+}
+
 function buildProgressivePrintTrees(sourceTree, maxVisibleNodes) {
+  // PDF exports the WHOLE mind map, fully expanded (unlike PNG/SVG which mirror the
+  // on-screen collapse state). If the entire expanded tree fits on one page, emit it
+  // as a single fully-expanded page — no fragmentation. Only genuinely large maps get
+  // split into progressive per-branch pages so every node stays readable.
+  const fullTree = fullyExpandedCopy(sourceTree);
+  if (countVisibleNodes(fullTree) <= maxVisibleNodes) {
+    return [fullTree];
+  }
+
   const pages = [];
   for (let index = 0; index < sourceTree.children.length; index += 1) {
     const pageTree = deserializeTree(serializeTree(sourceTree));
@@ -844,7 +862,7 @@ export default function MindmapPage() {
   };
 
   const deleteMindmap = async (mapId) => {
-    if (!confirm("Delete this mind map?")) return;
+    if (!(await confirmDialog({ title: "Delete mind map", message: "Delete this mind map?", confirmLabel: "Delete", danger: true }))) return;
     try {
       const res = await apiFetch(`${API_BASE_URL}/mindmaps/${mapId}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
@@ -986,7 +1004,9 @@ export default function MindmapPage() {
     setExportingPdf(true);
     try {
       say("Preparing full mind map pages for PDF...", "");
-      const maxCellsPerPage = 15;
+      // A4 landscape at export resolution stays readable up to ~28 cells; small/medium
+      // maps render on a single fully-expanded page, larger ones paginate progressively.
+      const maxCellsPerPage = 28;
       const sourceTree = deserializeTree(serializeTree(treeRef.current));
       const progressiveTrees = buildProgressivePrintTrees(sourceTree, maxCellsPerPage);
       const allPages = [];
@@ -1165,7 +1185,7 @@ html, body { margin: 0; padding: 0; background: #ffffff; }
       ) : null}
 
       {view === "list" ? (
-        <section className="scoreboard">
+        <section className="mm-library">
           <article className="player-card mm-library-card">
             <div className="player-row">
               <h2 className="player-name">Saved Mind Maps</h2>
@@ -1186,7 +1206,7 @@ html, body { margin: 0; padding: 0; background: #ffffff; }
                     </div>
                     <div className="mm-map-actions">
                       <button className="btn-day secondary" onClick={() => loadMindmapById(map.id)}>Open</button>
-                      <button className="dt-icon-btn danger" title="Delete" onClick={() => deleteMindmap(map.id)}>✕</button>
+                      <button className="dt-icon-btn danger" title="Delete" onClick={() => deleteMindmap(map.id)}><Icon name="trash" size={14} /></button>
                     </div>
                   </div>
                 ))}
@@ -1232,9 +1252,9 @@ html, body { margin: 0; padding: 0; background: #ffffff; }
                 <div className="mm-outline-row" key={item.id} style={{ marginLeft: `${Math.min(item.level, 5) * 20}px` }}>
                   <span className="mm-outline-chip">{index === 0 ? 0 : item.level}</span>
                   <button className="dt-icon-btn" title="Outdent" disabled={index === 0 || item.level <= 1}
-                    onClick={() => indentItem(item.id, -1)}>◀</button>
+                    onClick={() => indentItem(item.id, -1)}><Icon name="chevron-left" size={14} /></button>
                   <button className="dt-icon-btn" title="Indent" disabled={index === 0}
-                    onClick={() => indentItem(item.id, 1)}>▶</button>
+                    onClick={() => indentItem(item.id, 1)}><Icon name="chevron-right" size={14} /></button>
                   <input
                     className="mm-outline-input"
                     data-outline-id={item.id}
@@ -1245,7 +1265,7 @@ html, body { margin: 0; padding: 0; background: #ffffff; }
                   />
                   <button className="dt-icon-btn" title="Add item below" onClick={() => addItemAfter(item.id)}>+</button>
                   <button className="dt-icon-btn danger" title="Delete item" disabled={outlineItems.length === 1}
-                    onClick={() => deleteItem(item.id)}>✕</button>
+                    onClick={() => deleteItem(item.id)}><Icon name="close" size={14} /></button>
                 </div>
               ))}
             </div>
