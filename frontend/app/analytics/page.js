@@ -8,6 +8,7 @@ import MainMenu from "../components/MainMenu";
 import ComparisonCharts from "../components/goal/ComparisonCharts";
 import ContributionHeatmap from "../components/goal/ContributionHeatmap";
 import CalendarView from "../components/goal/CalendarView";
+import Icon from "../components/Icon";
 import { listGoals, getAnalytics, getDashboard } from "../lib/goalApi";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
@@ -71,9 +72,9 @@ export default function AnalyticsPage() {
           <div className="goal-header-actions">
             <select className="gsearch-input" value={goalId} onChange={(e) => setGoalId(e.target.value)}>
               <option value="">◍ All goals (combined)</option>
-              {goals.map((g) => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
+              {goals.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
-            <button className="goal-btn ghost" onClick={load}>↻ Refresh</button>
+            <button className="goal-btn ghost" onClick={load}><Icon name="refresh" size={15} /> Refresh</button>
           </div>
         </header>
         {error && <div className="goal-error">{error}</div>}
@@ -85,7 +86,7 @@ export default function AnalyticsPage() {
                 <section className="goal-stat-row">
                   <div className="goal-stat"><span className="goal-stat-num">{combined.goal_count}</span><span className="goal-stat-lbl">Goals</span></div>
                   <div className="goal-stat"><span className="goal-stat-num">{combined.avg_progress}%</span><span className="goal-stat-lbl">Avg progress</span></div>
-                  <div className="goal-stat"><span className="goal-stat-num">🔥 {combined.streak_current}</span><span className="goal-stat-lbl">Streak (best {combined.streak_longest})</span></div>
+                  <div className="goal-stat"><span className="goal-stat-num"><Icon name="fire" size={18} /> {combined.streak_current}</span><span className="goal-stat-lbl">Streak (best {combined.streak_longest})</span></div>
                   <div className="goal-stat"><span className="goal-stat-num">{combinedCharts.actDates.reduce((s, d) => s + combinedCharts.act[d], 0)}</span><span className="goal-stat-lbl">Actions (120d+)</span></div>
                 </section>
                 <div className="chart-grid">
@@ -98,11 +99,11 @@ export default function AnalyticsPage() {
                     <Plot data={[{ type: "pie", hole: 0.55, labels: Object.keys(combinedCharts.sd), values: Object.values(combinedCharts.sd), marker: { colors: PALETTE } }]}
                           layout={{ ...DARK, height: 240, showlegend: true, legend: { font: { size: 10 } } }} config={plotCfg} style={{ width: "100%" }} />
                   </div>
-                  <div className="chart-card wide">
+                  <div className="chart-card">
                     <h4>Progress by goal</h4>
                     <Plot data={[{ type: "bar", x: combinedCharts.gp.map((g) => g.name), y: combinedCharts.gp.map((g) => g.progress),
                       marker: { color: combinedCharts.gp.map((_, i) => PALETTE[i % PALETTE.length]) } }]}
-                      layout={{ ...DARK, height: 260, yaxis: { range: [0, 100] } }} config={plotCfg} style={{ width: "100%" }} />
+                      layout={{ ...DARK, height: 240, yaxis: { range: [0, 100] } }} config={plotCfg} style={{ width: "100%" }} />
                   </div>
                 </div>
                 <section className="dash-block">
