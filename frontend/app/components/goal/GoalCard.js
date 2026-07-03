@@ -2,6 +2,7 @@
 // A single goal card in the goals list: icon, name, progress ring, deadline, status.
 
 import Link from "next/link";
+import Icon from "../Icon";
 
 function daysLeft(endDate) {
   if (!endDate) return null;
@@ -11,7 +12,7 @@ function daysLeft(endDate) {
   return diff;
 }
 
-export default function GoalCard({ goal, onDelete }) {
+export default function GoalCard({ goal }) {
   const pct = Math.round(goal.progress || 0);
   const dl = daysLeft(goal.end_date);
   const color = goal.color || "#6366f1";
@@ -20,7 +21,7 @@ export default function GoalCard({ goal, onDelete }) {
     <div className="goal-card" style={{ "--goal-color": color }}>
       <Link href={`/goals/${goal.id}`} className="goal-card-main">
         <div className="goal-card-top">
-          <span className="goal-card-icon">{goal.icon || "🎯"}</span>
+          <span className="goal-card-icon">{goal.icon ? <Icon name={goal.icon} /> : <Icon name="target" />}</span>
           <span className={`goal-status-chip s-${goal.status}`}>{goal.status}</span>
         </div>
         <div className="goal-card-name">{goal.name}</div>
@@ -38,10 +39,6 @@ export default function GoalCard({ goal, onDelete }) {
           )}
         </div>
       </Link>
-      <div className="goal-card-actions">
-        <button className="goal-icon-btn danger" title="Delete goal"
-                onClick={() => onDelete(goal)}>🗑</button>
-      </div>
     </div>
   );
 }
