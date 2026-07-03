@@ -3,20 +3,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import MainMenu from "../../components/MainMenu";
+import Icon from "../../components/Icon";
 import GoalTree from "../../components/goal/GoalTree";
 import NodeDetail from "../../components/goal/NodeDetail";
 import BulkAddChildren from "../../components/goal/BulkAddChildren";
 import GoalInsights from "../../components/goal/GoalInsights";
 import DependencyGraph from "../../components/goal/DependencyGraph";
+import { confirmDialog } from "../../lib/dialog";
 import {
   getGoal, getTree, getActivity, buildTree,
-  createNode, updateNode, deleteNode, moveNode,
+  createNode, updateNode, deleteNode, moveNode, deleteGoal,
 } from "../../lib/goalApi";
 
 export default function GoalDetailPage() {
   const { goalId } = useParams();
+  const router = useRouter();
+  const [goalMenuOpen, setGoalMenuOpen] = useState(false);
   const [goal, setGoal] = useState(null);
   const [nodes, setNodes] = useState([]);
   const [activity, setActivity] = useState([]);
@@ -83,11 +87,29 @@ export default function GoalDetailPage() {
   };
 
   const handleDelete = async (node) => {
-    if (!window.confirm(`Delete "${node.title}" and all its children?`)) return;
+    const ok = await confirmDialog({
+      title: "Delete node", message: `Delete "${node.title}" and all its children?`,
+      confirmLabel: "Delete", danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteNode(node.id);
       if (selectedId === node.id) setSelectedId(null);
       await refresh();
+    } catch (err) { setError(String(err.message || err)); }
+  };
+
+  const handleDeleteGoal = async () => {
+    setGoalMenuOpen(false);
+    const ok = await confirmDialog({
+      title: "Delete goal",
+      message: `Delete "${goal?.name || "this goal"}" and its entire tree? This cannot be undone.`,
+      confirmLabel: "Delete", danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteGoal(goalId);
+      router.push("/goals");
     } catch (err) { setError(String(err.message || err)); }
   };
 
@@ -105,13 +127,32 @@ export default function GoalDetailPage() {
             <Link href="/goals" className="goal-back">← Goals</Link>
             {goal && (
               <div className="goal-detail-name">
-                <span className="goal-card-icon">{goal.icon || "🎯"}</span>
+                <span className="goal-card-icon"><Icon name={goal.icon || "target"} /></span>
                 <h1>{goal.name}</h1>
                 <span className="node-progress-badge lg">{Math.round(goal.progress || 0)}%</span>
               </div>
             )}
           </div>
-          <button className="goal-btn ghost" onClick={load} title="Refresh">↻ Refresh</button>
+          <div className="goal-header-actions">
+            <button className="goal-btn ghost" onClick={load} title="Refresh"><Icon name="refresh" /> Refresh</button>
+            <div className="goal-menu-wrap">
+              <button className="goal-btn ghost goal-menu-btn" onClick={() => setGoalMenuOpen((v) => !v)}
+                      aria-label="Goal actions" title="Goal actions"><Icon name="more" /></button>
+              {goalMenuOpen && (
+                <>
+                  <div className="goal-menu-backdrop" onClick={() => setGoalMenuOpen(false)} />
+                  <div className="goal-menu-dropdown">
+                    <button className="menu-item" disabled title="Pause coming soon">
+                      <Icon name="pause" size={15} /> Pause goal
+                    </button>
+                    <button className="menu-item danger" onClick={handleDeleteGoal}>
+                      <Icon name="trash" size={15} /> Delete goal
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </header>
 
         {error && <div className="goal-error">{error}</div>}
@@ -122,8 +163,8 @@ export default function GoalDetailPage() {
           <div className="goal-split">
             <div className="goal-split-left">
               <div className="goal-view-toggle">
-                <button className={view === "tree" ? "active" : ""} onClick={() => setView("tree")}>🌳 Tree</button>
-                <button className={view === "graph" ? "active" : ""} onClick={() => setView("graph")}>🔗 Dependencies</button>
+                <button className={view === "tree" ? "active" : ""} onClick={() => setView("tree")}><Icon name="tree" /> Tree</button>
+                <button className={view === "graph" ? "active" : ""} onClick={() => setView("graph")}><Icon name="link" /> Dependencies</button>
               </div>
               {view === "tree" ? (
                 <GoalTree roots={roots} selectedId={selectedId} onSelect={setSelectedId}
