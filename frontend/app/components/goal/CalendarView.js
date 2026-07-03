@@ -4,6 +4,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCalendar } from "../../lib/goalApi";
+import { toIsoDate } from "../../lib/dateUtils";
+import Icon from "../Icon";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -44,7 +46,7 @@ export default function CalendarView({ goalId = "" }) {
     const m = c.m + delta;
     return { y: c.y + Math.floor(m / 12), m: ((m % 12) + 12) % 12 };
   });
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = toIsoDate(new Date());
 
   return (
     <div>
@@ -63,7 +65,7 @@ export default function CalendarView({ goalId = "" }) {
             <div key={c.iso} className={`goalcal-cell ${c.iso === todayIso ? "today" : ""} ${c.count ? "active" : ""}`}>
               <span className="goalcal-date">{c.d}</span>
               {c.count > 0 && <span className="goalcal-count">{c.count}</span>}
-              {c.reminders.length > 0 && <span className="goalcal-rem" title={`${c.reminders.length} reminder(s)`}>🔔{c.reminders.length}</span>}
+              {c.reminders.length > 0 && <span className="goalcal-rem" title={`${c.reminders.length} reminder(s)`}><Icon name="bell" size={11} />{c.reminders.length}</span>}
             </div>
           ))}
       </div>
