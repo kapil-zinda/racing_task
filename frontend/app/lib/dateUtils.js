@@ -13,7 +13,9 @@ export function daysSince(value) {
 }
 
 export function toIsoDate(d) {
-  return d.toISOString().slice(0, 10);
+  // Local calendar date (YYYY-MM-DD) — NOT UTC. Using toISOString() here shifts the day
+  // for anyone ahead of/behind UTC (e.g. IST), making "today" land on the wrong date.
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function daysUntil(value) {
