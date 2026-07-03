@@ -129,11 +129,37 @@ def compute_node_progress(node: Dict[str, Any]) -> float:
     return _weighted_children(children)
 
 
-def _write_progress(node_id: str, progress: float) -> None:
-    goal_nodes_collection().update_one(
-        {"_id": ObjectId(node_id)},
-        {"$set": {"progress": round(progress, 2), "updated_at": _now()}},
-    )
+def _derived_status(node: Dict[str, Any], progress: float) -> str | None:
+    """For progress-driven modes, keep status in sync with progress:
+    0 -> todo, 0<p<100 -> in_progress, >=100 -> done. Returns None when status should be
+    left as-is: boolean mode is user-controlled, explicit blocked/skipped are respected,
+    and a children_weighted node with no children behaves like a manual done/undone leaf.
+    """
+    mode = (node.get("progress_mode") or "children_weighted").strip().lower()
+    current = (node.get("status") or "").lower()
+    if mode == "boolean" or current in {"blocked", "skipped"}:
+        return None
+    if mode == "children_weighted":
+        node_id = str(node.get("_id"))
+        has_children = goal_nodes_collection().count_documents(
+            {"goal_id": node.get("goal_id"), "parent_id": node_id}
+        ) > 0
+        if not has_children:
+            return None  # plain leaf — user toggles its status directly
+    if progress >= 100:
+        return "done"
+    if progress > 0:
+        return "in_progress"
+    return "todo"
+
+
+def _write_progress(node: Dict[str, Any], progress: float) -> None:
+    node_id = str(node.get("_id"))
+    update: Dict[str, Any] = {"progress": round(progress, 2), "updated_at": _now()}
+    new_status = _derived_status(node, progress)
+    if new_status and new_status != node.get("status"):
+        update["status"] = new_status
+    goal_nodes_collection().update_one({"_id": ObjectId(node_id)}, {"$set": update})
 
 
 def recompute_goal_rollup(goal_id: str) -> float:
@@ -161,13 +187,13 @@ def recompute_upward(goal_id: str, node_id: str) -> float:
     if not node:
         return 0.0
     progress = compute_node_progress(node)
-    _write_progress(node_id, progress)
+    _write_progress(node, progress)
     # Ancestors are stored root-first in `path`; recompute deepest first.
     for ancestor_id in reversed(node.get("path", []) or []):
         ancestor = goal_nodes_collection().find_one({"_id": ObjectId(ancestor_id), "goal_id": goal_id})
         if not ancestor:
             continue
-        _write_progress(ancestor_id, compute_node_progress(ancestor))
+        _write_progress(ancestor, compute_node_progress(ancestor))
     recompute_goal_rollup(goal_id)
     return progress
 
@@ -179,5 +205,5 @@ def recompute_full_goal(goal_id: str) -> float:
     for node in sorted(nodes, key=lambda n: int(n.get("depth", 0) or 0), reverse=True):
         full = goal_nodes_collection().find_one({"_id": node["_id"], "goal_id": goal_id})
         if full:
-            _write_progress(str(node["_id"]), compute_node_progress(full))
+            _write_progress(full, compute_node_progress(full))
     return recompute_goal_rollup(goal_id)

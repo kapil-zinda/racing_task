@@ -2,18 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
+import Icon from "../components/Icon";
 import PdfHighlightViewer from "../components/PdfHighlightViewer";
 import { apiFetch } from "../lib/auth";
+import { listGoals } from "../lib/goalApi";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
-const COURSE_OPTIONS = [
-  { value: "sfg_level_1", label: "SFG Level 1" },
-  { value: "sfg_level_2", label: "SFG Level 2" },
-  { value: "level_up_pmp", label: "Level Up PMP" },
-  { value: "spectrum", label: "Spectrum" },
-  { value: "laxmikant", label: "Laxmikant" },
-];
 
 // Highlight query terms inside a snippet.
 function highlightSnippet(text, query) {
@@ -34,6 +29,7 @@ function sameHit(a, b) {
 export default function PdfSearchPage() {
   const [query, setQuery] = useState("");
   const [searchCourse, setSearchCourse] = useState("");
+  const [goals, setGoals] = useState([]);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState([]);
   const [error, setError] = useState("");
@@ -46,6 +42,10 @@ export default function PdfSearchPage() {
     const onFs = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener("fullscreenchange", onFs);
     return () => document.removeEventListener("fullscreenchange", onFs);
+  }, []);
+
+  useEffect(() => {
+    listGoals().then((d) => setGoals(d.goals || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -109,12 +109,12 @@ export default function PdfSearchPage() {
 
         {/* Search bar */}
         <div className="kf-searchbar">
-          <select className="kf-course" value={searchCourse} onChange={(e) => setSearchCourse(e.target.value)}>
-            <option value="">All courses</option>
-            {COURSE_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+          <select className="task-select kf-course" value={searchCourse} onChange={(e) => setSearchCourse(e.target.value)}>
+            <option value="">All goals</option>
+            {goals.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
           <div className="kf-input-wrap">
-            <span className="kf-search-icon">🔍</span>
+            <span className="kf-search-icon"><Icon name="search" /></span>
             <input
               className="kf-input"
               placeholder="Search your PDFs — e.g. pseudo force, fundamental rights…"

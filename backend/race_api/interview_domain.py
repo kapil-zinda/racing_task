@@ -419,3 +419,25 @@ def get_interview_payload(session_id: str) -> Dict[str, Any]:
     if not doc:
         raise LookupError("Interview session not found")
     return {"session": _public_session(doc)}
+
+
+def list_interviews_payload(user_id: str, limit: int = 100) -> Dict[str, Any]:
+    """Summary list of a user's past interviews, newest first, for the history view."""
+    docs = interview_sessions_collection().find(
+        {"doc_type": "interview_session", "user_id": user_id}
+    ).sort("created_at", -1).limit(int(limit))
+    items = []
+    for doc in docs:
+        report = doc.get("report") or {}
+        overall = report.get("overall") or {}
+        items.append({
+            "session_id": doc.get("_id"),
+            "status": doc.get("status"),
+            "created_at": doc.get("created_at"),
+            "started_at": doc.get("started_at"),
+            "question_count": doc.get("question_count", 0),
+            "overall_score": overall.get("score"),
+            "verdict": overall.get("verdict"),
+            "has_report": bool(report),
+        })
+    return {"interviews": items}

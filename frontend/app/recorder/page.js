@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import MainMenu from "../components/MainMenu";
+import Icon from "../components/Icon";
 import ExplainerCanvas from "./ExplainerCanvas";
+import { confirmDialog } from "../lib/dialog";
 import { AGENT_PENDING_RECORDER_ACTION_KEY, AGENT_RECORDER_EVENT, AGENT_RECORDER_STATUS_EVENT } from "../lib/agent/constants";
 import { apiFetch, useAuth } from "../lib/auth";
 
@@ -205,7 +207,7 @@ export default function RecorderPage() {
     notes: "",
   });
   const [sessionList, setSessionList] = useState([]);
-  const [listScope, setListScope] = useState("today"); // "today" | "simple"
+  const [listScope, setListScope] = useState("all"); // "all" | "today" | "simple"
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [recordView, setRecordView] = useState("full"); // "full" | "float"
   const [recorderArming, setRecorderArming] = useState(false); // overlay mounted before streams bind
@@ -305,11 +307,6 @@ export default function RecorderPage() {
   const audioVizDataRef = useRef(null);
   const audioVizDrawRef = useRef(0);
   const recorderFlushTimersRef = useRef({});
-
-  const switchListScope = async (scope) => {
-    setListScope(scope);
-    await fetchSessions(scope);
-  };
 
   useEffect(() => {
     if (!timerState.running) return;
@@ -604,7 +601,7 @@ export default function RecorderPage() {
     setSessionLoading(true);
     setSessionError("");
     try {
-      const scopeQuery = scopeValue === "simple" ? "?scope=simple" : "";
+      const scopeQuery = scopeValue === "simple" ? "?scope=simple" : scopeValue === "today" ? "" : "?scope=all";
       const res = await apiFetch(`${API_BASE_URL}/sessions${scopeQuery}`);
       if (!res.ok) {
         const txt = await res.text();
@@ -692,9 +689,11 @@ export default function RecorderPage() {
       ["started", "resumed", "paused"].includes(s?.status)
     );
     if (activeElsewhere) {
-      const ok = window.confirm(
-        "A recording is already going on another device. Stop it and start a new recording here?"
-      );
+      const ok = await confirmDialog({
+        title: "Recording in progress",
+        message: "A recording is already going on another device. Stop it and start a new recording here?",
+        confirmLabel: "Stop & start here",
+      });
       if (!ok) {
         setSessionError("Recording not started — the other device's recording is still running.");
         return;
@@ -794,9 +793,11 @@ export default function RecorderPage() {
     const currentStatus = selectedSession?.status || "created";
     const isCurrentActive = ["started", "paused", "resumed"].includes(currentStatus);
     if (isCurrentActive && selectedSession?._id && hasLocalRecordingInThisTab()) {
-      const shouldStopAndSwitch = window.confirm(
-        "Current session is active in this tab. Stop it, upload final part, and switch to selected session?"
-      );
+      const shouldStopAndSwitch = await confirmDialog({
+        title: "Switch session",
+        message: "Current session is active in this tab. Stop it, upload final part, and switch to selected session?",
+        confirmLabel: "Stop & switch",
+      });
       if (!shouldStopAndSwitch) return;
       const stoppedCleanly = await stopSession();
       if (!stoppedCleanly) {
@@ -1675,9 +1676,11 @@ export default function RecorderPage() {
       if (conflict) {
         // A recording became active elsewhere between preflight and now. Ask before
         // taking over — never silently stop the other recording.
-        const confirmStop = window.confirm(
-          "A recording is already going on another device. Do you want to stop that ongoing recording and start here?"
-        );
+        const confirmStop = await confirmDialog({
+          title: "Recording in progress",
+          message: "A recording is already going on another device. Do you want to stop that ongoing recording and start here?",
+          confirmLabel: "Stop & start here",
+        });
         if (!confirmStop) {
           stopAndReleaseStreams();
           recorderRefs.current = {};
@@ -2396,7 +2399,7 @@ export default function RecorderPage() {
       return;
     }
     if (!explainerVideoBlob) {
-      setSessionError("Please record your explanation first (⏺ Record button on the canvas).");
+      setSessionError("Please record your explanation first (Record button on the canvas).");
       return;
     }
     try {
@@ -2470,11 +2473,11 @@ export default function RecorderPage() {
   // any in-flight = "saving", else if anything has saved = "saved".
   const uploadHealthValues = Object.values(uploadHealth);
   const uploadIndicator = uploadHealthValues.includes("error")
-    ? { cls: "error", label: "⚠ Not saving — check connection" }
+    ? { cls: "error", label: <><Icon name="warning" size={14} /> Not saving — check connection</> }
     : uploadHealthValues.includes("saving")
-    ? { cls: "saving", label: "⬆ Saving…" }
+    ? { cls: "saving", label: <><Icon name="upload" size={14} /> Saving…</> }
     : uploadHealthValues.includes("saved")
-    ? { cls: "saved", label: "✓ Saved" }
+    ? { cls: "saved", label: <><Icon name="check" size={14} /> Saved</> }
     : null;
   const sessionStatus = selectedSession?.status || "created";
   const isClosed = sessionStatus === "stopped";
@@ -2523,6 +2526,24 @@ export default function RecorderPage() {
       });
   }, [sessionList, myActiveRecordingId]);
 
+  // Group all recordings by their day for the day-wise listing.
+  const groupedSessions = useMemo(() => {
+    const groups = new Map();
+    orderedSessionList.forEach((s) => {
+      const key = s?.date || (s?.created_at || "").slice(0, 10) || "undated";
+      if (!groups.has(key)) groups.set(key, { key, items: [] });
+      groups.get(key).items.push(s);
+    });
+    return Array.from(groups.values()).sort((a, b) => (a.key < b.key ? 1 : -1));
+  }, [orderedSessionList]);
+
+  const fmtDayHeading = (key) => {
+    if (!key || key === "undated") return "Undated";
+    const d = new Date(`${key}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return key;
+    return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  };
+
   return (
     <main className="app-shell">
       <div className="bg-orb orb-1" />
@@ -2539,20 +2560,7 @@ export default function RecorderPage() {
         ) : (
           <>
             <div className="session-toolbar">
-              <div className="session-tabs">
-                <button
-                  className={`session-tab ${listScope === "today" ? "active" : ""}`}
-                  onClick={() => switchListScope("today")}
-                >
-                  Today
-                </button>
-                <button
-                  className={`session-tab ${listScope === "simple" ? "active" : ""}`}
-                  onClick={() => switchListScope("simple")}
-                >
-                  Simple Records
-                </button>
-              </div>
+              <h2 className="session-list-title">All recordings</h2>
               <button className="btn-ticket record-btn" onClick={() => setCreateModalOpen(true)}>
                 <span className="record-dot" aria-hidden="true" /> Record
               </button>
@@ -2739,9 +2747,9 @@ export default function RecorderPage() {
                       <button className="meet-icon-sm" onClick={enterPip} title="Picture-in-Picture">⧉</button>
                     ) : null}
                     {recordView === "full" ? (
-                      <button className="meet-icon-sm" onClick={() => setRecordView("float")} title="Float">🗗</button>
+                      <button className="meet-icon-sm" onClick={() => setRecordView("float")} title="Float"><Icon name="fullscreen" size={15} /></button>
                     ) : (
-                      <button className="meet-icon-sm" onClick={() => setRecordView("full")} title="Fullscreen">⛶</button>
+                      <button className="meet-icon-sm" onClick={() => setRecordView("full")} title="Fullscreen"><Icon name="fullscreen" size={15} /></button>
                     )}
                   </div>
                 </div>
@@ -2894,14 +2902,14 @@ export default function RecorderPage() {
                                 else setUploadFiles((p) => ({ ...p, explainerAttachment: null }));
                                 return next;
                               });
-                            }}>✕</span>
+                            }}><Icon name="close" size={14} /></span>
                           </button>
                         ))}
                       </div>
                     ) : null}
                   </div>
                   <div className="meet-topbar-right">
-                    <button className="meet-icon-sm" onClick={() => setExplainerFrameOpen(false)} title="Close">✕</button>
+                    <button className="meet-icon-sm" onClick={() => setExplainerFrameOpen(false)} title="Close"><Icon name="close" size={14} /></button>
                   </div>
                 </div>
 
@@ -2909,7 +2917,7 @@ export default function RecorderPage() {
                 <div className="meet-stage">
                   {explainerFiles.length === 0 ? (
                     <button className="meet-upload-prompt" onClick={() => explainerFileInputRef.current?.click()}>
-                      📄 Upload PDF or Image to begin
+                      <Icon name="document" size={14} /> Upload PDF or Image to begin
                     </button>
                   ) : (
                     <ExplainerCanvas
@@ -2930,7 +2938,7 @@ export default function RecorderPage() {
                 {/* Toolbar */}
                 <div className="meet-toolbar">
                   <label className="meet-ctrl" title="Upload PDF / Image" style={{ cursor: "pointer" }}>
-                    📄
+                    <Icon name="document" size={14} />
                     <input
                       ref={explainerFileInputRef}
                       type="file"
@@ -2955,17 +2963,17 @@ export default function RecorderPage() {
                     !explainerRecording ? (
                       <button className="meet-ctrl" style={{ background: "rgba(239,68,68,0.18)", fontSize: 18 }}
                         onClick={() => explainerCanvasRef.current?.startRecord()} title="Start recording">
-                        ⏺
+                        <Icon name="record" size={15} />
                       </button>
                     ) : (
                       <button className="meet-ctrl ctrl-muted" style={{ fontSize: 18 }}
                         onClick={() => explainerCanvasRef.current?.stopRecord()} title="Stop recording">
-                        ⏹
+                        <Icon name="stop" size={15} />
                       </button>
                     )
                   ) : null}
                   {explainerVideoBlob ? (
-                    <span className="meet-exp-ready">✓ {(explainerVideoBlob.size / 1024 / 1024).toFixed(1)} MB</span>
+                    <span className="meet-exp-ready"><Icon name="check" size={14} /> {(explainerVideoBlob.size / 1024 / 1024).toFixed(1)} MB</span>
                   ) : null}
                   <button
                     className="meet-end"
@@ -2979,12 +2987,13 @@ export default function RecorderPage() {
             ) : null}
 
             {orderedSessionList.length === 0 ? (
-              <p className="day-state">
-                {listScope === "simple" ? "No simple records yet." : "No sessions recorded today."}
-              </p>
+              <p className="day-state">No recordings yet. Tap <b>Record</b> to start your first one.</p>
             ) : (
-              <div className="session-grid">
-                {orderedSessionList.map((session) => {
+              groupedSessions.map((group) => (
+              <div key={group.key} className="session-day-group">
+                <div className="session-day-heading">{fmtDayHeading(group.key)}</div>
+                <div className="session-grid">
+                {group.items.map((session) => {
                   const running = ["started", "resumed", "paused"].includes(session.status);
                   const finalizing = isSessionFinalizing(session);
                   const canPlay = Boolean(getPrimaryPlaybackType(session)) && !finalizing;
@@ -3038,10 +3047,9 @@ export default function RecorderPage() {
                       <div className="session-card-meta">
                         <span className="session-chip">{capitalize(getRecorderType(session)).replace("_", " ")}</span>
                         <span className="session-chip">{session.session_type}</span>
-                        <span className="session-chip">{session.date}</span>
-                        {durationSecs > 0 ? <span className="session-chip">⏱ {formatDuration(durationSecs)}</span> : null}
+                        {durationSecs > 0 ? <span className="session-chip"><Icon name="timer" size={14} /> {formatDuration(durationSecs)}</span> : null}
                       </div>
-                      {session.notes ? <p className="session-card-note">📝 {session.notes}</p> : null}
+                      {session.notes ? <p className="session-card-note"><Icon name="note" size={14} /> {session.notes}</p> : null}
                       <div className="session-card-actions" onClick={(e) => e.stopPropagation()}>
                         <button
                           className="btn-day"
@@ -3049,13 +3057,15 @@ export default function RecorderPage() {
                           disabled={!canPlay}
                           title={canPlay ? "Play recording" : (finalizing ? "Finalizing recording…" : "No recording uploaded yet")}
                         >
-                          {finalizing ? "⏳ Finalizing…" : "▶ Play"}
+                          {finalizing ? <><Icon name="clock" size={15} /> Finalizing…</> : <><Icon name="play" size={15} /> Play</>}
                         </button>
                       </div>
                     </div>
                   );
                 })}
+                </div>
               </div>
+              ))
             )}
           </>
         )}
@@ -3077,7 +3087,7 @@ export default function RecorderPage() {
       {offlineStopped ? (
         <div className="offline-overlay">
           <div className="offline-card">
-            <div className="offline-stop-icon">⚠️</div>
+            <div className="offline-stop-icon"><Icon name="warning" size={14} /></div>
             <h3 className="offline-title">Recording stopped</h3>
             <p className="offline-sub">
               Your internet was down for too long, so the recording was stopped and
@@ -3093,7 +3103,7 @@ export default function RecorderPage() {
             {/* Title bar */}
             <div className="vlc-titlebar">
               <span className="vlc-title">{playerModal.title || "Player"}</span>
-              <button className="vlc-close-btn" onClick={closePlayer}>✕</button>
+              <button className="vlc-close-btn" onClick={closePlayer}><Icon name="close" size={14} /></button>
             </div>
             {/* Media area */}
             <div className="vlc-media-area" ref={playerWrapRef}>
@@ -3118,7 +3128,7 @@ export default function RecorderPage() {
                           <span key={i} className="vlc-ring"
                             style={{ width: `${44 + i * 32}px`, height: `${44 + i * 32}px`, animationDelay: `${i * 0.4}s`, animationPlayState: playerPlaying ? "running" : "paused" }} />
                         ))}
-                        <span className="vlc-ring-note">♫</span>
+                        <span className="vlc-ring-note"><Icon name="music" size={14} /></span>
                       </div>
                       <div className="vlc-audio-title">{playerModal.title}</div>
                     </div>
@@ -3151,10 +3161,10 @@ export default function RecorderPage() {
                 </div>
                 <div className="vlc-btn-row">
                   <button className="vlc-btn vlc-play-btn" onClick={togglePlayerPlay}>
-                    {playerPlaying ? "⏸" : "▶"}
+                    {playerPlaying ? <Icon name="pause" size={15} /> : <Icon name="play" size={15} />}
                   </button>
                   <div className="vlc-vol-group">
-                    <span>🔊</span>
+                    <span><Icon name="audio" size={15} /></span>
                     <input type="range" className="vlc-vol" min="0" max="1" step="0.05"
                       value={playerVolume} onChange={onPlayerVolume} />
                   </div>
@@ -3167,8 +3177,8 @@ export default function RecorderPage() {
                     <option value="1.5">1.5×</option>
                     <option value="2">2×</option>
                   </select>
-                  <button className="vlc-btn" onClick={togglePlayerFullscreen} title="Fullscreen">⛶</button>
-                  <button className="vlc-btn" onClick={() => triggerDownload(playerModal.sid, playerModal.mediaType)} title="Download">⬇</button>
+                  <button className="vlc-btn" onClick={togglePlayerFullscreen} title="Fullscreen"><Icon name="fullscreen" size={15} /></button>
+                  <button className="vlc-btn" onClick={() => triggerDownload(playerModal.sid, playerModal.mediaType)} title="Download"><Icon name="download" size={14} /></button>
                 </div>
               </div>
             ) : null}

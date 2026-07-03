@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
 import TrackerSummary from "./TrackerSummary";
+import Icon from "./Icon";
+import { confirmDialog } from "../lib/dialog";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -213,7 +215,7 @@ function TimeField({ label, value, onChange, optional }) {
           {value ? fmtTime(value) : "-- : -- --"}
         </button>
         {value && (
-          <button className="dt-tp-clear" onClick={() => onChange("")} title="Clear">✕</button>
+          <button className="dt-tp-clear" onClick={() => onChange("")} title="Clear"><Icon name="close" size={13} /></button>
         )}
       </div>
       {open && (
@@ -226,7 +228,7 @@ function TimeField({ label, value, onChange, optional }) {
 // ── Main Component ──────────────────────────────────────────────────────────
 const EMPTY_FORM = { title: "", start_time: "", end_time: "", category: "", note: "", date: "" };
 
-export default function DayTracker() {
+export default function DayTracker({ onDateChange }) {
   const [view, setView]             = useState("log");
   const [date, setDate]             = useState(todayStr);
   const [activities, setActivities] = useState([]);
@@ -270,6 +272,8 @@ export default function DayTracker() {
 
   useEffect(() => { loadCategories(); }, [loadCategories]);
   useEffect(() => { loadActivities(); }, [loadActivities]);
+  // Let the host (home page) mirror the Day Log's selected date so Extras follow it.
+  useEffect(() => { onDateChange?.(date); }, [date, onDateChange]);
 
   const catColor = (name) => categories.find((c) => c.name === name)?.color || "#6366f1";
 
@@ -307,7 +311,7 @@ export default function DayTracker() {
   };
 
   const deleteActivity = async (id) => {
-    if (!confirm("Delete this activity?")) return;
+    if (!(await confirmDialog({ message: "Delete this activity?", confirmLabel: "Delete", danger: true }))) return;
     try { await apiFetch(`${API_BASE_URL}/tracker/activities/${id}`, { method: "DELETE" }); setActivities((p) => p.filter((a) => a.id !== id)); }
     catch (_) {}
   };
@@ -350,15 +354,15 @@ export default function DayTracker() {
           <button className={`dt-tab${view === "summary" ? " active" : ""}`} onClick={() => setView("summary")}>Summary</button>
         </div>
         {view === "log" && (
-          <>
+          <div className="dt-log-controls">
             <div className="dt-date-nav">
-              <button className="dt-nav-btn" onClick={() => setDate((d) => addDays(d, -1))}>‹</button>
+              <button className="dt-nav-btn" onClick={() => setDate((d) => addDays(d, -1))}><Icon name="chevron-left" size={16} /></button>
               <span className="dt-date-label">{fmtDate(date)}</span>
-              <button className="dt-nav-btn" onClick={() => setDate((d) => addDays(d, 1))} disabled={date >= today}>›</button>
+              <button className="dt-nav-btn" onClick={() => setDate((d) => addDays(d, 1))} disabled={date >= today}><Icon name="chevron-right" size={16} /></button>
               {date !== today && <button className="dt-today-btn" onClick={() => setDate(today)}>Today</button>}
             </div>
-            <button className="dt-add-btn" onClick={openAdd}>+ Log Activity</button>
-          </>
+            <button className="dt-add-btn" onClick={openAdd}><Icon name="plus" size={14} /> Log Activity</button>
+          </div>
         )}
       </div>
 
@@ -402,8 +406,8 @@ export default function DayTracker() {
                 {act.duration_minutes > 0
                   ? <span className="dt-item-dur">{fmtMins(act.duration_minutes)}</span>
                   : <span className="dt-item-dur pending">—</span>}
-                <button className="dt-icon-btn" onClick={() => openEdit(act)} title="Edit">✎</button>
-                <button className="dt-icon-btn danger" onClick={() => deleteActivity(act.id)} title="Delete">✕</button>
+                <button className="dt-icon-btn" onClick={() => openEdit(act)} title="Edit"><Icon name="edit" size={14} /></button>
+                <button className="dt-icon-btn danger" onClick={() => deleteActivity(act.id)} title="Delete"><Icon name="trash" size={14} /></button>
               </div>
             </div>
           ))}
@@ -442,7 +446,7 @@ export default function DayTracker() {
       {/* Categories */}
       <div className="dt-cat-section">
         <button className="dt-cat-toggle" onClick={() => setCatOpen((v) => !v)}>
-          Categories {catOpen ? "▲" : "▼"}
+          Categories <Icon name={catOpen ? "chevron-up" : "chevron-down"} size={14} />
         </button>
         {catOpen && (
           <div className="dt-cat-body">
@@ -451,7 +455,7 @@ export default function DayTracker() {
                 <div className="dt-cat-row" key={cat.name}>
                   <span className="dt-cat-dot" style={{ background: cat.color }} />
                   <span className="dt-cat-name">{cat.name}</span>
-                  <button className="dt-icon-btn danger" onClick={() => deleteCategory(cat.name)}>✕</button>
+                  <button className="dt-icon-btn danger" onClick={() => deleteCategory(cat.name)}><Icon name="trash" size={14} /></button>
                 </div>
               ))}
             </div>
@@ -495,7 +499,7 @@ export default function DayTracker() {
             {modalDuration !== null && (
               <p className="dt-duration-hint">Duration: {fmtMins(modalDuration)}</p>
             )}
-            {overlapWarn && <p className="dt-overlap-warn">⚠ {overlapWarn}</p>}
+            {overlapWarn && <p className="dt-overlap-warn"><Icon name="warning" size={14} /> {overlapWarn}</p>}
 
             <textarea className="task-textarea" placeholder="Note (optional)" rows={2} value={form.note}
               onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} />

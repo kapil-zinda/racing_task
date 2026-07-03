@@ -37,6 +37,7 @@ from .extras_domain import get_extras_payload, save_extras_payload
 from .interview_domain import (
     finalize_report_payload,
     get_interview_payload,
+    list_interviews_payload,
     start_interview_payload,
     submit_answer_payload,
 )
@@ -720,23 +721,23 @@ def create_app() -> FastAPI:
     # --- Goal OS: analytics + calendar + search ---
 
     @app.get("/goals/{goal_id}/analytics")
-    def goal_analytics_route(goal_id: str, request: Request):
+    def goal_analytics_route(goal_id: str, request: Request, tz_offset: int = Query(default=0)):
         try:
-            return goal_analytics(_require_auth(request), goal_id)
+            return goal_analytics(_require_auth(request), goal_id, tz_offset)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /goals/{goal_id}/analytics")
 
     @app.get("/dashboard")
-    def goal_dashboard_route(request: Request):
+    def goal_dashboard_route(request: Request, tz_offset: int = Query(default=0)):
         try:
-            return goal_dashboard(_require_auth(request))
+            return goal_dashboard(_require_auth(request), tz_offset)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /dashboard")
 
     @app.get("/calendar")
-    def goal_calendar_route(request: Request, goal_id: str = Query(default="")):
+    def goal_calendar_route(request: Request, goal_id: str = Query(default=""), tz_offset: int = Query(default=0)):
         try:
-            return goal_calendar(_require_auth(request), goal_id)
+            return goal_calendar(_require_auth(request), goal_id, tz_offset)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /calendar")
 
@@ -1314,6 +1315,13 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /interview/{id}/report")
 
+    @app.get("/interview")
+    def interview_list(request: Request):
+        try:
+            return list_interviews_payload(_req_user_id(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /interview")
+
     @app.get("/interview/{session_id}")
     def interview_get(session_id: str):
         try:
@@ -1326,7 +1334,8 @@ def create_app() -> FastAPI:
     def answer_eval_presign(request: Request, payload: AnswerEvalPresignRequest):
         try:
             return presign_answer_upload_payload(
-                _req_user_id(request), payload.filename, payload.content_type, payload.question, payload.max_marks
+                _req_user_id(request), payload.filename, payload.content_type,
+                payload.question, payload.max_marks, payload.subject,
             )
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /answer-eval/presign")
@@ -1346,9 +1355,14 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "GET /answer-eval/{id}")
 
     @app.get("/answer-eval")
-    def answer_eval_list(request: Request):
+    def answer_eval_list(
+        request: Request,
+        q: str = Query(default=""),
+        from_date: str = Query(default=""),
+        to_date: str = Query(default=""),
+    ):
         try:
-            return list_answer_evals_payload(_req_user_id(request))
+            return list_answer_evals_payload(_req_user_id(request), q=q, from_date=from_date, to_date=to_date)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /answer-eval")
 

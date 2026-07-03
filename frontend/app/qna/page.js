@@ -238,16 +238,16 @@ export default function QnaPage() {
   };
 
   return (
-    <main className="app-shell">
+    <main className="app-shell qna-shell">
       <div className="bg-orb orb-1" />
       <div className="bg-orb orb-2" />
 
-      <header className="hero">
+      <header className="hero qna-hero">
         <MainMenu active="qna" />
       </header>
 
       <section className="pdf-search-single">
-        <article className="milestone-panel">
+        <article className="milestone-panel qna-panel">
           {!API_BASE_URL ? <p className="api-state warn">Set NEXT_PUBLIC_API_BASE_URL first.</p> : null}
           {error ? <p className="api-state error">{error}</p> : null}
           <div className="qna-layout">

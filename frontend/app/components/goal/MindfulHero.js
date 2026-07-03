@@ -3,11 +3,18 @@
 // above as thought-clouds; as you clear them the mind empties toward calm. Clicking a
 // cloud jumps to its goal. Zero pending tasks → a serene, cloud-free "at peace" state.
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Icon from "../Icon";
+import { listNodeMetrics, incrementMetric, updateNode } from "../../lib/goalApi";
 
-export default function MindfulHero({ tasks = [], streak = 0, avgProgress = 0 }) {
+export default function MindfulHero({ tasks = [], streak = 0, avgProgress = 0, onChanged }) {
   const router = useRouter();
   const clear = tasks.length === 0;
+  const [busyId, setBusyId] = useState("");
+  const [picker, setPicker] = useState(null); // { task, metrics }
+  const [pickerBusy, setPickerBusy] = useState(false);
+
   // Spread clouds across arc positions above the head.
   const positions = [
     { top: "6%", left: "12%" }, { top: "0%", left: "40%" }, { top: "5%", left: "68%" },
@@ -15,6 +22,56 @@ export default function MindfulHero({ tasks = [], streak = 0, avgProgress = 0 })
     { top: "40%", left: "76%" }, { top: "16%", left: "56%" }, { top: "30%", left: "30%" },
     { top: "12%", left: "26%" }, { top: "34%", left: "60%" }, { top: "48%", left: "44%" },
   ];
+
+  const metricComplete = (m) => Number(m.target_value || 0) > 0 && Number(m.current_value || 0) >= Number(m.target_value || 0);
+
+  // Tick behaviour depends on how the node measures progress: a metric-based node opens a
+  // picker so you record WHICH thing was done (class / notes / a revision); a plain
+  // done/undone node just gets marked done.
+  const onTick = async (task, e) => {
+    e.stopPropagation();
+    if (busyId) return;
+    setBusyId(task.id);
+    try {
+      let metrics = [];
+      try { metrics = (await listNodeMetrics(task.id)).metrics || []; } catch (_) { metrics = []; }
+      if (metrics.length) {
+        setPicker({ task, metrics });
+      } else {
+        await updateNode(task.id, { status: "done" });
+        onChanged?.();
+      }
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const incMetric = async (m) => {
+    if (pickerBusy || !picker || metricComplete(m)) return;
+    setPickerBusy(true);
+    try {
+      await incrementMetric(m.id, 1);
+      const metrics = (await listNodeMetrics(picker.task.id)).metrics || [];
+      onChanged?.();
+      const allDone = metrics.length > 0 && metrics.every(metricComplete);
+      if (allDone) setPicker(null);
+      else setPicker((p) => (p ? { ...p, metrics } : p));
+    } finally {
+      setPickerBusy(false);
+    }
+  };
+
+  const markAllDone = async () => {
+    if (!picker || pickerBusy) return;
+    setPickerBusy(true);
+    try {
+      await updateNode(picker.task.id, { status: "done" });
+      onChanged?.();
+      setPicker(null);
+    } finally {
+      setPickerBusy(false);
+    }
+  };
 
   return (
     <section className={`mindful ${clear ? "is-clear" : ""}`}>
@@ -26,8 +83,8 @@ export default function MindfulHero({ tasks = [], streak = 0, avgProgress = 0 })
             : `${tasks.length} thought${tasks.length > 1 ? "s" : ""} to release today. Complete them and return to peace.`}
         </p>
         <div className="mindful-meta">
-          <span>🔥 {streak}-day streak</span>
-          <span>◍ {Math.round(avgProgress)}% avg progress</span>
+          <span><Icon name="fire" size={15} /> {streak}-day streak</span>
+          <span><Icon name="target" size={15} /> {Math.round(avgProgress)}% avg progress</span>
         </div>
       </div>
 
@@ -36,15 +93,23 @@ export default function MindfulHero({ tasks = [], streak = 0, avgProgress = 0 })
         {tasks.map((t, i) => {
           const pos = positions[i % positions.length];
           return (
-            <button key={t.id} className="thought-cloud" style={{ ...pos, animationDelay: `${(i % 6) * 0.6}s` }}
-                    title={`${t.goal_name}${t.parent_title ? ` › ${t.parent_title}` : ""} › ${t.title} — ${t.progress}%`}
-                    onClick={() => router.push(`/goals/${t.goal_id}`)}>
-              <span className="thought-cloud-icon">{t.goal_icon}</span>
-              <span className="thought-cloud-text">
-                {t.parent_title && <span className="thought-cloud-parent">{t.parent_title} › </span>}
-                {t.title}
-              </span>
-            </button>
+            <div key={t.id} className="thought-cloud" style={{ ...pos, animationDelay: `${(i % 6) * 0.6}s` }}
+                 title={`${t.goal_name}${t.parent_title ? ` › ${t.parent_title}` : ""} › ${t.title} — ${t.progress}%`}>
+              {onChanged && (
+                <button className="thought-cloud-done" title="Mark done"
+                        disabled={busyId === t.id}
+                        onClick={(e) => onTick(t, e)}>
+                  <Icon name="check" size={13} />
+                </button>
+              )}
+              <button className="thought-cloud-open" onClick={() => router.push(`/goals/${t.goal_id}`)}>
+                <span className="thought-cloud-icon"><Icon name={t.goal_icon} size={13} /></span>
+                <span className="thought-cloud-text">
+                  {t.parent_title && <span className="thought-cloud-parent">{t.parent_title} › </span>}
+                  {t.title}
+                </span>
+              </button>
+            </div>
           );
         })}
 
@@ -71,6 +136,35 @@ export default function MindfulHero({ tasks = [], streak = 0, avgProgress = 0 })
         </svg>
         {clear && <div className="mindful-glow" aria-hidden="true" />}
       </div>
+
+      {picker && (
+        <div className="task-modal-overlay" onClick={() => !pickerBusy && setPicker(null)}>
+          <div className="task-modal mh-metric-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>What did you complete?</h3>
+            <p className="mh-metric-sub">{picker.task.title}</p>
+            <div className="mh-metric-list">
+              {picker.metrics.map((m) => {
+                const done = metricComplete(m);
+                return (
+                  <button key={m.id} className={`mh-metric-item${done ? " done" : ""}`}
+                          disabled={done || pickerBusy} onClick={() => incMetric(m)}>
+                    <span className="mh-metric-name">
+                      <Icon name={done ? "check-circle" : "circle"} size={16} /> {m.name}
+                    </span>
+                    <span className="mh-metric-count">
+                      {Number(m.current_value || 0)}/{Number(m.target_value || 0)}{m.unit ? ` ${m.unit}` : ""}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="task-modal-actions">
+              <button className="btn-day secondary" onClick={() => setPicker(null)} disabled={pickerBusy}>Close</button>
+              <button className="btn-new" onClick={markAllDone} disabled={pickerBusy}>Mark all done</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

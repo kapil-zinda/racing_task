@@ -12,6 +12,7 @@ import {
 } from "../../lib/agent/agentBridge";
 import { AGENT_RECORDER_STATUS_EVENT } from "../../lib/agent/constants";
 import { executeAgentActions } from "../../lib/agent/actionExecutor";
+import Icon from "../Icon";
 
 const IDLE_NUDGE_MS = 120000;
 const AUTO_SLEEP_MS = 300000;
@@ -401,7 +402,7 @@ export default function AgentV2Widget() {
         aria-label="Voice Animal Agent"
         disabled={recorderRunning}
       >
-        <span className="animal-icon">🐰</span>
+        <span className="animal-icon"><Icon name="rabbit" /></span>
       </button>
       {open ? (
         <div className="agent-v2-panel animal-only">

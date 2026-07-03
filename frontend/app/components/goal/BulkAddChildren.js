@@ -4,6 +4,7 @@
 
 import { useMemo, useState } from "react";
 import { bulkCreateNodes } from "../../lib/goalApi";
+import Icon from "../Icon";
 
 export default function BulkAddChildren({ goalId, parent, onClose, onDone }) {
   const [pattern, setPattern] = useState("Class {n}");
@@ -58,7 +59,7 @@ export default function BulkAddChildren({ goalId, parent, onClose, onDone }) {
       <div className="goal-modal" onClick={(e) => e.stopPropagation()}>
         <div className="goal-modal-head">
           <h3>Add multiple children{parent ? ` under “${parent.title}”` : ""}</h3>
-          <button className="goal-icon-btn" onClick={onClose} aria-label="Close">✕</button>
+          <button className="goal-icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
         </div>
         {err && <div className="goal-error">{err}</div>}
         <div className="goal-modal-body">
@@ -92,7 +93,7 @@ export default function BulkAddChildren({ goalId, parent, onClose, onDone }) {
                          onChange={(e) => setMetric(i, "target_value", e.target.value)} />
                   <input placeholder="Unit" value={m.unit}
                          onChange={(e) => setMetric(i, "unit", e.target.value)} />
-                  <button className="goal-icon-btn danger sm" onClick={() => removeMetric(i)} title="Remove">✕</button>
+                  <button className="goal-icon-btn danger sm" onClick={() => removeMetric(i)} title="Remove"><Icon name="close" /></button>
                 </div>
               ))}
             </div>

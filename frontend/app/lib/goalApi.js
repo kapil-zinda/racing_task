@@ -69,9 +69,16 @@ export const saveTemplate = (goalId, name = "") => req("/templates", { method: "
 export const deleteTemplate = (id) => req(`/templates/${id}`, { method: "DELETE" });
 
 // --- Dashboard / analytics / calendar / search ---
-export const getDashboard = () => req("/dashboard");
-export const getAnalytics = (goalId) => req(`/goals/${goalId}/analytics`);
-export const getCalendar = (goalId = "") => req(`/calendar${goalId ? `?goal_id=${goalId}` : ""}`);
+// Send the browser's timezone offset so day-bucketing (heatmap, streaks, today/yesterday,
+// this/last week) follows the user's LOCAL calendar day instead of UTC.
+const tzOffset = () => (typeof Date !== "undefined" ? new Date().getTimezoneOffset() : 0);
+export const getDashboard = () => req(`/dashboard?tz_offset=${tzOffset()}`);
+export const getAnalytics = (goalId) => req(`/goals/${goalId}/analytics?tz_offset=${tzOffset()}`);
+export const getCalendar = (goalId = "") => {
+  const qs = new URLSearchParams({ tz_offset: String(tzOffset()) });
+  if (goalId) qs.set("goal_id", goalId);
+  return req(`/calendar?${qs.toString()}`);
+};
 export const search = (q, limit = 30) => req(`/search?q=${encodeURIComponent(q)}&limit=${limit}`);
 
 // --- Dependencies ---

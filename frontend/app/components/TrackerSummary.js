@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
+import Icon from "./Icon";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -106,6 +107,20 @@ export default function TrackerSummary({ categories = [] }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const graphDivRef = useRef(null);
+
+  const downloadChart = async () => {
+    if (!graphDivRef.current) return;
+    try {
+      const Plotly = (await import("plotly.js-dist-min")).default;
+      const label = viewMode === "daily" ? date : `${range.start}_${range.end}`;
+      await Plotly.downloadImage(graphDivRef.current, {
+        format: "png", scale: 2, filename: `time-summary-${label}`,
+      });
+    } catch (err) {
+      setError(String(err.message || err));
+    }
+  };
 
   const range = useMemo(() => {
     if (viewMode === "daily") return { start: date, end: date };
@@ -328,8 +343,15 @@ export default function TrackerSummary({ categories = [] }) {
           {/* Stacked bar chart */}
           {computed.hasData ? (
             <div className="dt-chart-wrap">
-              <div className="dt-chart-label">{computed.isDaily ? "Minutes per hour slot" : "Hours per day"}</div>
+              <div className="dt-chart-head">
+                <span className="dt-chart-label">{computed.isDaily ? "Minutes per hour slot" : "Hours per day"}</span>
+                <button className="dt-chart-dl" onClick={downloadChart} title="Download this graph as PNG">
+                  <Icon name="download" size={14} /> Download
+                </button>
+              </div>
               <Plot
+                onInitialized={(fig, gd) => { graphDivRef.current = gd; }}
+                onUpdate={(fig, gd) => { graphDivRef.current = gd; }}
                 data={computed.traces}
                 layout={{
                   barmode: "stack",

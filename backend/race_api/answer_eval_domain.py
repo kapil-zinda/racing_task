@@ -9,6 +9,7 @@ Lambda (self-invoke), inline off Lambda.
 
 import io
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -279,7 +280,7 @@ def _annotate_pdf(pdf_bytes: bytes, result: Dict[str, Any]) -> bytes:
 
 # ── Public API ─────────────────────────────────────────────────────────────--
 def presign_answer_upload_payload(
-    user_id: str, filename: str, content_type: str, question: str = "", max_marks: int = 0
+    user_id: str, filename: str, content_type: str, question: str = "", max_marks: int = 0, subject: str = ""
 ) -> Dict[str, Any]:
     bucket = _bucket()
     eval_id = f"answereval:{uuid.uuid4().hex}"
@@ -304,6 +305,7 @@ def presign_answer_upload_payload(
         "original_key": key,
         "marked_key": "",
         "question": (question or "").strip(),
+        "subject": (subject or "").strip(),
         "max_marks": int(max_marks or 0),
         "result": None,
         "created_at": now,
@@ -461,16 +463,41 @@ def get_answer_eval_payload(eval_id: str) -> Dict[str, Any]:
     }
 
 
-def list_answer_evals_payload(user_id: str) -> Dict[str, Any]:
-    cur = answer_evaluations_collection().find(
-        {"doc_type": "answer_evaluation", "user_id": (user_id or "").strip()}
-    ).sort("created_at", -1).limit(50)
+def list_answer_evals_payload(
+    user_id: str,
+    q: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    limit: int = 200,
+) -> Dict[str, Any]:
+    """List a user's evaluations, newest first. Optional filters:
+    - q: case-insensitive substring match on the question text (subject) or filename.
+    - from_date / to_date: inclusive bounds on created_at (YYYY-MM-DD)."""
+    query: Dict[str, Any] = {"doc_type": "answer_evaluation", "user_id": (user_id or "").strip()}
+
+    term = (q or "").strip()
+    if term:
+        rx = {"$regex": re.escape(term), "$options": "i"}
+        query["$or"] = [{"subject": rx}, {"question": rx}, {"filename": rx}]
+
+    created: Dict[str, str] = {}
+    if (from_date or "").strip():
+        created["$gte"] = from_date.strip()
+    if (to_date or "").strip():
+        # created_at is an ISO timestamp; extend an inclusive end-of-day bound.
+        created["$lte"] = to_date.strip() + "T23:59:59.999999+00:00"
+    if created:
+        query["created_at"] = created
+
+    cur = answer_evaluations_collection().find(query).sort("created_at", -1).limit(int(limit))
     items = []
     for d in cur:
         res = d.get("result") or {}
         items.append({
             "eval_id": d.get("_id"),
             "filename": d.get("filename"),
+            "question": d.get("question"),
+            "subject": d.get("subject"),
             "status": d.get("status"),
             "total_awarded": res.get("total_awarded"),
             "total_max": res.get("total_max"),

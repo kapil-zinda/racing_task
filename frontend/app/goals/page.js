@@ -10,7 +10,8 @@ import GoalHeaderTools from "../components/goal/GoalHeaderTools";
 import MindfulHero from "../components/goal/MindfulHero";
 import ContributionHeatmap from "../components/goal/ContributionHeatmap";
 import ComparisonCharts from "../components/goal/ComparisonCharts";
-import { listGoals, createGoal, deleteGoal, getDashboard } from "../lib/goalApi";
+import Icon from "../components/Icon";
+import { listGoals, createGoal, getDashboard } from "../lib/goalApi";
 
 export default function GoalsPage() {
   const router = useRouter();
@@ -49,18 +50,6 @@ export default function GoalsPage() {
     setGoals((gs) => [created, ...gs]);
   };
 
-  const handleDelete = async (goal) => {
-    if (!window.confirm(`Delete "${goal.name}" and its entire tree? This cannot be undone.`)) return;
-    const prev = goals;
-    setGoals((gs) => gs.filter((g) => g.id !== goal.id));
-    try {
-      await deleteGoal(goal.id);
-    } catch (err) {
-      setError(String(err.message || err));
-      setGoals(prev);
-    }
-  };
-
   return (
     <div className="goal-page">
       <MainMenu active="goals" />
@@ -72,14 +61,14 @@ export default function GoalsPage() {
           </div>
           <div className="goal-header-actions">
             <GoalHeaderTools />
-            <button className="goal-btn ghost" onClick={load} title="Refresh">↻ Refresh</button>
+            <button className="goal-btn ghost" onClick={load} title="Refresh"><Icon name="refresh" size={15} /> Refresh</button>
             <button className="goal-btn primary" onClick={() => setWizardOpen(true)}>+ New goal</button>
           </div>
         </header>
 
         {dash && (
           <MindfulHero tasks={dash.today_tasks || []} streak={dash.streak_current || 0}
-                       avgProgress={dash.avg_progress || 0} />
+                       avgProgress={dash.avg_progress || 0} onChanged={load} />
         )}
 
         <section className="goal-stat-row">
@@ -87,7 +76,7 @@ export default function GoalsPage() {
           <div className="goal-stat"><span className="goal-stat-num">{stats.active}</span><span className="goal-stat-lbl">Active</span></div>
           <div className="goal-stat"><span className="goal-stat-num">{stats.avg}%</span><span className="goal-stat-lbl">Avg progress</span></div>
           <div className="goal-stat">
-            <span className="goal-stat-num">🔥 {dash?.streak_current ?? 0}</span>
+            <span className="goal-stat-num"><Icon name="fire" size={18} /> {dash?.streak_current ?? 0}</span>
             <span className="goal-stat-lbl">Current streak (best {dash?.streak_longest ?? 0})</span>
           </div>
         </section>
@@ -112,7 +101,7 @@ export default function GoalsPage() {
           </div>
         ) : (
           <div className="goal-grid">
-            {goals.map((g) => <GoalCard key={g.id} goal={g} onDelete={handleDelete} />)}
+            {goals.map((g) => <GoalCard key={g.id} goal={g} />)}
           </div>
         )}
       </div>

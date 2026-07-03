@@ -82,6 +82,7 @@ class AnswerEvalPresignRequest(BaseModel):
     filename: str = "answer.pdf"
     content_type: str = "application/pdf"
     question: str = ""
+    subject: str = ""
     max_marks: int = 0
 
 

@@ -16,12 +16,23 @@ from typing import Any, Dict
 
 from .context import (
     content_files_collection,
+    interview_sessions_collection,
     logger,
     pdf_docs_collection,
     sessions_collection,
     settings,
     user_usage_collection,
 )
+
+
+def _interviews_taken(user_id: str) -> int:
+    try:
+        return int(interview_sessions_collection().count_documents(
+            {"doc_type": "interview_session", "user_id": (user_id or "").strip()}
+        ))
+    except Exception:
+        logger.exception("interview count failed")
+        return 0
 
 
 def _now() -> str:
@@ -130,6 +141,7 @@ def storage_status_payload(user_id: str) -> Dict[str, Any]:
         "used_gb": round(used / (1024 ** 3), 3),
         "limit_gb": round(limit / (1024 ** 3), 2),
         "answers_evaluated": int(doc.get("answers_evaluated", 0) or 0),
+        "interviews_taken": _interviews_taken(user_id),
         "search_llm_tokens": int(doc.get("search_llm_tokens", 0) or 0),
         "qna_llm_tokens": int(doc.get("qna_llm_tokens", 0) or 0),
     }

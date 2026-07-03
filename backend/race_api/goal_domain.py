@@ -7,7 +7,7 @@ node, adjacency list). See goal_node_domain.py and goal_progress_engine.py.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from bson import ObjectId
@@ -34,6 +34,27 @@ def _uid(user_id: str) -> str:
     if not uid:
         raise ValueError("Invalid user_id")
     return uid
+
+
+# ── Timezone-aware "local day" helpers ───────────────────────────────────────
+# The client sends its JS getTimezoneOffset() (minutes; UTC - local, e.g. IST = -330).
+# We store timestamps in UTC, so a user's calendar day = UTC time minus that offset.
+
+def local_today(tz_offset_min: int = 0):
+    return (datetime.now(timezone.utc) - timedelta(minutes=int(tz_offset_min or 0))).date()
+
+
+def iso_to_local_date(iso: str, tz_offset_min: int = 0) -> str:
+    if not iso:
+        return ""
+    try:
+        dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except ValueError:
+        return str(iso)[:10]
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    local = dt.astimezone(timezone.utc) - timedelta(minutes=int(tz_offset_min or 0))
+    return local.date().isoformat()
 
 
 def _oid(value: str, label: str = "id") -> ObjectId:

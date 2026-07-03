@@ -4,8 +4,9 @@
 
 import { useEffect, useState } from "react";
 import { aiGenerate, listTemplates, useTemplate } from "../../lib/goalApi";
+import Icon from "../Icon";
 
-const ICONS = ["🎯", "📚", "💪", "🥗", "📖", "💻", "💰", "🗣️", "🔥", "🧠", "🏆", "⏱️"];
+const ICONS = ["target", "book", "trophy", "food", "idea", "file", "chart", "chat", "fire", "brain", "tree", "timer"];
 const COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#ef4444", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6"];
 
 export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
@@ -13,7 +14,7 @@ export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
   const [mode, setMode] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState({ name: "", description: "", icon: "🎯", color: "#6366f1", end_date: "", category: "General" });
+  const [form, setForm] = useState({ name: "", description: "", icon: "target", color: "#6366f1", end_date: "", category: "General" });
   const [aiPrompt, setAiPrompt] = useState("");
   const [templates, setTemplates] = useState([]);
 
@@ -59,7 +60,7 @@ export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
       <div className="goal-modal" onClick={(e) => e.stopPropagation()}>
         <div className="goal-modal-head">
           <h3>{step === 0 ? "New goal" : mode === "ai" ? "Generate with AI" : mode === "template" ? "Pick a template" : "How do you want to start?"}</h3>
-          <button className="goal-icon-btn" onClick={onClose} aria-label="Close">✕</button>
+          <button className="goal-icon-btn" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
         </div>
         {error && <div className="goal-error">{error}</div>}
 
@@ -71,7 +72,7 @@ export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
               <textarea rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Optional" /></label>
             <div className="goal-field"><span>Icon</span>
               <div className="goal-icon-grid">{ICONS.map((ic) => (
-                <button key={ic} type="button" className={`goal-icon-pick ${form.icon === ic ? "sel" : ""}`} onClick={() => set("icon", ic)}>{ic}</button>))}</div></div>
+                <button key={ic} type="button" className={`goal-icon-pick ${form.icon === ic ? "sel" : ""}`} onClick={() => set("icon", ic)}><Icon name={ic} /></button>))}</div></div>
             <div className="goal-field"><span>Color</span>
               <div className="goal-color-grid">{COLORS.map((c) => (
                 <button key={c} type="button" className={`goal-color-pick ${form.color === c ? "sel" : ""}`} style={{ background: c }} onClick={() => set("color", c)} aria-label={c} />))}</div></div>
@@ -84,13 +85,13 @@ export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
           <div className="goal-modal-body">
             <div className="goal-start-grid">
               <button className="goal-start-card" onClick={submitBlank} disabled={saving}>
-                <span className="goal-start-emoji">📄</span><span className="goal-start-title">Blank</span>
+                <span className="goal-start-emoji"><Icon name="file" /></span><span className="goal-start-title">Blank</span>
                 <span className="goal-start-sub">Build the tree yourself</span></button>
               <button className="goal-start-card" onClick={() => setMode("template")} disabled={saving}>
-                <span className="goal-start-emoji">🧩</span><span className="goal-start-title">Template</span>
+                <span className="goal-start-emoji"><Icon name="puzzle" /></span><span className="goal-start-title">Template</span>
                 <span className="goal-start-sub">Start from a preset</span></button>
               <button className="goal-start-card" onClick={() => setMode("ai")} disabled={saving}>
-                <span className="goal-start-emoji">✨</span><span className="goal-start-title">AI Generate</span>
+                <span className="goal-start-emoji"><Icon name="sparkles" /></span><span className="goal-start-title">AI Generate</span>
                 <span className="goal-start-sub">Describe it in words</span></button>
             </div>
           </div>
@@ -110,7 +111,7 @@ export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
             <div className="template-grid sm">
               {templates.map((t) => (
                 <button key={t.id} className="template-card" onClick={() => pickTemplate(t)} disabled={saving}>
-                  <span className="template-icon">{t.icon}</span>
+                  <span className="template-icon"><Icon name={t.icon} /></span>
                   <span className="template-name">{t.name}</span>
                   <span className="template-meta">{t.node_count} nodes{t.builtin ? " · preset" : ""}</span>
                 </button>

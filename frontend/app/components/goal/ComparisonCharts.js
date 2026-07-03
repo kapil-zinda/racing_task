@@ -26,9 +26,9 @@ export default function ComparisonCharts({ today = 0, yesterday = 0, thisWeek = 
         <Plot
           data={[
             { type: "scatter", mode: "lines+markers", name: "Last week", x: labels, y: lastWeek.map((d) => d.count),
-              line: { color: "#8b95a7", dash: "dot" } },
+              line: { color: "#8b95a7", dash: "dot", shape: "spline", smoothing: 1.3, width: 2.5 } },
             { type: "scatter", mode: "lines+markers", name: "This week", x: labels, y: thisWeek.map((d) => d.count),
-              line: { color: "#10b981" } },
+              line: { color: "#10b981", shape: "spline", smoothing: 1.3, width: 3 } },
           ]}
           layout={{ ...DARK, height: 220, showlegend: true, legend: { orientation: "h", y: 1.15, font: { size: 10 } } }}
           config={{ displayModeBar: false, responsive: true }} style={{ width: "100%" }} />

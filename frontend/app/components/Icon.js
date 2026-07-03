@@ -1,0 +1,114 @@
+"use client";
+// Thin wrapper around lucide-react so the whole app renders consistent line icons
+// instead of emoji. Use <Icon name="home" /> or import lucide components directly.
+// `size` defaults to 1em so icons inherit the surrounding font-size; pass a number for px.
+
+import {
+  Home, Mic, Gavel, FileText, Target, BarChart3, MessageSquare, Brain, Search,
+  FolderOpen, Folder, Flame, Bell, X, RefreshCw, Pencil, Trash2, Play, Pause,
+  Square, Circle, Check, CheckCircle2, Download, Upload, Link2, ArrowRight,
+  ArrowLeft, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Maximize2,
+  AlertTriangle, Sparkles, Trophy, BookOpen, Clock, Image as ImageIcon, Volume2,
+  Music, Scale, PartyPopper, Lightbulb, Rabbit, Salad, Puzzle, User, TreePine,
+  Timer, Disc, MoreHorizontal, Plus, Minus, Circle as Dot, Loader2, Layers,
+  CalendarDays, ClipboardList, Paperclip, StickyNote,
+} from "lucide-react";
+
+const MAP = {
+  home: Home,
+  recorder: Mic,
+  mic: Mic,
+  interview: Gavel,
+  gavel: Gavel,
+  "answer-eval": FileText,
+  file: FileText,
+  document: FileText,
+  goals: Target,
+  target: Target,
+  analytics: BarChart3,
+  chart: BarChart3,
+  qna: MessageSquare,
+  chat: MessageSquare,
+  message: MessageSquare,
+  mindmap: Brain,
+  brain: Brain,
+  search: Search,
+  content: FolderOpen,
+  folder: Folder,
+  "folder-open": FolderOpen,
+  usage: BarChart3,
+  fire: Flame,
+  streak: Flame,
+  bell: Bell,
+  reminder: Bell,
+  close: X,
+  x: X,
+  refresh: RefreshCw,
+  edit: Pencil,
+  pencil: Pencil,
+  trash: Trash2,
+  delete: Trash2,
+  play: Play,
+  pause: Pause,
+  stop: Square,
+  square: Square,
+  record: Disc,
+  circle: Circle,
+  dot: Dot,
+  check: Check,
+  "check-circle": CheckCircle2,
+  done: CheckCircle2,
+  download: Download,
+  upload: Upload,
+  link: Link2,
+  "arrow-right": ArrowRight,
+  "arrow-left": ArrowLeft,
+  "chevron-right": ChevronRight,
+  "chevron-left": ChevronLeft,
+  "chevron-down": ChevronDown,
+  "chevron-up": ChevronUp,
+  expand: Maximize2,
+  fullscreen: Maximize2,
+  warning: AlertTriangle,
+  alert: AlertTriangle,
+  sparkles: Sparkles,
+  trophy: Trophy,
+  book: BookOpen,
+  clock: Clock,
+  timer: Timer,
+  image: ImageIcon,
+  audio: Volume2,
+  volume: Volume2,
+  music: Music,
+  scale: Scale,
+  party: PartyPopper,
+  idea: Lightbulb,
+  bulb: Lightbulb,
+  rabbit: Rabbit,
+  food: Salad,
+  puzzle: Puzzle,
+  user: User,
+  tree: TreePine,
+  more: MoreHorizontal,
+  plus: Plus,
+  minus: Minus,
+  loading: Loader2,
+  layers: Layers,
+  calendar: CalendarDays,
+  clipboard: ClipboardList,
+  attachment: Paperclip,
+  note: StickyNote,
+};
+
+export default function Icon({ name, size = "1em", className = "", strokeWidth = 2, ...rest }) {
+  const Cmp = MAP[name];
+  if (!Cmp) {
+    // Unknown name. Legacy data (e.g. goal.icon) may still hold a literal emoji —
+    // pass any non-ASCII glyph straight through as text so nothing breaks mid-migration.
+    if (name && /[^\x00-\x7F]/.test(name)) {
+      return <span className={className} style={{ fontSize: size }} aria-hidden="true" {...rest}>{name}</span>;
+    }
+    return <Circle size={size} className={className} strokeWidth={strokeWidth} aria-hidden="true" {...rest} />;
+  }
+  return <Cmp size={size} className={className} strokeWidth={strokeWidth} aria-hidden="true" {...rest} />;
+}

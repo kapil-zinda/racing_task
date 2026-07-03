@@ -11,13 +11,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from .context import goal_activity_collection, goal_nodes_collection, goals_collection
-from .goal_domain import _uid, ensure_goal_indexes
+from .goal_domain import _uid, ensure_goal_indexes, iso_to_local_date, local_today
 
 _ACTION_TYPES = ["node_updated", "metric_incremented", "node_created", "nodes_bulk_created"]
 
 
-def _activity_by_date(user_id: str, days: int = 180) -> Dict[str, int]:
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+def _activity_by_date(user_id: str, days: int = 180, tz_offset: int = 0) -> Dict[str, int]:
+    # Fetch a slightly wider UTC window so nothing is dropped when shifting to local days.
+    since = (datetime.now(timezone.utc) - timedelta(days=days + 1)).isoformat()
     goal_ids = [str(g["_id"]) for g in goals_collection().find({"user_id": user_id}, {"_id": 1})]
     if not goal_ids:
         return {}
@@ -26,18 +27,18 @@ def _activity_by_date(user_id: str, days: int = 180) -> Dict[str, int]:
         {"goal_id": {"$in": goal_ids}, "created_at": {"$gte": since}, "action": {"$in": _ACTION_TYPES}},
         {"created_at": 1},
     ):
-        d = (a.get("created_at") or "")[:10]
+        d = iso_to_local_date(a.get("created_at"), tz_offset)
         if d:
             out[d] = out.get(d, 0) + 1
     return out
 
 
-def _streaks(active_dates: set) -> Dict[str, int]:
+def _streaks(active_dates: set, tz_offset: int = 0) -> Dict[str, int]:
     """Current + longest streak (consecutive days with activity). Current streak counts
     back from today; if today has none but yesterday does, the streak is still alive."""
     if not active_dates:
         return {"current": 0, "longest": 0}
-    today = datetime.now(timezone.utc).date()
+    today = local_today(tz_offset)
 
     current = 0
     cursor = today
@@ -58,8 +59,8 @@ def _streaks(active_dates: set) -> Dict[str, int]:
     return {"current": current, "longest": longest}
 
 
-def _last_n_days_counts(activity: Dict[str, int], n: int, offset: int = 0) -> List[Dict[str, Any]]:
-    today = datetime.now(timezone.utc).date()
+def _last_n_days_counts(activity: Dict[str, int], n: int, offset: int = 0, tz_offset: int = 0) -> List[Dict[str, Any]]:
+    today = local_today(tz_offset)
     out = []
     for i in range(n - 1, -1, -1):
         d = today - timedelta(days=i + offset)
@@ -92,14 +93,14 @@ def _today_tasks(user_id: str, limit: int = 6) -> List[Dict[str, Any]]:
     return out
 
 
-def dashboard(user_id: str) -> Dict[str, Any]:
+def dashboard(user_id: str, tz_offset: int = 0) -> Dict[str, Any]:
     ensure_goal_indexes()
     uid = _uid(user_id)
-    activity = _activity_by_date(uid, 180)
+    activity = _activity_by_date(uid, 180, tz_offset)
     active_dates = {d for d, c in activity.items() if c > 0}
-    streaks = _streaks(active_dates)
+    streaks = _streaks(active_dates, tz_offset)
 
-    today = datetime.now(timezone.utc).date()
+    today = local_today(tz_offset)
     yesterday = today - timedelta(days=1)
 
     goals = list(goals_collection().find({"user_id": uid}))
@@ -127,8 +128,8 @@ def dashboard(user_id: str) -> Dict[str, Any]:
         "streak_longest": streaks["longest"],
         "today_count": activity.get(today.isoformat(), 0),
         "yesterday_count": activity.get(yesterday.isoformat(), 0),
-        "this_week": _last_n_days_counts(activity, 7, 0),
-        "last_week": _last_n_days_counts(activity, 7, 7),
+        "this_week": _last_n_days_counts(activity, 7, 0, tz_offset),
+        "last_week": _last_n_days_counts(activity, 7, 7, tz_offset),
         "today_tasks": _today_tasks(uid),
         "goal_count": len(goals),
         "active_count": len(active),
