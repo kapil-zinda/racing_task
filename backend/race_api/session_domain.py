@@ -132,7 +132,11 @@ def list_sessions_payload(date: Optional[str], user_id: Optional[str], scope: Op
     query: Dict[str, Any] = {"doc_type": "study_session"}
     if (user_id or "").strip():
         query["user_id"] = user_id
-    if (scope or "").strip().lower() == "simple":
+    scope_val = (scope or "").strip().lower()
+    if scope_val == "all":
+        # Full history: every recording for the user, across all days (grouped by day on the client).
+        pass
+    elif scope_val == "simple":
         # Simple Records span every day, so do not filter by date.
         query["is_simple_record"] = True
     else:
