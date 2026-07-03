@@ -47,7 +47,8 @@ export default function HomePage() {
   const { auth } = useAuth();
   const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState("");
-  const [todayDate] = useState("");
+  // Mirrors the Day Log's selected date so Extras load for the same day.
+  const [todayDate, setTodayDate] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
   const [extrasByUser, setExtrasByUser] = useState({});
   const [extraActionOpenId, setExtraActionOpenId] = useState("");
@@ -220,17 +221,15 @@ export default function HomePage() {
         <MainMenu active="home" />
         <p className="subtext">"{heroQuote.quote}"</p>
         {heroQuote.author ? <p className="subtext subtext-author">— {heroQuote.author}</p> : null}
-        {API_BASE_URL ? (
-          <p className={`api-state ${apiError ? "error" : "ok"}`}>
-            {apiError ? `API issue: ${apiError}` : "Connected to backend API"}
-          </p>
-        ) : (
+        {!API_BASE_URL ? (
           <p className="api-state warn">Running in local mode (no backend URL configured).</p>
-        )}
+        ) : apiError ? (
+          <p className="api-state error">API issue: {apiError}</p>
+        ) : null}
       </header>
 
       <section className="scoreboard">
-        <DayTracker />
+        <DayTracker onDateChange={setTodayDate} />
         <article className="player-card extras-card">
           <div className="player-row">
             <h2 className="player-name">Extras</h2>
