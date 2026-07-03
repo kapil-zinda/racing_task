@@ -4,16 +4,14 @@ import { apiFetch } from "../lib/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import MainMenu from "../components/MainMenu";
+import Icon from "../components/Icon";
+import { confirmDialog } from "../lib/dialog";
+import { listGoals } from "../lib/goalApi";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
-const CONTENT_SEARCH_COURSES = [
-  { value: "sfg_level_1", label: "SFG Level 1" },
-  { value: "sfg_level_2", label: "SFG Level 2" },
-  { value: "level_up_pmp", label: "Level Up PMP" },
-  { value: "spectrum", label: "Spectrum" },
-  { value: "laxmikant", label: "Laxmikant" },
-];
+// Content is tagged against a goal (or kept "Global"); options are loaded from the user's goals.
+const CONTENT_GLOBAL_OPTION = { value: "global", label: "Global (all goals)" };
 
 function formatBytes(bytes) {
   const n = Number(bytes || 0);
@@ -129,8 +127,9 @@ export default function ContentPage() {
   });
   const [showMakeSearchableModal, setShowMakeSearchableModal] = useState(false);
   const [makeSearchableItem, setMakeSearchableItem] = useState(null);
-  const [searchableCourse, setSearchableCourse] = useState(CONTENT_SEARCH_COURSES[0].value);
+  const [searchableCourse, setSearchableCourse] = useState(CONTENT_GLOBAL_OPTION.value);
   const [makingSearchable, setMakingSearchable] = useState(false);
+  const [goals, setGoals] = useState([]);
 
   const uploadInputRef = useRef(null);
   const folderInputRef = useRef(null);
@@ -258,6 +257,10 @@ export default function ContentPage() {
     };
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
+  }, []);
+
+  useEffect(() => {
+    listGoals().then((d) => setGoals(d.goals || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -435,11 +438,11 @@ export default function ContentPage() {
 
   const deleteItem = async (item) => {
     if (!API_BASE_URL || !item) return;
-    const ok = window.confirm(
-      item.type === "folder"
-        ? `Delete folder "${item.name}" recursively?`
-        : `Delete file "${item.name}"?`,
-    );
+    const ok = await confirmDialog({
+      title: "Delete",
+      message: item.type === "folder" ? `Delete folder "${item.name}" recursively?` : `Delete file "${item.name}"?`,
+      confirmLabel: "Delete", danger: true,
+    });
     if (!ok) return;
     setError("");
     try {
@@ -545,7 +548,7 @@ export default function ContentPage() {
   const openMakeSearchableModal = (item) => {
     if (!item) return;
     setMakeSearchableItem(item);
-    setSearchableCourse(CONTENT_SEARCH_COURSES[0].value);
+    setSearchableCourse(CONTENT_GLOBAL_OPTION.value);
     setShowMakeSearchableModal(true);
   };
 
@@ -1009,7 +1012,7 @@ export default function ContentPage() {
                             else previewFile(item);
                           }}
                         >
-                          <span className="item-icon" aria-hidden="true">{item.type === "folder" ? "📁" : "📄"}</span>
+                          <span className="item-icon" aria-hidden="true"><Icon name={item.type === "folder" ? "folder" : "document"} /></span>
                           <span>{item.name}</span>
                         </button>
                       </td>
@@ -1195,7 +1198,7 @@ export default function ContentPage() {
                         disabled={blocked}
                         title={blocked ? "Cannot choose source folder or its child folders" : "Open folder"}
                       >
-                        <span className="item-icon" aria-hidden="true">📁</span>
+                        <span className="item-icon" aria-hidden="true"><Icon name="folder" /></span>
                         <span>{folder.name}</span>
                       </button>
                     );
@@ -1272,10 +1275,9 @@ export default function ContentPage() {
               value={searchableCourse}
               onChange={(e) => setSearchableCourse(e.target.value)}
             >
-              {CONTENT_SEARCH_COURSES.map((course) => (
-                <option key={course.value} value={course.value}>
-                  {course.label}
-                </option>
+              <option value={CONTENT_GLOBAL_OPTION.value}>{CONTENT_GLOBAL_OPTION.label}</option>
+              {goals.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
               ))}
             </select>
             <div className="task-modal-actions">
