@@ -1,16 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
+import Icon from "../components/Icon";
 import { apiFetch } from "../lib/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
-function fmtDate(iso) {
+function fmtTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDayHeading(iso) {
+  if (!iso) return "Undated";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "Undated";
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+}
+
+function dayKey(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function EvalResult({ data }) {
@@ -72,35 +87,61 @@ function EvalResult({ data }) {
 }
 
 export default function AnswerEvalPage() {
-  const [tab, setTab] = useState("submit"); // "submit" | "answers"
+  const [view, setView] = useState("list"); // "list" | "submit" | "detail"
   const [file, setFile] = useState(null);
   const [question, setQuestion] = useState("");
+  const [subject, setSubject] = useState("");
   const [maxMarks, setMaxMarks] = useState("");
-  const [status, setStatus] = useState("idle"); // idle | uploading | processing | completed | failed
+  const [status, setStatus] = useState("idle"); // idle | uploading | submitted | loading | completed | failed
   const [data, setData] = useState(null);        // result currently shown
-  const [detail, setDetail] = useState(false);   // showing a specific eval inside My Answers
   const [error, setError] = useState("");
   const [list, setList] = useState([]);
   const [listLoading, setListLoading] = useState(false);
 
-  const loadList = async () => {
+  // Search / filter
+  const [searchQ, setSearchQ] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const loadList = useCallback(async (filters = {}) => {
     if (!API_BASE_URL) return;
     setListLoading(true);
     try {
-      const res = await apiFetch(`${API_BASE_URL}/answer-eval`);
+      const params = new URLSearchParams();
+      const q = filters.q ?? searchQ;
+      const from = filters.from ?? fromDate;
+      const to = filters.to ?? toDate;
+      if (q && q.trim()) params.set("q", q.trim());
+      if (from) params.set("from_date", from);
+      if (to) params.set("to_date", to);
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      const res = await apiFetch(`${API_BASE_URL}/answer-eval${suffix}`);
       if (res.ok) setList((await res.json()).evaluations || []);
     } catch (_) {} finally {
       setListLoading(false);
     }
-  };
+  }, [searchQ, fromDate, toDate]);
 
-  useEffect(() => { loadList(); }, []);
+  useEffect(() => { loadList({ q: "", from: "", to: "" }); }, []); // initial full list
+
+  // Group the listing by submission day (newest day first).
+  const groupedList = useMemo(() => {
+    const groups = new Map();
+    list.forEach((it) => {
+      const key = dayKey(it.created_at) || "undated";
+      if (!groups.has(key)) groups.set(key, { key, iso: it.created_at, items: [] });
+      groups.get(key).items.push(it);
+    });
+    return Array.from(groups.values());
+  }, [list]);
+
+  const runSearch = () => loadList();
+  const clearSearch = () => { setSearchQ(""); setFromDate(""); setToDate(""); loadList({ q: "", from: "", to: "" }); };
 
   const start = async () => {
     if (!file) { setError("Choose a PDF of your answer first."); return; }
     setError("");
     setData(null);
-    setDetail(false);
     setStatus("uploading");
     try {
       const contentType = file.type || "application/pdf";
@@ -113,6 +154,7 @@ export default function AnswerEvalPage() {
           filename: file.name,
           content_type: contentType,
           question: question.trim(),
+          subject: subject.trim(),
           max_marks: Number(maxMarks) || 0,
         }),
       });
@@ -134,7 +176,10 @@ export default function AnswerEvalPage() {
       // once done; the user just refreshes / reopens it.
       setStatus("submitted");
       setFile(null);
-      loadList();
+      setQuestion("");
+      setSubject("");
+      setMaxMarks("");
+      loadList({ q: "", from: "", to: "" });
     } catch (err) {
       setError(`Could not submit: ${String(err.message || err)}`);
       setStatus("failed");
@@ -143,7 +188,7 @@ export default function AnswerEvalPage() {
 
   const openEval = async (id) => {
     setError("");
-    setDetail(true);
+    setView("detail");
     setData(null);
     setStatus("loading");
     try {
@@ -156,11 +201,8 @@ export default function AnswerEvalPage() {
     }
   };
 
-  const switchTab = (t) => {
-    setTab(t);
-    setError("");
-    if (t === "answers") { setDetail(false); loadList(); }
-  };
+  const openSubmit = () => { setView("submit"); setError(""); setStatus("idle"); };
+  const backToList = () => { setView("list"); setData(null); setError(""); loadList(); };
 
   const busy = status === "uploading";
 
@@ -179,95 +221,150 @@ export default function AnswerEvalPage() {
           <p className="api-state warn">Backend URL needed.</p>
         ) : (
           <>
-            <div className="session-tabs ae-tabs">
-              <button className={`session-tab ${tab === "submit" ? "active" : ""}`} onClick={() => switchTab("submit")}>
-                Submit Question
-              </button>
-              <button className={`session-tab ${tab === "answers" ? "active" : ""}`} onClick={() => switchTab("answers")}>
-                My Answers
-              </button>
-            </div>
-
             {error ? <p className="api-state error">{error}</p> : null}
 
-            {/* ── Submit Question tab ── */}
-            {tab === "submit" ? (
+            {/* ── SUBMIT VIEW ── */}
+            {view === "submit" ? (
               <>
+                <button className="ae-back" onClick={backToList}><Icon name="arrow-left" size={16} /> All answers</button>
+                <h2 className="ae-submit-title">Submit a new question</h2>
                 <div className="ae-form">
                   <label className="ae-file">
                     <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} disabled={busy} />
                     <span>{file ? file.name : "Choose answer PDF…"}</span>
                   </label>
-                  <input
-                    className="task-input"
-                    placeholder="Question (optional — leave blank to auto-detect from the PDF)"
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    disabled={busy}
-                  />
-                  <input
-                    className="task-input ae-marks"
-                    type="number"
-                    placeholder="Max marks (e.g. 10 / 15)"
-                    value={maxMarks}
-                    onChange={(e) => setMaxMarks(e.target.value)}
-                    disabled={busy}
-                  />
+
+                  <div className="ae-field">
+                    <label className="ae-label">Subject</label>
+                    <input
+                      className="ae-input"
+                      placeholder="e.g. Polity, Geography, Ethics"
+                      value={subject}
+                      onChange={(e) => setSubject(e.target.value)}
+                      disabled={busy}
+                    />
+                  </div>
+
+                  <div className="ae-field">
+                    <label className="ae-label">Question</label>
+                    <textarea
+                      className="ae-input ae-textarea"
+                      placeholder="Paste the question (optional — leave blank to auto-detect from the PDF)"
+                      rows={3}
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      disabled={busy}
+                    />
+                  </div>
+
+                  <div className="ae-field ae-field-narrow">
+                    <label className="ae-label">Max marks</label>
+                    <input
+                      className="ae-input"
+                      type="number"
+                      placeholder="e.g. 10 / 15"
+                      value={maxMarks}
+                      onChange={(e) => setMaxMarks(e.target.value)}
+                      disabled={busy}
+                    />
+                  </div>
+
                   <button className="btn-ticket" onClick={start} disabled={busy || !file}>
                     {status === "uploading" ? "Submitting…" : "Submit for evaluation"}
                   </button>
                 </div>
 
                 {status === "uploading" ? (
-                  <div className="ae-loading">
-                    <div className="ae-spinner" />
-                    <span>Uploading your answer…</span>
-                  </div>
+                  <div className="ae-loading"><div className="ae-spinner" /><span>Uploading your answer…</span></div>
                 ) : null}
 
                 {status === "submitted" ? (
                   <div className="ae-submitted">
-                    ✅ Submitted! Your answer is being evaluated in the background. Open the
-                    <strong> My Answers </strong> tab and refresh in a bit to see the marks and comments.
+                    <Icon name="check-circle" size={16} /> Submitted! Your answer is being evaluated in the background.
+                    Head back to the list and refresh in a bit to see the marks and comments.
                   </div>
                 ) : null}
               </>
             ) : null}
 
-            {/* ── My Answers tab ── */}
-            {tab === "answers" ? (
-              detail ? (
-                <>
-                  <button className="btn-cancel ae-back" onClick={() => { setDetail(false); setData(null); }}>← All answers</button>
-                  {status === "loading" ? (
-                    <div className="ae-loading"><div className="ae-spinner" /><span>Loading…</span></div>
-                  ) : data?.result ? (
-                    <EvalResult data={data} />
-                  ) : data?.status === "failed" ? (
-                    <p className="day-state">Evaluation failed{data?.error ? `: ${data.error}` : ""}.</p>
-                  ) : (
-                    <p className="day-state">Still evaluating — refresh in a bit to see the result.</p>
-                  )}
-                </>
-              ) : (
-                <>
-                  {listLoading ? <p className="day-state">Loading…</p> : null}
-                  {!listLoading && list.length === 0 ? <p className="day-state">No evaluated answers yet. Submit one from the “Submit Question” tab.</p> : null}
-                  {list.map((it) => (
-                    <button key={it.eval_id} className="ae-history-item" onClick={() => openEval(it.eval_id)}>
-                      <span className="ae-hist-main">
-                        <span className="ae-hist-name">{it.filename}</span>
-                        <span className="ae-hist-date">{fmtDate(it.created_at)}</span>
-                      </span>
-                      <span className="ae-hist-meta">
-                        {it.status === "completed"
-                          ? `${it.total_awarded}/${it.total_max}`
-                          : it.status === "failed" ? "failed" : "processing…"}
-                      </span>
-                    </button>
-                  ))}
-                </>
-              )
+            {/* ── DETAIL VIEW ── */}
+            {view === "detail" ? (
+              <>
+                <button className="ae-back" onClick={backToList}><Icon name="arrow-left" size={16} /> All answers</button>
+                {status === "loading" ? (
+                  <div className="ae-loading"><div className="ae-spinner" /><span>Loading…</span></div>
+                ) : data?.result ? (
+                  <EvalResult data={data} />
+                ) : data?.status === "failed" ? (
+                  <p className="day-state">Evaluation failed{data?.error ? `: ${data.error}` : ""}.</p>
+                ) : (
+                  <p className="day-state">Still evaluating — refresh in a bit to see the result.</p>
+                )}
+              </>
+            ) : null}
+
+            {/* ── LIST VIEW ── */}
+            {view === "list" ? (
+              <>
+                <div className="ae-search">
+                  <div className="ae-search-field">
+                    <Icon name="search" size={15} />
+                    <input
+                      className="ae-search-input"
+                      placeholder="Search by subject / keyword…"
+                      value={searchQ}
+                      onChange={(e) => setSearchQ(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
+                    />
+                  </div>
+                  <label className="ae-date-field">From
+                    <input type="date" className="ae-date-input" value={fromDate} max={toDate || undefined}
+                      onChange={(e) => setFromDate(e.target.value)} />
+                  </label>
+                  <label className="ae-date-field">To
+                    <input type="date" className="ae-date-input" value={toDate} min={fromDate || undefined}
+                      onChange={(e) => setToDate(e.target.value)} />
+                  </label>
+                  <button className="btn-day" onClick={runSearch}>Search</button>
+                  {(searchQ || fromDate || toDate) ? <button className="btn-cancel" onClick={clearSearch}>Clear</button> : null}
+                </div>
+
+                <button className="ae-history-item ae-list-new" onClick={openSubmit}>
+                  <span className="ae-new-icon"><Icon name="plus" size={20} /></span>
+                  <span className="ae-hist-main">
+                    <span className="ae-hist-name">Submit a new question</span>
+                    <span className="ae-hist-date">Upload a Mains answer PDF for examiner-style marking.</span>
+                  </span>
+                  <Icon name="chevron-right" size={18} />
+                </button>
+
+                {listLoading ? <p className="day-state">Loading…</p> : null}
+                {!listLoading && list.length === 0 ? (
+                  <p className="day-state">No evaluated answers{searchQ || fromDate || toDate ? " match your search" : " yet"}.</p>
+                ) : null}
+
+                {groupedList.map((group) => (
+                  <div key={group.key} className="ae-day-group">
+                    <div className="ae-day-heading">{fmtDayHeading(group.iso)}</div>
+                    {group.items.map((it) => (
+                      <button key={it.eval_id} className="ae-history-item" onClick={() => openEval(it.eval_id)}>
+                        <span className="ae-hist-main">
+                          <span className="ae-hist-name">
+                            {it.subject?.trim() ? <span className="ae-subject-chip">{it.subject.trim()}</span> : null}
+                            {it.question?.trim() || it.filename}
+                          </span>
+                          <span className="ae-hist-date">{it.filename} · {fmtTime(it.created_at)}</span>
+                        </span>
+                        <span className="ae-hist-meta">
+                          {it.status === "completed"
+                            ? `${it.total_awarded}/${it.total_max}`
+                            : it.status === "failed" ? "failed" : "processing…"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </>
             ) : null}
           </>
         )}
