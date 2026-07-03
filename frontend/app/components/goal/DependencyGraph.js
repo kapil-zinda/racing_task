@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactFlow, { Background, Controls } from "reactflow";
 import "reactflow/dist/style.css";
 import { listDependencies, createDependency, deleteDependency } from "../../lib/goalApi";
+import { confirmDialog } from "../../lib/dialog";
 
 export default function DependencyGraph({ goalId, nodes }) {
   const [deps, setDeps] = useState([]);
@@ -51,7 +52,7 @@ export default function DependencyGraph({ goalId, nodes }) {
   };
 
   const onEdgeClick = async (_e, edge) => {
-    if (window.confirm("Delete this dependency?")) {
+    if (await confirmDialog({ message: "Delete this dependency?", confirmLabel: "Delete", danger: true })) {
       try { await deleteDependency(edge.id); load(); } catch (e) { setErr(String(e.message || e)); }
     }
   };
