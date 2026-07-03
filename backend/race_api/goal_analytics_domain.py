@@ -18,7 +18,7 @@ from .context import (
     goal_reminders_collection,
     goals_collection,
 )
-from .goal_domain import _uid, ensure_goal_indexes
+from .goal_domain import _uid, ensure_goal_indexes, iso_to_local_date
 
 
 def _owned_goal(user_id: str, goal_id: str) -> Dict[str, Any]:
@@ -28,7 +28,7 @@ def _owned_goal(user_id: str, goal_id: str) -> Dict[str, Any]:
     return doc
 
 
-def analytics(user_id: str, goal_id: str) -> Dict[str, Any]:
+def analytics(user_id: str, goal_id: str, tz_offset: int = 0) -> Dict[str, Any]:
     ensure_goal_indexes()
     uid = _uid(user_id)
     goal = _owned_goal(uid, goal_id)
@@ -71,7 +71,7 @@ def analytics(user_id: str, goal_id: str) -> Dict[str, Any]:
          "action": {"$in": ["node_updated", "metric_incremented", "node_created", "nodes_bulk_created"]}},
         {"created_at": 1},
     ):
-        d = (a.get("created_at") or "")[:10]
+        d = iso_to_local_date(a.get("created_at"), tz_offset)
         if d:
             activity_by_date[d] = activity_by_date.get(d, 0) + 1
 
@@ -97,7 +97,7 @@ def analytics(user_id: str, goal_id: str) -> Dict[str, Any]:
     }
 
 
-def calendar(user_id: str, goal_id: str = "") -> Dict[str, Any]:
+def calendar(user_id: str, goal_id: str = "", tz_offset: int = 0) -> Dict[str, Any]:
     """Calendar feed: reminders + activity counts by date. Scoped to one goal or all."""
     ensure_goal_indexes()
     uid = _uid(user_id)
@@ -106,11 +106,17 @@ def calendar(user_id: str, goal_id: str = "") -> Dict[str, Any]:
         _owned_goal(uid, goal_id)
         q = {"goal_id": goal_id}
 
-    since = (datetime.now(timezone.utc) - timedelta(days=120)).isoformat()
-    act_q = {**({"goal_id": goal_id} if goal_id else {}), "created_at": {"$gte": since}}
+    since = (datetime.now(timezone.utc) - timedelta(days=121)).isoformat()
+    if goal_id:
+        act_q = {"goal_id": goal_id, "created_at": {"$gte": since}}
+    else:
+        # All-goals view: scope to THIS user's goals only (activity docs carry goal_id,
+        # not user_id, so an unscoped query would leak every user's activity).
+        goal_ids = [str(g["_id"]) for g in goals_collection().find({"user_id": uid}, {"_id": 1})]
+        act_q = {"goal_id": {"$in": goal_ids}, "created_at": {"$gte": since}}
     activity_by_date: Dict[str, int] = {}
     for a in goal_activity_collection().find(act_q, {"created_at": 1}):
-        d = (a.get("created_at") or "")[:10]
+        d = iso_to_local_date(a.get("created_at"), tz_offset)
         if d:
             activity_by_date[d] = activity_by_date.get(d, 0) + 1
 
