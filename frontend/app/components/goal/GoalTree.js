@@ -8,6 +8,7 @@ import {
   DndContext, PointerSensor, useSensor, useSensors, useDraggable, useDroppable,
 } from "@dnd-kit/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import Icon from "../Icon";
 
 function flatten(roots, collapsed, out = [], depth = 0) {
   for (const n of roots) {
@@ -40,9 +41,9 @@ function TreeRow({ item, selectedId, onSelect, onToggle, onAddChild, onBulkAdd, 
       <span className="tree-label">{node.title}</span>
       <span className="tree-pct">{Math.round(node.progress || 0)}%</span>
       <span className="tree-row-actions" onClick={(e) => e.stopPropagation()}>
-        <button className="goal-icon-btn sm" title="Add child" onClick={() => onAddChild(node.id)}>＋</button>
-        <button className="goal-icon-btn sm" title="Add multiple children" onClick={() => onBulkAdd(node)}>⧉</button>
-        <button className="goal-icon-btn sm danger" title="Delete" onClick={() => onDelete(node)}>🗑</button>
+        <button className="goal-icon-btn sm" title="Add child" onClick={() => onAddChild(node.id)}><Icon name="plus" /></button>
+        <button className="goal-icon-btn sm" title="Add multiple children" onClick={() => onBulkAdd(node)}><Icon name="layers" /></button>
+        <button className="goal-icon-btn sm danger" title="Delete" onClick={() => onDelete(node)}><Icon name="trash" /></button>
       </span>
     </div>
   );
@@ -106,7 +107,7 @@ export default function GoalTree({ roots, selectedId, onSelect, onAddChild, onBu
         <input className="goal-tree-search" placeholder="Search nodes…" value={query}
                onChange={(e) => setQuery(e.target.value)} />
         <button className="goal-btn ghost tiny" onClick={onAddRoot}>+ Top-level</button>
-        <button className="goal-btn ghost tiny" onClick={() => onBulkAdd(null)} title="Bulk-add top-level nodes">⧉ Bulk</button>
+        <button className="goal-btn ghost tiny" onClick={() => onBulkAdd(null)} title="Bulk-add top-level nodes"><Icon name="layers" /> Bulk</button>
       </div>
       <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <div ref={parentRef} className="goal-tree-scroll">
