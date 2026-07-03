@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { forecast, weeklyReview, dailyPlan } from "../../lib/goalApi";
+import Icon from "../Icon";
 
 export default function GoalInsights({ goalId, onJump }) {
   const [fc, setFc] = useState(null);
@@ -22,7 +23,7 @@ export default function GoalInsights({ goalId, onJump }) {
 
   return (
     <div className="insights">
-      <div className="insights-head"><h3>Insights</h3><button className="goal-btn ghost tiny" onClick={load}>↻</button></div>
+      <div className="insights-head"><h3>Insights</h3><button className="goal-btn ghost tiny" onClick={load}><Icon name="refresh" /></button></div>
       {err && <div className="goal-error">{err}</div>}
 
       <div className="insight-card">
@@ -37,12 +38,12 @@ export default function GoalInsights({ goalId, onJump }) {
         <span className="insight-sub">
           {rv ? `${rv.completed_count} done · ${rv.in_progress_count} in progress · ${rv.stale_count} stale` : ""}
         </span>
-        {rv?.suggestions?.[0] && <span className="insight-sub tip">💡 {rv.suggestions[0]}</span>}
+        {rv?.suggestions?.[0] && <span className="insight-sub tip"><Icon name="idea" /> {rv.suggestions[0]}</span>}
       </div>
 
       <div className="insight-card">
         <span className="insight-label">Today's plan</span>
-        {plan.length === 0 ? <span className="insight-sub">All caught up 🎉</span> : (
+        {plan.length === 0 ? <span className="insight-sub">All caught up <Icon name="party" /></span> : (
           <ul className="insight-plan">
             {plan.map((p) => (
               <li key={p.id}>
