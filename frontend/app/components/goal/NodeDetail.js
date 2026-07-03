@@ -9,6 +9,7 @@ import {
   listNodeMetrics, createMetric, incrementMetric, deleteMetric,
   listAttachments, createAttachment, deleteAttachment, uploadAttachment,
 } from "../../lib/goalApi";
+import Icon from "../Icon";
 
 const TABS = ["Overview", "Metrics", "Files", "Activity"];
 
@@ -43,7 +44,7 @@ export default function NodeDetail({ node, onUpdate, onDelete, onChanged, activi
       <div className="node-detail-head">
         <input className="node-title-input" value={draft.title || ""}
                onChange={(e) => set("title", e.target.value)} onBlur={() => commit("title")} />
-        <button className="goal-icon-btn danger" title="Delete node" onClick={() => onDelete(node)}>🗑</button>
+        <button className="goal-icon-btn danger" title="Delete node" onClick={() => onDelete(node)}><Icon name="trash" /></button>
       </div>
       <div className="node-detail-substats">
         <span className={`goal-status-chip s-${draft.status}`}>{draft.status}</span>
@@ -164,7 +165,7 @@ function FilesTab({ node, setErr }) {
     finally { setUploading(false); }
   };
 
-  const icon = (t) => (t === "link" ? "🔗" : t === "image" ? "🖼️" : t === "video" ? "🎬" : t === "audio" ? "🎵" : t === "pdf" ? "📕" : "📎");
+  const iconName = (t) => (t === "link" ? "link" : t === "image" ? "image" : t === "video" ? "play" : t === "audio" ? "music" : t === "pdf" ? "file" : "attachment");
 
   return (
     <div className="node-tab-body">
@@ -172,13 +173,13 @@ function FilesTab({ node, setErr }) {
       {items.map((a) => (
         <div key={a.id} className="metric-row">
           <div className="metric-row-top">
-            <a className="metric-name" href={a.url || "#"} target="_blank" rel="noreferrer">{icon(a.type)} {a.name}</a>
-            <button className="goal-icon-btn danger sm" onClick={async () => { try { await deleteAttachment(a.id); load(); } catch (e) { setErr(String(e.message || e)); } }}>🗑</button>
+            <a className="metric-name" href={a.url || "#"} target="_blank" rel="noreferrer"><Icon name={iconName(a.type)} /> {a.name}</a>
+            <button className="goal-icon-btn danger sm" onClick={async () => { try { await deleteAttachment(a.id); load(); } catch (e) { setErr(String(e.message || e)); } }}><Icon name="trash" /></button>
           </div>
         </div>
       ))}
       <label className="goal-btn ghost" style={{ textAlign: "center", cursor: "pointer" }}>
-        {uploading ? "Uploading…" : "⬆ Upload file"}
+        {uploading ? "Uploading…" : <><Icon name="upload" /> Upload file</>}
         <input type="file" hidden onChange={onFile} disabled={uploading} />
       </label>
       <div className="metric-add">
@@ -228,7 +229,7 @@ function MetricsTab({ node, metrics, reload, setErr }) {
               <button className="goal-btn tiny" onClick={() => bump(m, -1)} disabled={cur <= 0}>−</button>
               <button className="goal-btn tiny primary" onClick={() => bump(m, 1)}>+1 done</button>
               <button className="goal-icon-btn danger sm" title="Delete metric"
-                      onClick={async () => { try { await deleteMetric(m.id); reload(); } catch (e) { setErr(String(e.message || e)); } }}>🗑</button>
+                      onClick={async () => { try { await deleteMetric(m.id); reload(); } catch (e) { setErr(String(e.message || e)); } }}><Icon name="trash" /></button>
             </div>
           </div>
         );
