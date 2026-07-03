@@ -69,6 +69,7 @@ export default function UsagePage() {
               <div className="goal-stat"><span className="goal-stat-num">{fmtNum(data.search_llm_tokens)}</span><span className="goal-stat-lbl">Search tokens</span></div>
               <div className="goal-stat"><span className="goal-stat-num">{fmtNum(data.qna_llm_tokens)}</span><span className="goal-stat-lbl">QnA tokens</span></div>
               <div className="goal-stat"><span className="goal-stat-num">{fmtNum(data.answers_evaluated)}</span><span className="goal-stat-lbl">Answers evaluated</span></div>
+              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(data.interviews_taken)}</span><span className="goal-stat-lbl">Interviews taken</span></div>
             </section>
           </>
         )}
