@@ -158,12 +158,12 @@ def _run_grounded_answer(
     search_query = _retrieval_query(q, history_messages)
 
     try:
-        from langchain.agents import create_agent
+        from langgraph.prebuilt import create_react_agent
         from langchain.tools import tool
         from langchain_openai import ChatOpenAI
     except ImportError as err:  # pragma: no cover
         raise RuntimeError(
-            "LangChain QnA dependencies are missing. Install langchain and langchain-openai in the Lambda layer."
+            "LangChain QnA dependencies are missing. Install langchain, langchain-openai and langgraph in the Lambda layer."
         ) from err
 
     # Sources are discovered by the agent through the search tool below, not pre-fetched.
@@ -349,7 +349,7 @@ def _run_grounded_answer(
     """
 
     model = ChatOpenAI(model=_chat_model(), temperature=0)
-    agent = create_agent(model=model, tools=[search_reference_content], system_prompt=system_prompt)
+    agent = create_react_agent(model, [search_reference_content], prompt=system_prompt)
     user_content = (
         "Conversation history (for understanding the question only, not a source of facts):\n"
         f"{history_text}\n\n"

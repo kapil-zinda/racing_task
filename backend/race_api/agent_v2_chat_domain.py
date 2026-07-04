@@ -1321,12 +1321,12 @@ def run_agent_v2_chat_payload(
     agent_v2_messages_collection().insert_one(user_doc)
 
     try:
-        from langchain.agents import create_agent
+        from langgraph.prebuilt import create_react_agent
         from langchain.tools import tool
         from langchain_openai import ChatOpenAI
     except ImportError as err:  # pragma: no cover
         raise RuntimeError(
-            "LangChain agent dependencies are missing. Install langchain and langchain-openai in backend runtime."
+            "LangChain agent dependencies are missing. Install langchain, langchain-openai and langgraph in backend runtime."
         ) from err
 
     @tool("read_agent_context")
@@ -1470,9 +1470,9 @@ def run_agent_v2_chat_payload(
     )
 
     model = ChatOpenAI(model=_chat_model(), temperature=0.2)
-    agent = create_agent(
-        model=model,
-        tools=[
+    agent = create_react_agent(
+        model,
+        [
             read_agent_context,
             report_period,
             report_revision_gaps,
@@ -1484,7 +1484,7 @@ def run_agent_v2_chat_payload(
             prepare_log_entry,
             log_entry,
         ],
-        system_prompt=_system_prompt(),
+        prompt=_system_prompt(),
     )
     result = agent.invoke({"messages": [{"role": "user", "content": user_prompt}]})
     content = _extract_answer_text(result)

@@ -9,7 +9,7 @@ from urllib.parse import quote, unquote
 from pymongo import ASCENDING
 
 from .context import content_files_collection, content_folders_collection, logger, pdf_docs_collection, settings, storage_client
-from .pdf_search_domain import COURSE_OPTIONS, _normalize_course, index_pdf_document
+from .pdf_search_domain import _course_label, _normalize_course, index_pdf_document
 
 ROOT_FOLDER_ID = "content_root"
 _content_indexes_ensured = False
@@ -1201,8 +1201,8 @@ def make_item_searchable(item_id: str, item_type: str, course: str, user_id: str
     if kind not in {"file", "folder"}:
         raise ValueError("item_type must be file or folder")
     if not normalized_course:
-        allowed = ", ".join(COURSE_OPTIONS.values())
-        raise ValueError(f"course is required and must be one of: {allowed}")
+        raise ValueError("course is required (select a goal, or 'global')")
+    course_label = _course_label(normalized_course, user_id)
 
     candidates = _files_for_item(iid, kind)
     if not candidates:
@@ -1242,7 +1242,7 @@ def make_item_searchable(item_id: str, item_type: str, course: str, user_id: str
                     "bucket": str(file_doc.get("bucket", "") or "").strip() or _bucket(),
                     "key": key,
                     "course": normalized_course,
-                    "course_label": COURSE_OPTIONS[normalized_course],
+                    "course_label": course_label,
                     "status": "uploaded_pending_index",
                     "source": "content_drive",
                     "source_file_id": file_id,
@@ -1287,7 +1287,7 @@ def make_item_searchable(item_id: str, item_type: str, course: str, user_id: str
         "message": "Searchable indexing completed",
         "item_type": kind,
         "course": normalized_course,
-        "course_label": COURSE_OPTIONS[normalized_course],
+        "course_label": course_label,
         "total_candidates": len(candidates),
         "indexed_count": len(indexed),
         "failed_count": len(failed),

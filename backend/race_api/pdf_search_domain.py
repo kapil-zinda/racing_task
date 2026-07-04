@@ -12,6 +12,7 @@ from pymongo import ASCENDING, DESCENDING
 
 from .context import (
     current_date_str,
+    goals_collection,
     logger,
     pdf_docs_collection,
     pdf_pages_collection,
@@ -88,22 +89,37 @@ def _stage_for_textract(
     return target_bucket, target_key
 
 
+GLOBAL_COURSE = "global"
+
+
 def _normalize_course(course: str | None) -> str:
-    raw = (course or "").strip().lower().replace("-", "_").replace(" ", "_")
-    aliases = {
-        "sfg1": "sfg_level_1",
-        "sfg_1": "sfg_level_1",
-        "sfg_level_1": "sfg_level_1",
-        "sfg2": "sfg_level_2",
-        "sfg_2": "sfg_level_2",
-        "sfg_level_2": "sfg_level_2",
-        "leveluppmp": "level_up_pmp",
-        "level_up_pmp": "level_up_pmp",
-        "pmp": "level_up_pmp",
-        "spectrum": "spectrum",
-        "laxmikant": "laxmikant",
-    }
-    return aliases.get(raw, "")
+    """Normalise a course selector.
+
+    A "course" is either the literal ``"global"`` (content shared across every
+    goal) or a goal id. Returns the trimmed value, or ``""`` when nothing was
+    provided. (Previously restricted to a fixed list of course names; any goal —
+    or global — is now accepted.)
+    """
+    return (course or "").strip()
+
+
+def _course_label(course: str | None, user_id: str = "") -> str:
+    """Human-readable label for a course selector, for display in results."""
+    c = (course or "").strip()
+    if not c or c == GLOBAL_COURSE:
+        return "Global (all goals)"
+    if c in COURSE_OPTIONS:  # legacy fixed-course keys, if any remain indexed
+        return COURSE_OPTIONS[c]
+    # Otherwise treat it as a goal id and resolve the goal's name.
+    try:
+        from bson import ObjectId
+
+        doc = goals_collection().find_one({"_id": ObjectId(c)}, {"name": 1})
+        if doc and doc.get("name"):
+            return str(doc["name"])
+    except Exception:  # noqa: BLE001 — label resolution is best-effort
+        pass
+    return c
 
 
 def _doc_id() -> str:
@@ -280,8 +296,8 @@ def create_pdf_presigned_upload(payload, user_id: str = "") -> Dict[str, Any]:
         raise ValueError("Only PDF uploads are allowed")
     course = _normalize_course(payload.course)
     if not course:
-        allowed = ", ".join(COURSE_OPTIONS.values())
-        raise ValueError(f"course is required and must be one of: {allowed}")
+        raise ValueError("course is required (select a goal, or 'global')")
+    course_label = _course_label(course, user_id)
 
     doc_id = _doc_id()
     key = _pdf_key(doc_id, file_name, user_id)
@@ -306,7 +322,7 @@ def create_pdf_presigned_upload(payload, user_id: str = "") -> Dict[str, Any]:
                 "bucket": bucket,
                 "key": key,
                 "course": course,
-                "course_label": COURSE_OPTIONS[course],
+                "course_label": course_label,
                 "status": "uploaded_pending_index",
                 "page_count": 0,
                 "user_id": (user_id or "").strip(),
@@ -322,7 +338,7 @@ def create_pdf_presigned_upload(payload, user_id: str = "") -> Dict[str, Any]:
         "bucket": bucket,
         "key": key,
         "course": course,
-        "course_label": COURSE_OPTIONS[course],
+        "course_label": course_label,
         "upload_url": upload_url,
     }
 
@@ -406,6 +422,9 @@ def index_pdf_document(payload) -> Dict[str, Any]:
     doc_user_id = str(doc.get("user_id", "") or "").strip()
     if not course:
         raise ValueError("Document course metadata is missing")
+    # Prefer the label captured at request time; otherwise resolve it once here
+    # (avoids a goal lookup per page/vector below).
+    course_label = doc.get("course_label") or _course_label(course, doc_user_id)
     if not source_key:
         raise ValueError("PDF key missing for this document")
 
@@ -467,7 +486,7 @@ def index_pdf_document(payload) -> Dict[str, Any]:
                 "bucket": bucket,
                 "key": key,
                 "course": course,
-                "course_label": COURSE_OPTIONS.get(course, course),
+                "course_label": course_label,
                 "user_id": doc_user_id,
                 "page_number": p["page_number"],
                 "text": p["text"],
@@ -490,7 +509,7 @@ def index_pdf_document(payload) -> Dict[str, Any]:
                     "doc_id": doc_id,
                     "user_id": doc_user_id,
                     "course": course,
-                    "course_label": COURSE_OPTIONS.get(course, course),
+                    "course_label": course_label,
                     "file_name": doc.get("file_name", ""),
                     "bucket": bucket,
                     "key": key,
@@ -509,7 +528,7 @@ def index_pdf_document(payload) -> Dict[str, Any]:
                 "page_count": len(pages),
                 "ocr_engine": "aws_textract",
                 "course": course,
-                "course_label": COURSE_OPTIONS.get(course, course),
+                "course_label": course_label,
                 "vector_index_name": _vector_index_name(),
                 "embedding_model": _embedding_model(),
                 "vector_ready_pages": len(embedding_vectors),
@@ -523,7 +542,7 @@ def index_pdf_document(payload) -> Dict[str, Any]:
         "doc_id": doc_id,
         "page_count": len(pages),
         "course": course,
-        "course_label": COURSE_OPTIONS.get(course, course),
+        "course_label": course_label,
         "vector_enabled": True,
         "vector_ready_pages": len(embedding_vectors),
     }
@@ -549,10 +568,8 @@ def search_pdf(query: str, limit: int = 20, course: str | None = None, user_id: 
         raise ValueError("query is required")
 
     lim = max(1, min(int(limit or 20), 100))
+    # A course is a goal id or "global"; empty / "global" means search everything.
     selected_course = _normalize_course(course)
-    if course and not selected_course:
-        allowed = ", ".join(COURSE_OPTIONS.values())
-        raise ValueError(f"course must be one of: {allowed}")
     uid = (user_id or "").strip()
 
     if not _openai_api_key():
@@ -571,11 +588,14 @@ def search_pdf(query: str, limit: int = 20, course: str | None = None, user_id: 
         raise RuntimeError("Upstash Vector is not configured (UPSTASH_VECTOR_REST_URL / _TOKEN)")
 
     # Metadata filter: always scope to the user; optionally to a course.
+    # A specific goal also surfaces content indexed as "global" (all goals).
     clauses = []
     if uid:
         clauses.append(f"user_id = '{uv.escape(uid)}'")
-    if selected_course:
-        clauses.append(f"course = '{uv.escape(selected_course)}'")
+    if selected_course and selected_course != GLOBAL_COURSE:
+        clauses.append(
+            f"(course = '{uv.escape(selected_course)}' OR course = '{GLOBAL_COURSE}')"
+        )
     flt = " AND ".join(clauses) if clauses else None
 
     matches = uv.query(query_vector, top_k=lim, flt=flt, include_metadata=True)

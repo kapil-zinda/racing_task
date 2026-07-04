@@ -1344,9 +1344,14 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /answer-eval/presign")
 
     @app.post("/answer-eval/{eval_id}/evaluate")
-    def answer_eval_evaluate(eval_id: str, payload: AnswerEvalEvaluateRequest):
+    def answer_eval_evaluate(eval_id: str, payload: Optional[AnswerEvalEvaluateRequest] = None):
+        # Body is optional: question/subject/marks are captured and stored at
+        # presign time, so the manual trigger normally posts nothing and the
+        # evaluation reads the stored values. Any fields sent here just override.
         try:
-            return evaluate_answer_payload(eval_id, payload.question, payload.max_marks)
+            question = payload.question if payload else ""
+            max_marks = payload.max_marks if payload else 0
+            return evaluate_answer_payload(eval_id, question, max_marks)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /answer-eval/{id}/evaluate")
 

@@ -5,6 +5,7 @@ dnspython==2.6.1
 python-dotenv==1.0.1
 boto3==1.37.38
 pypdf==6.10.0
-langchain==0.3.25
-langchain-openai==0.3.17
-openai==1.76.2
+langchain==1.2.15
+langchain-openai==1.1.12
+langgraph==1.1.6
+openai==2.31.0
