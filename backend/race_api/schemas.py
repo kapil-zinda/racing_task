@@ -474,3 +474,18 @@ class MindmapUpsertRequest(BaseModel):
     markdown: str = ""
     outlineItems: Optional[List[dict]] = None
     tree: Optional[dict] = None
+
+
+# --- Razorpay payments ---
+
+class CreateOrderRequest(BaseModel):
+    amount: int  # in paise; minimum 100
+    currency: str = "INR"
+    receipt: str = ""
+    notes: dict = {}
+
+
+class VerifyPaymentRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str

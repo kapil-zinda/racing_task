@@ -11,7 +11,7 @@ import {
   AlertTriangle, Sparkles, Trophy, BookOpen, Clock, Image as ImageIcon, Volume2,
   Music, Scale, PartyPopper, Lightbulb, Rabbit, Salad, Puzzle, User, TreePine,
   Timer, Disc, MoreHorizontal, Plus, Minus, Circle as Dot, Loader2, Layers,
-  CalendarDays, ClipboardList, Paperclip, StickyNote,
+  CalendarDays, ClipboardList, Paperclip, StickyNote, CreditCard,
 } from "lucide-react";
 
 const MAP = {
@@ -98,6 +98,8 @@ const MAP = {
   clipboard: ClipboardList,
   attachment: Paperclip,
   note: StickyNote,
+  payment: CreditCard,
+  card: CreditCard,
 };
 
 export default function Icon({ name, size = "1em", className = "", strokeWidth = 2, ...rest }) {
