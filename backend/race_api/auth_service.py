@@ -6,6 +6,7 @@ import os
 import random
 import secrets
 import string
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -63,6 +64,9 @@ def _send_otp_email(to_email: str, otp: str, name: str) -> bool:
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            # Cloudflare (fronting api.resend.com) 403s the default
+            # "Python-urllib/x.y" User-Agent with error 1010, so set our own.
+            "User-Agent": "race-api/2.0 (+https://uchhal.in)",
         },
         method="POST",
     )
@@ -72,13 +76,49 @@ def _send_otp_email(to_email: str, otp: str, name: str) -> bool:
                 logger.error("Resend error: status=%s", resp.status)
                 return False
             return True
-    except Exception as exc:
+    except urllib.error.HTTPError as exc:
+        # Resend puts the actual reason (unverified domain, restricted key,
+        # rate limit, testing-mode recipient restriction) in the JSON body.
+        try:
+            detail = exc.read().decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001
+            detail = ""
+        logger.error("Resend rejected email: status=%s body=%s", exc.code, detail)
+        return False
+    except Exception as exc:  # noqa: BLE001
         logger.error("Resend request failed: %s", exc)
         return False
 
 
+def _normalize_phone(phone: str) -> str:
+    """Validate and normalise a phone number to E.164 (e.g. ``+919876543210``).
+
+    Requires an explicit country code (leading ``+``). Strips spaces, dashes and
+    parentheses. Raises ValueError on anything that isn't a plausible number.
+    """
+    raw = (phone or "").strip()
+    if not raw:
+        raise ValueError("Phone number is required")
+    # Drop common separators; keep a single leading '+'.
+    cleaned = raw.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    if cleaned.startswith("00"):  # 00 is an alternate international prefix
+        cleaned = "+" + cleaned[2:]
+    if not cleaned.startswith("+"):
+        raise ValueError("Phone number must include a country code, e.g. +91…")
+    digits = cleaned[1:]
+    if not digits.isdigit():
+        raise ValueError("Phone number may only contain digits after the country code")
+    # E.164: 1–3 digit country code + subscriber number, 8–15 digits total.
+    if not (8 <= len(digits) <= 15):
+        raise ValueError("Phone number must be 8–15 digits including the country code")
+    if digits[0] == "0":
+        raise ValueError("Country code cannot start with 0")
+    return "+" + digits
+
+
 def signup(email: str, name: str, phone: str, password: str) -> dict:
     email = email.strip().lower()
+    phone = _normalize_phone(phone)
     col = users_collection()
     if col.find_one({"email": email}):
         raise ValueError("Email already registered")

@@ -146,6 +146,7 @@ from .mindmap_domain import (
     list_mindmaps,
     update_mindmap,
 )
+from .payment_domain import create_order_payload, verify_payment_payload, credit_balance_payload
 from .schemas import (
     ActivityCategoryRequest,
     ActivityUpsertRequest,
@@ -205,6 +206,8 @@ from .schemas import (
     AgentV2MemoryUpsertRequest,
     AgentV2RealtimeTokenRequest,
     SessionStatusRequest,
+    CreateOrderRequest,
+    VerifyPaymentRequest,
 )
 from .session_domain import (
     abort_multipart_upload_payload,
@@ -1341,9 +1344,14 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /answer-eval/presign")
 
     @app.post("/answer-eval/{eval_id}/evaluate")
-    def answer_eval_evaluate(eval_id: str, payload: AnswerEvalEvaluateRequest):
+    def answer_eval_evaluate(eval_id: str, payload: Optional[AnswerEvalEvaluateRequest] = None):
+        # Body is optional: question/subject/marks are captured and stored at
+        # presign time, so the manual trigger normally posts nothing and the
+        # evaluation reads the stored values. Any fields sent here just override.
         try:
-            return evaluate_answer_payload(eval_id, payload.question, payload.max_marks)
+            question = payload.question if payload else ""
+            max_marks = payload.max_marks if payload else 0
+            return evaluate_answer_payload(eval_id, question, max_marks)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /answer-eval/{id}/evaluate")
 
@@ -1476,6 +1484,40 @@ def create_app() -> FastAPI:
             return delete_mindmap(_req_user_id(request), map_id)
         except Exception as err:
             _raise_as_http(err, "DELETE /mindmaps/{id}")
+
+    # --- Razorpay payments ---
+
+    @app.post("/payments/create-order")
+    def payments_create_order(request: Request, payload: CreateOrderRequest):
+        try:
+            return create_order_payload(
+                payload.amount,
+                payload.currency,
+                payload.receipt,
+                notes=payload.notes,
+                user_id=_req_user_id(request),
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /payments/create-order")
+
+    @app.post("/payments/verify")
+    def payments_verify(request: Request, payload: VerifyPaymentRequest):
+        try:
+            return verify_payment_payload(
+                payload.razorpay_order_id,
+                payload.razorpay_payment_id,
+                payload.razorpay_signature,
+                user_id=_req_user_id(request),
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /payments/verify")
+
+    @app.get("/payments/credits")
+    def payments_credits(request: Request):
+        try:
+            return credit_balance_payload(_req_user_id(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /payments/credits")
 
     @app.get("/")
     def health():

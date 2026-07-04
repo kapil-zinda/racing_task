@@ -9,7 +9,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 class SignupRequest(BaseModel):
     email: str
     name: str
-    phone: str = ""
+    phone: str
     password: str
 
 

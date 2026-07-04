@@ -25,7 +25,7 @@ cp app.py "$PACKAGE_DIR/"
 cp lambda_function.py "$PACKAGE_DIR/"
 cp answer_eval_worker.py "$PACKAGE_DIR/"
 cp -r race_api "$PACKAGE_DIR/"
-cp .env.example "$PACKAGE_DIR/" 2>/dev/null || true
+cp .env "$PACKAGE_DIR/" 2>/dev/null || true
 
 # If present, include API spec
 cp openapi.yaml "$PACKAGE_DIR/" 2>/dev/null || true

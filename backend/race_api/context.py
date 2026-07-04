@@ -116,6 +116,11 @@ def settings() -> Dict[str, Any]:
         "mongodb_goal_recurring_collection": os.getenv("MONGODB_GOAL_RECURRING_COLLECTION", "goal_recurring_rules"),
         "mongodb_goal_reminders_collection": os.getenv("MONGODB_GOAL_REMINDERS_COLLECTION", "goal_reminders"),
         "mongodb_goal_templates_collection": os.getenv("MONGODB_GOAL_TEMPLATES_COLLECTION", "goal_templates"),
+        "mongodb_payments_collection": os.getenv("MONGODB_PAYMENTS_COLLECTION", "payments"),
+        # Razorpay Standard Checkout. KEY_ID is safe to expose to the frontend;
+        # KEY_SECRET must stay server-side (used for order creation + signature verify).
+        "razorpay_key_id": os.getenv("RAZORPAY_KEY_ID", ""),
+        "razorpay_key_secret": os.getenv("RAZORPAY_KEY_SECRET", ""),
     }
 
 
@@ -308,6 +313,11 @@ def goal_reminders_collection():
 def goal_templates_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_goal_templates_collection"]]
+
+
+def payments_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_payments_collection"]]
 
 
 def s3_client():
