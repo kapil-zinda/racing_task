@@ -147,6 +147,7 @@ from .mindmap_domain import (
     update_mindmap,
 )
 from .payment_domain import create_order_payload, verify_payment_payload, credit_balance_payload
+from .contact_domain import send_contact_message
 from .schemas import (
     ActivityCategoryRequest,
     ActivityUpsertRequest,
@@ -208,6 +209,7 @@ from .schemas import (
     SessionStatusRequest,
     CreateOrderRequest,
     VerifyPaymentRequest,
+    ContactRequest,
 )
 from .session_domain import (
     abort_multipart_upload_payload,
@@ -228,7 +230,7 @@ from .session_domain import (
 )
 
 
-_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/contact"}
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -1531,6 +1533,13 @@ def create_app() -> FastAPI:
             return credit_balance_payload(_req_user_id(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /payments/credits")
+
+    @app.post("/contact")
+    def contact(payload: ContactRequest):
+        try:
+            return send_contact_message(payload.name, payload.email, payload.message, payload.subject)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /contact")
 
     @app.get("/")
     def health():
