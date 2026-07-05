@@ -4,11 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, apiSignin } from "../../lib/auth";
+import Icon from "../../components/Icon";
 
 export default function SigninPage() {
   const { signIn } = useAuth();
   const router = useRouter();
   const [form, setForm] = useState({ email: "", password: "" });
+  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -19,7 +21,7 @@ export default function SigninPage() {
     try {
       const data = await apiSignin(form);
       signIn(data);
-      router.replace("/");
+      router.replace("/home");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -50,14 +52,26 @@ export default function SigninPage() {
               autoFocus
             />
             <label className="auth-label">Password</label>
-            <input
-              className="auth-input"
-              type="password"
-              placeholder="••••••••"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              required
-            />
+            <div className="auth-pass-wrap">
+              <input
+                className="auth-input"
+                type={showPass ? "text" : "password"}
+                placeholder="••••••••"
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                required
+              />
+              <button
+                type="button"
+                className="auth-pass-toggle"
+                onClick={() => setShowPass((v) => !v)}
+                aria-label={showPass ? "Hide password" : "Show password"}
+                aria-pressed={showPass}
+                tabIndex={-1}
+              >
+                <Icon name={showPass ? "eye-off" : "eye"} size={18} />
+              </button>
+            </div>
             {error && <p className="auth-error">{error}</p>}
             <button className="auth-btn" type="submit" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
