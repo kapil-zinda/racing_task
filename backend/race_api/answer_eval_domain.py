@@ -282,6 +282,9 @@ def _annotate_pdf(pdf_bytes: bytes, result: Dict[str, Any]) -> bytes:
 def presign_answer_upload_payload(
     user_id: str, filename: str, content_type: str, question: str = "", max_marks: int = 0, subject: str = ""
 ) -> Dict[str, Any]:
+    # Block the upload up front if the user is out of free evals and credits.
+    from . import billing_domain as billing
+    billing.ensure_can_afford(user_id, billing.ANSWER_EVAL)
     bucket = _bucket()
     eval_id = f"answereval:{uuid.uuid4().hex}"
     ext = (filename or "answer.pdf").rsplit(".", 1)[-1].lower()
@@ -428,6 +431,14 @@ def _run_evaluation(eval_id: str) -> Dict[str, Any]:
         }},
     )
     logger.info("answer-eval completed id=%s marks=%s/%s", eval_id, result.get("total_awarded"), result.get("total_max"))
+    # Charge on successful completion (free while within the free allowance). Best-effort
+    # in the worker: the presign pre-check already gated affordability, so a charge here
+    # should not fail — if it somehow does, don't undo a completed evaluation.
+    try:
+        from . import billing_domain as billing
+        billing.charge_fixed(doc.get("user_id", ""), billing.ANSWER_EVAL, {"eval_id": eval_id})
+    except Exception:
+        logger.exception("answer-eval billing charge failed id=%s", eval_id)
     try:
         from .storage_domain import incr_answers_evaluated
         incr_answers_evaluated(doc.get("user_id", ""), 1)
