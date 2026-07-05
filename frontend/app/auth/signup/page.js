@@ -64,7 +64,7 @@ export default function SignupPage() {
             <label className="auth-label">Full name</label>
             <input
               className="auth-input"
-              placeholder="Kapil Kumar"
+              placeholder="Aarav Sharma"
               value={form.name}
               onChange={field("name")}
               required
