@@ -1,5 +1,6 @@
 "use client";
 import { apiFetch } from "../lib/auth";
+import { useCredits } from "../lib/credits";
 
 import { useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
@@ -44,6 +45,7 @@ function renderAnswerWithInlineCitations(text, sources, onOpenSource) {
 }
 
 export default function QnaPage() {
+  const { requireCredits, refreshCredits } = useCredits();
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [question, setQuestion] = useState("");
@@ -161,6 +163,7 @@ export default function QnaPage() {
   const askQuestion = async () => {
     const q = question.trim();
     if (!q || !API_BASE_URL || !selectedSessionId) return;
+    if (!requireCredits("qna")) return;
     const userMessage = {
       _id: `tmp-user-${Date.now()}`,
       role: "user",
@@ -183,11 +186,17 @@ export default function QnaPage() {
           limit: 8,
         }),
       });
+      if (res.status === 402) {
+        // Out of credits — popup already shown; roll back the optimistic message.
+        setMessages((prev) => prev.filter((m) => m._id !== userMessage._id));
+        return;
+      }
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`QnA failed: ${res.status} ${txt}`);
       }
       const data = await res.json();
+      refreshCredits();
       const persistedUserMsg = data.user_message || null;
       const assistantMsg = data.assistant_message || null;
       if (persistedUserMsg || assistantMsg) {

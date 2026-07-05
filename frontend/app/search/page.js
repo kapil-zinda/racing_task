@@ -5,6 +5,7 @@ import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
 import PdfHighlightViewer from "../components/PdfHighlightViewer";
 import { apiFetch } from "../lib/auth";
+import { useCredits } from "../lib/credits";
 import { listGoals } from "../lib/goalApi";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -27,6 +28,7 @@ function sameHit(a, b) {
 }
 
 export default function PdfSearchPage() {
+  const { requireCredits, refreshCredits } = useCredits();
   const [query, setQuery] = useState("");
   const [searchCourse, setSearchCourse] = useState("");
   const [goals, setGoals] = useState([]);
@@ -58,6 +60,7 @@ export default function PdfSearchPage() {
     if (!API_BASE_URL) return;
     const q = query.trim();
     if (!q) return;
+    if (!requireCredits("vector_search")) return;
     setSearching(true);
     setError("");
     setSelected(null);
@@ -65,11 +68,13 @@ export default function PdfSearchPage() {
       const params = new URLSearchParams({ q, limit: "30" });
       if (searchCourse) params.set("course", searchCourse);
       const res = await apiFetch(`${API_BASE_URL}/pdf-search/query?${params.toString()}`);
+      if (res.status === 402) return; // credits popup already shown
       if (!res.ok) throw new Error(`Search failed: ${res.status} ${await res.text()}`);
       const data = await res.json();
       const rows = data.results || [];
       setResults(rows);
       setSearched(true);
+      refreshCredits();
       if (rows.length) setSelected(rows[0]);
     } catch (err) {
       setError(String(err.message || err));

@@ -284,6 +284,19 @@ def _raise_as_http(err: Exception, endpoint_name: str) -> None:
     if isinstance(err, HTTPException):
         logger.warning("%s -> HTTP %s: %s", endpoint_name, err.status_code, err.detail)
         raise err
+    from .billing_domain import InsufficientCreditsError
+    if isinstance(err, InsufficientCreditsError):
+        logger.info("%s -> 402 insufficient credits (%s)", endpoint_name, err.action)
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "code": "insufficient_credits",
+                "action": err.action,
+                "required_usd": err.required_usd,
+                "balance_usd": err.balance_usd,
+                "message": "Not enough credits. Please add credits to continue.",
+            },
+        )
     if isinstance(err, ValueError):
         logger.warning("%s -> 400 (ValueError): %s", endpoint_name, err)
         raise HTTPException(status_code=400, detail=str(err))

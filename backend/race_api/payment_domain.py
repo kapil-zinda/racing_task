@@ -195,10 +195,18 @@ def verify_payment_payload(
         logger.warning("Payment signature mismatch for order %s (payment %s)", order_id, payment_id)
         raise HTTPException(status_code=400, detail="Payment signature verification failed")
 
+    # Stamp the USD value this payment credits (surface currency is USD; Razorpay took
+    # INR). Derived from the stored order amount so it can't be tampered client-side.
+    existing = payments_collection().find_one({"order_id": order_id}, {"amount": 1})
+    rate = float(settings().get("usd_to_inr") or 88)
+    amount_paise = int((existing or {}).get("amount", 0) or 0)
+    credit_usd = round((amount_paise / 100.0) / rate, 4) if rate else 0.0
+
     paid_fields: Dict[str, Any] = {
         "status": "paid",
         "payment_id": payment_id,
         "signature": signature,
+        "credit_usd": credit_usd,
         "verified_at": now,
         "updated_at": now,
     }
@@ -238,28 +246,12 @@ def verify_payment_payload(
 
 
 def credit_balance_payload(user_id: str = "") -> Dict[str, Any]:
-    """Credit balance for a user, derived from verified (``paid``) payments.
+    """Credits summary for a user, in USD — balance, spend breakdown, and free-tier usage.
 
-    Credits are 1:1 with rupees paid, so balance_paise is the sum of paid amounts and
-    the frontend renders balance_paise / 100 as the rupee balance.
+    Surface currency is USD; Razorpay top-ups are converted at ``usd_to_inr`` and the
+    credited USD is stamped on each paid payment (see ``verify_payment_payload``).
     """
     ensure_payment_indexes()
-    match: Dict[str, Any] = {"status": "paid"}
-    uid = (user_id or "").strip()
-    match["user_id"] = uid if uid else ""
-    agg = list(
-        payments_collection().aggregate(
-            [
-                {"$match": match},
-                {"$group": {"_id": None, "total_paise": {"$sum": "$amount"}, "payments": {"$sum": 1}}},
-            ]
-        )
-    )
-    total_paise = int(agg[0]["total_paise"]) if agg else 0
-    payments = int(agg[0]["payments"]) if agg else 0
-    return {
-        "balance_paise": total_paise,
-        "balance_rupees": round(total_paise / 100, 2),
-        "currency": "INR",
-        "payments": payments,
-    }
+    from . import billing_domain as billing
+
+    return billing.summary_payload((user_id or "").strip())

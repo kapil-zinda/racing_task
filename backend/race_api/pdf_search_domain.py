@@ -575,6 +575,15 @@ def search_pdf(query: str, limit: int = 20, course: str | None = None, user_id: 
     if not _openai_api_key():
         raise RuntimeError("OPENAI_API_KEY is required for vector search")
 
+    # Charge the vector-search query before embedding (free while within the free
+    # allowance, else deduct / raise 402). Only user-initiated searches are billed;
+    # QnA's internal retrieval passes track_search=False and is not double-charged.
+    if track_search and uid:
+        from . import billing_domain as billing
+        from .storage_domain import incr_search_queries
+        billing.charge_fixed(uid, billing.VECTOR_SEARCH, {"query": q[:120]})
+        incr_search_queries(uid)
+
     _qvecs, _embed_tokens = _embed_text_batch([q])
     query_vector = _qvecs[0]
     if track_search and uid:

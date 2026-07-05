@@ -31,7 +31,7 @@ function VerifyOtpInner() {
     try {
       const data = await apiVerifyOtp({ email, otp });
       signIn(data);
-      router.replace("/");
+      router.replace("/home");
     } catch (err) {
       setError(err.message);
     } finally {

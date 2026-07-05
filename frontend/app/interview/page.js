@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
 import { apiFetch, useAuth } from "../lib/auth";
+import { useCredits } from "../lib/credits";
 import { confirmDialog } from "../lib/dialog";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -130,6 +131,7 @@ function QuestionByQuestion({ messages = [], panel = [] }) {
 
 export default function InterviewPage() {
   const { auth } = useAuth();
+  const { requireCredits, refreshCredits } = useCredits();
   const [mode, setMode] = useState("list"); // list | live | detail
   const [interviews, setInterviews] = useState([]);
   const [listLoading, setListLoading] = useState(false);
@@ -207,6 +209,7 @@ export default function InterviewPage() {
   const memberName = (id) => panel.find((m) => m.id === id)?.name || "Board";
 
   const startInterview = async () => {
+    if (!requireCredits("interview")) return;
     setError("");
     setReport(null);
     setTurns([]);
@@ -218,6 +221,7 @@ export default function InterviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
+      if (res.status === 402) { setStatus("idle"); setMode("list"); return; } // popup shown
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setPanel(data.panel || []);
@@ -229,6 +233,7 @@ export default function InterviewPage() {
       questionShownRef.current = Date.now();
       setElapsed(0);
       setStatus("active");
+      refreshCredits();
       playAudio(data.audio);
     } catch (err) {
       setError(`Could not start interview: ${String(err.message || err)}`);

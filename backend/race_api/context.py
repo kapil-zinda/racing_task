@@ -117,10 +117,22 @@ def settings() -> Dict[str, Any]:
         "mongodb_goal_reminders_collection": os.getenv("MONGODB_GOAL_REMINDERS_COLLECTION", "goal_reminders"),
         "mongodb_goal_templates_collection": os.getenv("MONGODB_GOAL_TEMPLATES_COLLECTION", "goal_templates"),
         "mongodb_payments_collection": os.getenv("MONGODB_PAYMENTS_COLLECTION", "payments"),
+        "mongodb_credit_ledger_collection": os.getenv("MONGODB_CREDIT_LEDGER_COLLECTION", "credit_ledger"),
         # Razorpay Standard Checkout. KEY_ID is safe to expose to the frontend;
         # KEY_SECRET must stay server-side (used for order creation + signature verify).
         "razorpay_key_id": os.getenv("RAZORPAY_KEY_ID", ""),
         "razorpay_key_secret": os.getenv("RAZORPAY_KEY_SECRET", ""),
+        # --- Billing / credits (all money is USD on the surface; Razorpay charges INR) ---
+        "usd_to_inr": float(os.getenv("USD_TO_INR", "88")),
+        "price_answer_eval_usd": float(os.getenv("PRICE_ANSWER_EVAL_USD", "0.05")),
+        "price_interview_usd": float(os.getenv("PRICE_INTERVIEW_USD", "0.20")),
+        "price_vector_search_usd": float(os.getenv("PRICE_VECTOR_SEARCH_USD", "0.01")),
+        "llm_markup": float(os.getenv("LLM_MARKUP", "1.5")),
+        "llm_usd_per_1k_tokens": float(os.getenv("LLM_USD_PER_1K_TOKENS", "0.005")),
+        "free_answer_eval": int(os.getenv("FREE_ANSWER_EVAL", "5")),
+        "free_interview": int(os.getenv("FREE_INTERVIEW", "2")),
+        "free_vector_search": int(os.getenv("FREE_VECTOR_SEARCH", "100")),
+        "free_qna": int(os.getenv("FREE_QNA", "0")),
     }
 
 
@@ -266,6 +278,11 @@ def activity_categories_collection():
 def mindmaps_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_mindmaps_collection"]]
+
+
+def credit_ledger_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_credit_ledger_collection"]]
 
 
 # --- Universal Goal OS collections ---

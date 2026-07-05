@@ -1,37 +1,37 @@
 "use client";
-// Usage & limits — storage consumed and LLM tokens spent, from GET /storage.
-// Also shows a Credits balance (from verified Razorpay payments) with an Add-credit button.
+// Usage & credits. All money is shown in USD. Credits come from the in-memory store
+// (GET /payments/credits); storage + activity counts come from GET /storage. Top-ups
+// go through Razorpay in INR, converted from the USD amount at the server's rate.
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, useAuth } from "../lib/auth";
+import { useCredits } from "../lib/credits";
 import MainMenu from "../components/MainMenu";
 import RazorpayCheckout from "../components/RazorpayCheckout";
 import Icon from "../components/Icon";
-import { getCredits } from "../lib/paymentApi";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
-function fmtNum(n) {
-  return Number(n || 0).toLocaleString();
-}
+const fmtUsd = (n) => `$${Number(n || 0).toFixed(2)}`;
+const fmtNum = (n) => Number(n || 0).toLocaleString();
 
 export default function UsagePage() {
   const { auth } = useAuth();
-  const [data, setData] = useState(null);
+  const { credits, refreshCredits } = useCredits();
+
+  const [storage, setStorage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [addUsd, setAddUsd] = useState("5");
+  const [payStatus, setPayStatus] = useState(null);
 
-  const [credits, setCredits] = useState(null);
-  const [creditRupees, setCreditRupees] = useState("100");
-  const [payStatus, setPayStatus] = useState(null); // { kind, message, detail }
-
-  const load = useCallback(async () => {
+  const loadStorage = useCallback(async () => {
     setLoading(true); setError("");
     try {
       const res = await apiFetch(`${API_BASE_URL}/storage`);
       const body = await res.json();
       if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
-      setData(body);
+      setStorage(body);
     } catch (err) {
       setError(String(err.message || err));
     } finally {
@@ -39,121 +39,156 @@ export default function UsagePage() {
     }
   }, []);
 
-  const loadCredits = useCallback(async () => {
-    try {
-      setCredits(await getCredits());
-    } catch (_) {
-      // Non-fatal: the credits card just shows a dash until this succeeds.
-    }
-  }, []);
+  useEffect(() => { loadStorage(); refreshCredits(); }, [loadStorage, refreshCredits]);
 
-  useEffect(() => { load(); loadCredits(); }, [load, loadCredits]);
+  const refreshAll = () => { loadStorage(); refreshCredits(); };
 
-  const usedGb = data?.used_gb ?? 0;
-  const limitGb = data?.limit_gb ?? 0;
+  // Storage
+  const usedGb = storage?.used_gb ?? 0;
+  const limitGb = storage?.limit_gb ?? 0;
   const pct = limitGb > 0 ? Math.min(100, Math.round((usedGb / limitGb) * 100)) : 0;
-  const totalTokens = (data?.search_llm_tokens || 0) + (data?.qna_llm_tokens || 0);
 
-  const creditAmountPaise = Math.round(Number(creditRupees || 0) * 100);
-  const validCredit = Number.isFinite(creditAmountPaise) && creditAmountPaise >= 100;
+  // Credits
+  const balance = credits?.balance_usd ?? 0;
+  const added = credits?.added_usd ?? 0;
+  const spent = credits?.spent_usd ?? 0;
+  const rate = credits?.usd_to_inr ?? 88;
+  const pricing = credits?.pricing || {};
+  const free = credits?.free || {};
+  const spentBreak = credits?.spent_breakdown || {};
+
+  // Top-up: USD → INR paise for Razorpay.
+  const addUsdNum = Number(addUsd || 0);
+  const paise = Math.round(addUsdNum * rate * 100);
+  const validAdd = Number.isFinite(paise) && addUsdNum >= 1;
   const prefill = auth ? { name: auth.name || "", email: auth.email || "" } : {};
+
+  // Per-action rows for the plan card.
+  const actions = [
+    { key: "answer_eval", label: "Answer evaluation", icon: "file", price: pricing.answer_eval_usd, unit: "each" },
+    { key: "interview", label: "Mock interview", icon: "interview", price: pricing.interview_usd, unit: "each" },
+    { key: "vector_search", label: "Search query", icon: "search", price: pricing.vector_search_usd, unit: "per query" },
+    { key: "qna", label: "QnA question", icon: "chat", price: null, unit: "usage-based" },
+  ];
 
   return (
     <div className="goal-page">
       <MainMenu active="usage" />
       <div className="goal-container">
         <header className="goal-header">
-          <div><h1>Usage & limits</h1><p className="goal-sub">What you've consumed so far this account.</p></div>
-          <button className="goal-btn ghost" onClick={() => { load(); loadCredits(); }}>↻ Refresh</button>
+          <div>
+            <h1>Usage &amp; credits</h1>
+            <p className="goal-sub">Your balance, what you&apos;ve used, and what actions cost.</p>
+          </div>
+          <button className="goal-btn ghost" onClick={refreshAll}><Icon name="refresh" size={15} /> Refresh</button>
         </header>
 
         {error && <div className="goal-error">{error}</div>}
-        {loading ? <div className="goal-empty">Loading…</div> : data && (
+
+        {/* Credits hero */}
+        <section className="usage-credit-card">
+          <div className="usage-credit-main">
+            <span className="usage-credit-label"><Icon name="wallet" size={15} /> Credit balance</span>
+            <span className="usage-credit-balance">{fmtUsd(balance)}</span>
+            <div className="usage-credit-meta">
+              <span><b>{fmtUsd(added)}</b> added</span>
+              <span className="dot">·</span>
+              <span><b>{fmtUsd(spent)}</b> spent</span>
+              {credits?.payments ? <><span className="dot">·</span><span>{credits.payments} top-up{credits.payments === 1 ? "" : "s"}</span></> : null}
+            </div>
+          </div>
+
+          <div className="usage-topup">
+            <label className="usage-topup-field">
+              <span>Add credits (USD)</span>
+              <div className="usage-topup-input">
+                <span className="usage-topup-dollar">$</span>
+                <input type="number" min="1" step="1" value={addUsd}
+                  onChange={(e) => setAddUsd(e.target.value)} placeholder="5" />
+              </div>
+            </label>
+            <RazorpayCheckout
+              amount={paise}
+              currency="INR"
+              description={`Add ${fmtUsd(validAdd ? addUsdNum : 0)} credit`}
+              notes={{ purpose: "credits", usd: validAdd ? addUsdNum : 0 }}
+              prefill={prefill}
+              disabled={!validAdd}
+              label="Add credits"
+              onSuccess={() => {
+                setPayStatus({ kind: "success", message: "Credits added" });
+                if (typeof window !== "undefined") window.dispatchEvent(new Event("credits-changed"));
+                refreshAll();
+              }}
+              onFailure={(err) => setPayStatus({ kind: "error", message: `Payment failed: ${String(err.message || err)}` })}
+              onDismiss={() => setPayStatus({ kind: "info", message: "Checkout cancelled" })}
+            />
+          </div>
+
+          {payStatus && (
+            <div className={`usage-pay-note ${payStatus.kind}`}>{payStatus.message}</div>
+          )}
+        </section>
+
+        {/* Plan: prices + free allowances */}
+        <section className="usage-card">
+          <div className="usage-card-head"><h3>Actions &amp; pricing</h3></div>
+          <ul className="usage-plan">
+            {actions.map((a) => {
+              const f = free[a.key];
+              return (
+                <li key={a.key} className="usage-plan-row">
+                  <span className="usage-plan-icon"><Icon name={a.icon} size={18} /></span>
+                  <span className="usage-plan-label">{a.label}</span>
+                  {f ? (
+                    <span className={`usage-plan-free ${f.remaining > 0 ? "on" : ""}`}>
+                      {f.remaining > 0 ? `${f.remaining} of ${f.limit} free left` : `${f.limit} free used`}
+                    </span>
+                  ) : <span className="usage-plan-free" />}
+                  <span className="usage-plan-price">
+                    {a.price != null ? fmtUsd(a.price) : "—"}
+                    <small>{a.unit}</small>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        {/* Spend breakdown */}
+        <section className="usage-card">
+          <div className="usage-card-head"><h3>Spend so far</h3><span className="usage-of">{fmtUsd(spent)} total</span></div>
+          <div className="usage-spend-grid">
+            <div className="usage-spend"><span>{fmtUsd(spentBreak.answer_eval_usd)}</span><small>Answer eval</small></div>
+            <div className="usage-spend"><span>{fmtUsd(spentBreak.interview_usd)}</span><small>Interviews</small></div>
+            <div className="usage-spend"><span>{fmtUsd(spentBreak.vector_search_usd)}</span><small>Search</small></div>
+            <div className="usage-spend"><span>{fmtUsd(spentBreak.qna_usd)}</span><small>QnA</small></div>
+          </div>
+        </section>
+
+        {/* Storage */}
+        {loading ? <div className="goal-empty">Loading…</div> : storage && (
           <>
             <section className="usage-card">
               <div className="usage-card-head">
                 <h3>Storage</h3>
-                <span className="usage-big">{usedGb} GB <span className="usage-of">of {limitGb} GB</span></span>
+                <span className="usage-of">{usedGb} GB of {limitGb} GB</span>
               </div>
               <div className="goal-progress-bar" style={{ height: 12 }}>
-                <span style={{ width: `${pct}%`, background: pct > 90 ? "#ef4444" : pct > 70 ? "#f59e0b" : "#6366f1" }} />
+                <span style={{ width: `${pct}%`, background: pct > 90 ? "var(--red)" : pct > 70 ? "var(--gold)" : "var(--indigo, #6366f1)" }} />
               </div>
               <div className="usage-sub-row">
                 <span>{pct}% used</span>
-                <span>{(data.available_bytes / (1024 ** 3)).toFixed(2)} GB free</span>
+                <span>{(storage.available_bytes / (1024 ** 3)).toFixed(2)} GB free</span>
               </div>
               <p className="goal-hint">Counts content, recordings and PDF-search files (answer-eval PDFs excluded).</p>
             </section>
 
-            <section className="usage-card" style={{ marginTop: 20 }}>
-              <div className="usage-card-head">
-                <h3><Icon name="payment" /> Credits</h3>
-                <span className="usage-big">
-                  ₹{credits ? credits.balance_rupees.toFixed(2) : "—"}
-                  {credits ? <span className="usage-of">from {credits.payments} payment{credits.payments === 1 ? "" : "s"}</span> : null}
-                </span>
-              </div>
-
-              <div className="goal-field-row" style={{ alignItems: "flex-end", marginTop: 12 }}>
-                <label className="goal-field" style={{ maxWidth: 180 }}>
-                  <span>Add amount (₹)</span>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={creditRupees}
-                    onChange={(e) => setCreditRupees(e.target.value)}
-                    placeholder="100"
-                  />
-                </label>
-                <RazorpayCheckout
-                  amount={creditAmountPaise}
-                  currency="INR"
-                  description={`Add ₹${validCredit ? (creditAmountPaise / 100).toFixed(2) : "0"} credit`}
-                  notes={{ purpose: "credits" }}
-                  prefill={prefill}
-                  disabled={!validCredit}
-                  label="Add credit"
-                  onSuccess={(result) => {
-                    setPayStatus({ kind: "success", message: "Credit added", detail: `Payment ID: ${result.payment_id}` });
-                    loadCredits();
-                  }}
-                  onFailure={(err) => setPayStatus({ kind: "error", message: "Payment failed", detail: String(err.message || err) })}
-                  onDismiss={() => setPayStatus({ kind: "info", message: "Checkout cancelled", detail: "" })}
-                />
-              </div>
-              <p className="goal-hint" style={{ marginTop: 10 }}>Minimum ₹1 (100 paise). Credits are 1:1 with rupees paid, added after the payment is verified.</p>
-
-              {payStatus && (
-                <div
-                  className={payStatus.kind === "error" ? "goal-error" : ""}
-                  style={
-                    payStatus.kind === "error"
-                      ? { marginTop: 12 }
-                      : {
-                          marginTop: 12,
-                          padding: "10px 12px",
-                          borderRadius: 10,
-                          fontSize: 14,
-                          border: "1px solid",
-                          borderColor: payStatus.kind === "success" ? "#1f7a44" : "#2b3348",
-                          background: payStatus.kind === "success" ? "#0f2318" : "#0e1320",
-                          color: payStatus.kind === "success" ? "#4ade80" : "#8b95a7",
-                        }
-                  }
-                >
-                  <strong>{payStatus.message}</strong>
-                  {payStatus.detail ? <div style={{ marginTop: 4, fontSize: 13, opacity: 0.85 }}>{payStatus.detail}</div> : null}
-                </div>
-              )}
-            </section>
-
-            <section className="goal-stat-row" style={{ marginTop: 20 }}>
-              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(totalTokens)}</span><span className="goal-stat-lbl">LLM tokens total</span></div>
-              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(data.search_llm_tokens)}</span><span className="goal-stat-lbl">Search tokens</span></div>
-              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(data.qna_llm_tokens)}</span><span className="goal-stat-lbl">QnA tokens</span></div>
-              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(data.answers_evaluated)}</span><span className="goal-stat-lbl">Answers evaluated</span></div>
-              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(data.interviews_taken)}</span><span className="goal-stat-lbl">Interviews taken</span></div>
+            <section className="goal-stat-row">
+              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(storage.answers_evaluated)}</span><span className="goal-stat-lbl">Answers evaluated</span></div>
+              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(storage.interviews_taken)}</span><span className="goal-stat-lbl">Interviews taken</span></div>
+              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(storage.search_queries)}</span><span className="goal-stat-lbl">Searches run</span></div>
+              <div className="goal-stat"><span className="goal-stat-num">{fmtNum(storage.qna_questions)}</span><span className="goal-stat-lbl">QnA questions</span></div>
             </section>
           </>
         )}
