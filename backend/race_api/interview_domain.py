@@ -225,6 +225,9 @@ def _elapsed_seconds(doc: Dict[str, Any]) -> int:
 
 # ── Public API ─────────────────────────────────────────────────────────────--
 def start_interview_payload(user_id: str, daf: Optional[dict] = None) -> Dict[str, Any]:
+    # Free while within the free allowance, else deduct / raise 402 — before any LLM cost.
+    from . import billing_domain as billing
+    billing.charge_fixed(user_id, billing.INTERVIEW, {"kind": "interview_start"})
     resolved_daf = daf if isinstance(daf, dict) and daf else DEFAULT_DAF
     sid = f"interview:{uuid.uuid4().hex}"
     member_id, question, _ = _run_director([], resolved_daf, 0, wrap=False, must_close=False)
