@@ -136,9 +136,20 @@ export function readAuthUserId() {
   }
 }
 
-export function apiFetch(url, opts = {}) {
+export async function apiFetch(url, opts = {}) {
   const headers = { ...getAuthHeaders(), ...(opts.headers || {}) };
-  return fetch(url, { ...opts, headers });
+  const res = await fetch(url, { ...opts, headers });
+  // Any 402 (insufficient credits) surfaces a global "add credits" prompt, regardless
+  // of which feature made the call. Callers still get the response to handle normally.
+  if (res.status === 402 && typeof window !== "undefined") {
+    try {
+      const body = await res.clone().json();
+      window.dispatchEvent(new CustomEvent("insufficient-credits", { detail: body?.detail || {} }));
+    } catch (_) {
+      window.dispatchEvent(new CustomEvent("insufficient-credits", { detail: {} }));
+    }
+  }
+  return res;
 }
 
 export async function apiSignin({ email, password }) {
