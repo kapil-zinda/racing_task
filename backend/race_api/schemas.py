@@ -91,6 +91,13 @@ class AnswerEvalEvaluateRequest(BaseModel):
     max_marks: int = 0
 
 
+class ContactRequest(BaseModel):
+    name: str = ""
+    email: str
+    message: str
+    subject: str = ""
+
+
 class InterviewAnswerRequest(BaseModel):
     text: str = ""
     audio_base64: str = ""
