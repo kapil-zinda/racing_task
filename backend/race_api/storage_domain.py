@@ -93,6 +93,8 @@ def _ensure_doc(user_id: str) -> Dict[str, Any]:
         "answers_evaluated": 0,
         "search_llm_tokens": 0,
         "qna_llm_tokens": 0,
+        "search_queries": 0,
+        "qna_questions": 0,
         "created_at": _now(),
         "updated_at": _now(),
     }
@@ -130,6 +132,14 @@ def add_llm_tokens(user_id: str, feature: str, tokens: int) -> None:
     _incr(user_id, field, int(tokens or 0))
 
 
+def incr_search_queries(user_id: str, n: int = 1) -> None:
+    _incr(user_id, "search_queries", int(n or 0))
+
+
+def incr_qna_questions(user_id: str, n: int = 1) -> None:
+    _incr(user_id, "qna_questions", int(n or 0))
+
+
 def storage_status_payload(user_id: str) -> Dict[str, Any]:
     doc = get_usage(user_id)
     used = max(0, int(doc.get("storage_bytes", 0) or 0))
@@ -144,6 +154,8 @@ def storage_status_payload(user_id: str) -> Dict[str, Any]:
         "interviews_taken": _interviews_taken(user_id),
         "search_llm_tokens": int(doc.get("search_llm_tokens", 0) or 0),
         "qna_llm_tokens": int(doc.get("qna_llm_tokens", 0) or 0),
+        "search_queries": int(doc.get("search_queries", 0) or 0),
+        "qna_questions": int(doc.get("qna_questions", 0) or 0),
     }
 
 
