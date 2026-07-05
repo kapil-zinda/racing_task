@@ -9,11 +9,15 @@ export default function AuthGuard({ children }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  // Signed-out visitors can see the public landing/explainer page (root) and the
+  // auth screens; everything else sends them to the landing page first.
+  const isPublic = pathname === "/" || pathname.startsWith("/auth");
+
   useEffect(() => {
-    if (!loading && !auth && !pathname.startsWith("/auth")) {
-      router.replace("/auth/signin");
+    if (!loading && !auth && !isPublic) {
+      router.replace("/");
     }
-  }, [auth, loading, pathname, router]);
+  }, [auth, loading, isPublic, router]);
 
   if (loading) {
     return (
