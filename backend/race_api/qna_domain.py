@@ -477,6 +477,11 @@ def ask_qna_in_session(session_id: str, question: str, course: str = "", limit: 
     if not q:
         raise ValueError("question is required")
 
+    # QnA is billed on actual LLM cost (× markup). Require some credit up front unless
+    # this question is still within the free allowance; the real charge is applied after.
+    from . import billing_domain as billing
+    billing.ensure_can_qna(uid)
+
     previous_messages = list(
         qna_messages_collection()
         .find({"session_id": sid, "doc_type": "qna_message"})
@@ -497,10 +502,12 @@ def ask_qna_in_session(session_id: str, question: str, course: str = "", limit: 
 
     grounded = _run_grounded_answer(q, course, limit, user_id=uid, conversation_messages=previous_messages)
     try:
-        from .storage_domain import add_llm_tokens
+        from .storage_domain import add_llm_tokens, incr_qna_questions
         add_llm_tokens(uid, "qna", grounded.get("llm_tokens", 0))
+        billing.charge_llm(uid, grounded.get("llm_tokens", 0), {"session_id": sid})
+        incr_qna_questions(uid)
     except Exception:
-        logger.exception("usage add_llm_tokens (qna) failed")
+        logger.exception("usage/billing (qna) failed")
     assistant_msg = {
         "_id": _new_message_id(),
         "doc_type": "qna_message",
