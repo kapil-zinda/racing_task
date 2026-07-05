@@ -5,6 +5,8 @@
 import Link from "next/link";
 import Icon from "./Icon";
 import { useAuth } from "../lib/auth";
+import PublicNav from "./PublicNav";
+import PublicFooter from "./PublicFooter";
 
 const FEATURES = [
   { icon: "mic", title: "Study Recorder", desc: "Record audio, video, or screen sessions that upload as you go — a dropped connection or closed tab never loses your work." },
@@ -32,22 +34,7 @@ export default function LandingPage() {
     <main className="lp">
       <div className="lp-bg" aria-hidden="true" />
 
-      <header className="lp-nav">
-        <Link href="/" className="lp-brand">
-          <img className="lp-logo" src="/dias-icon.png" alt="Dias" />
-          <span className="lp-brand-text">Dias</span>
-        </Link>
-        <nav className="lp-nav-actions">
-          {signedIn ? (
-            <Link href="/home" className="lp-btn primary">Go to app</Link>
-          ) : (
-            <>
-              <Link href="/auth/signin" className="lp-btn ghost">Sign in</Link>
-              <Link href="/auth/signup" className="lp-btn primary">Get started</Link>
-            </>
-          )}
-        </nav>
-      </header>
+      <PublicNav />
 
       {/* Hero */}
       <section className="lp-hero">
@@ -131,23 +118,7 @@ export default function LandingPage() {
         )}
       </section>
 
-      <footer className="lp-footer">
-        <div className="lp-brand">
-          <img className="lp-logo sm" src="/dias-icon.png" alt="Dias" />
-          <span className="lp-brand-text">Dias</span>
-        </div>
-        <span className="lp-footer-note">Your all-in-one UPSC preparation workspace.</span>
-        <div className="lp-footer-links">
-          {signedIn ? (
-            <Link href="/home">Go to app</Link>
-          ) : (
-            <>
-              <Link href="/auth/signin">Sign in</Link>
-              <Link href="/auth/signup">Get started</Link>
-            </>
-          )}
-        </div>
-      </footer>
+      <PublicFooter />
     </main>
   );
 }
