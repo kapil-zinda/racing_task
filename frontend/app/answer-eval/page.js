@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
 import { apiFetch } from "../lib/auth";
+import { useCredits } from "../lib/credits";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -87,6 +88,7 @@ function EvalResult({ data }) {
 }
 
 export default function AnswerEvalPage() {
+  const { requireCredits, refreshCredits } = useCredits();
   const [view, setView] = useState("list"); // "list" | "submit" | "detail"
   const [file, setFile] = useState(null);
   const [question, setQuestion] = useState("");
@@ -140,6 +142,8 @@ export default function AnswerEvalPage() {
 
   const start = async () => {
     if (!file) { setError("Choose a PDF of your answer first."); return; }
+    // In-memory affordability gate — don't even fire the upload if it can't be paid for.
+    if (!requireCredits("answer_eval")) return;
     setError("");
     setData(null);
     setStatus("uploading");
@@ -158,6 +162,7 @@ export default function AnswerEvalPage() {
           max_marks: Number(maxMarks) || 0,
         }),
       });
+      if (pre.status === 402) { setStatus("idle"); return; } // popup already shown
       if (!pre.ok) throw new Error(await pre.text());
       const { eval_id, upload_url, auto_evaluate } = await pre.json();
 
@@ -179,6 +184,7 @@ export default function AnswerEvalPage() {
       setQuestion("");
       setSubject("");
       setMaxMarks("");
+      refreshCredits();
       loadList({ q: "", from: "", to: "" });
     } catch (err) {
       setError(`Could not submit: ${String(err.message || err)}`);
