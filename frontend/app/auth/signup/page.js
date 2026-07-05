@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiSignup } from "../../lib/auth";
 import PhoneInput from "../../components/PhoneInput";
+import Icon from "../../components/Icon";
 import { DEFAULT_COUNTRY } from "../../lib/countries";
 
 export default function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({ email: "", name: "", phone: "", password: "", confirm: "" });
   const [country, setCountry] = useState(DEFAULT_COUNTRY);
+  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -85,19 +87,31 @@ export default function SignupPage() {
               onNumberChange={(v) => setForm((f) => ({ ...f, phone: v }))}
             />
             <label className="auth-label">Password</label>
-            <input
-              className="auth-input"
-              type="password"
-              placeholder="Min 8 characters"
-              value={form.password}
-              onChange={field("password")}
-              minLength={8}
-              required
-            />
+            <div className="auth-pass-wrap">
+              <input
+                className="auth-input"
+                type={showPass ? "text" : "password"}
+                placeholder="Min 8 characters"
+                value={form.password}
+                onChange={field("password")}
+                minLength={8}
+                required
+              />
+              <button
+                type="button"
+                className="auth-pass-toggle"
+                onClick={() => setShowPass((v) => !v)}
+                aria-label={showPass ? "Hide password" : "Show password"}
+                aria-pressed={showPass}
+                tabIndex={-1}
+              >
+                <Icon name={showPass ? "eye-off" : "eye"} size={18} />
+              </button>
+            </div>
             <label className="auth-label">Confirm password</label>
             <input
               className="auth-input"
-              type="password"
+              type={showPass ? "text" : "password"}
               placeholder="Repeat password"
               value={form.confirm}
               onChange={field("confirm")}
