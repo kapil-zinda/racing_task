@@ -1,12 +1,12 @@
 import "./globals.css";
 import ClientLayout from "./components/ClientLayout";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://dias.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://dias.uchhal.in";
 
 const DESCRIPTION =
-  "Dias is an all-in-one UPSC preparation workspace: record and review study sessions, " +
-  "take AI voice mock interviews, get Mains answers evaluated, search your own notes, " +
-  "plan goals, and study alongside an AI assistant.";
+  "Dias is an all-in-one UPSC preparation workspace: day tracking, goal monitoring and " +
+  "analytics, task monitoring, AI UPSC Mains answer evaluation, voice mock interviews, " +
+  "storing and searching your study content, and content-grounded QnA — with an AI study assistant.";
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
@@ -18,11 +18,22 @@ export const metadata = {
   applicationName: "Dias",
   keywords: [
     "UPSC preparation",
+    "UPSC preparation app",
+    "day tracking",
+    "study day tracker",
+    "goal monitoring",
+    "goal tracking and analytics",
+    "task monitoring",
+    "study analytics",
+    "UPSC Mains answer evaluation",
+    "AI answer evaluation",
     "UPSC mock interview",
-    "Mains answer evaluation",
-    "UPSC notes search",
-    "UPSC study tracker",
-    "UPSC goals planner",
+    "AI mock interview",
+    "store and search study content",
+    "PDF notes search",
+    "content QnA",
+    "ask questions from your notes",
+    "mind maps",
     "IAS preparation app",
     "civil services preparation",
   ],
