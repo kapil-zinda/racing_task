@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import MainMenu from "./components/MainMenu";
-import DayTracker from "./components/DayTracker";
-import { apiFetch, useAuth } from "./lib/auth";
+import MainMenu from "../components/MainMenu";
+import DayTracker from "../components/DayTracker";
+import { apiFetch, useAuth } from "../lib/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const QUOTE_API_URL = "https://motivational-spark-api.vercel.app/api/quotes/random";
