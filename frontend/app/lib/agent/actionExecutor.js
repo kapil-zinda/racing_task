@@ -51,7 +51,7 @@ export async function executeAgentActions(actions, { router, pathname }) {
         (isSwitchPageGeneric && (genericPage === "resources" || genericPage === "/search" || genericPage === "search" || genericPage === "content" || genericPage === "qna"));
 
       if (wantsHome) {
-        router.push("/");
+        router.push("/home");
       } else if (wantsRecorder) {
         router.push("/recorder");
       } else if (wantsSyllabus) {
