@@ -1,12 +1,12 @@
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://dias.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://dias.uchhal.in";
 
-// Only the public landing page is indexable; the app itself is behind auth.
+// Public marketing pages are indexable; the app itself is behind auth.
 export default function robots() {
   return {
     rules: [
       {
         userAgent: "*",
-        allow: "/",
+        allow: ["/", "/about", "/how-to-use", "/contact"],
         disallow: [
           "/home", "/recorder", "/interview", "/answer-eval", "/goals",
           "/analytics", "/qna", "/mindmap", "/search", "/content", "/usage",
