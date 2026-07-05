@@ -7,7 +7,7 @@ import { useAuth } from "../lib/auth";
 import Icon from "./Icon";
 
 const NAV_ITEMS = [
-  { key: "home", label: "Home", href: "/", icon: "home" },
+  { key: "home", label: "Home", href: "/home", icon: "home" },
   { key: "recorder", label: "Recorder", href: "/recorder", icon: "recorder" },
   { key: "interview", label: "Interview", href: "/interview", icon: "interview" },
   { key: "answer-eval", label: "Answer Eval", href: "/answer-eval", icon: "answer-eval" },
