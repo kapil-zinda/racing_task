@@ -12,6 +12,7 @@ import {
   Music, Scale, PartyPopper, Lightbulb, Rabbit, Salad, Puzzle, User, TreePine,
   Timer, Disc, MoreHorizontal, Plus, Minus, Circle as Dot, Loader2, Layers,
   CalendarDays, ClipboardList, Paperclip, StickyNote, CreditCard,
+  Eye, EyeOff, Wallet, Zap,
 } from "lucide-react";
 
 const MAP = {
@@ -100,6 +101,10 @@ const MAP = {
   note: StickyNote,
   payment: CreditCard,
   card: CreditCard,
+  eye: Eye,
+  "eye-off": EyeOff,
+  wallet: Wallet,
+  zap: Zap,
 };
 
 export default function Icon({ name, size = "1em", className = "", strokeWidth = 2, ...rest }) {
