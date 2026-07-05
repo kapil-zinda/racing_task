@@ -51,3 +51,10 @@ backend/python/
 *.swp
 *.swo
 .gstack/
+
+.agents/
+.claude/
+.impeccable/
+CLAUDE.md
+DESIGN.md
+PRODUCT.md
