@@ -47,7 +47,7 @@ export const metadata = {
     url: SITE_URL,
     title: "Dias — All-in-one UPSC preparation workspace",
     description: DESCRIPTION,
-    images: [{ url: "/dias-icon.png", width: 512, height: 512, alt: "Dias" }],
+    images: [{ url: "/dias-icon.png", width: 180, height: 180, alt: "Dias" }],
   },
   twitter: {
     card: "summary",
