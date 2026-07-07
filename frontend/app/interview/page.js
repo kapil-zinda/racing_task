@@ -6,9 +6,9 @@ import Icon from "../components/Icon";
 import { apiFetch, useAuth } from "../lib/auth";
 import { useCredits } from "../lib/credits";
 import { confirmDialog } from "../lib/dialog";
+import DafForm from "./DafForm";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-const MAX_SECONDS = 30 * 60;
 
 const QUALITY_LABELS = {
   mental_alertness: "Mental alertness",
@@ -129,16 +129,86 @@ function QuestionByQuestion({ messages = [], panel = [] }) {
   );
 }
 
+// ── Read-only DAF summary ─────────────────────────────────────────────────────
+function DafSummary({ daf }) {
+  if (!daf) return null;
+  const p = daf.personal_details || {};
+  const edu = daf.educational_details || {};
+  const grad = edu.graduation || {};
+  const pg = edu.post_graduation || {};
+  const ach = daf.achievements || {};
+  const career = daf.career_details || {};
+  const work = (daf.employment_details || {}).work_experience || [];
+  const join = (a) => (a || []).filter((x) => String(x).trim()).join(", ");
+  const eduLine = (s) => [s.degree || s.stream, s.discipline, s.college_university || s.school, s.board, s.year]
+    .filter(Boolean).join(" · ");
+
+  const Row = ({ label, value }) => (value ? (
+    <div className="daf-view-row"><span className="daf-view-k">{label}</span><span className="daf-view-v">{value}</span></div>
+  ) : null);
+
+  return (
+    <div className="daf-view">
+      <div className="daf-view-group">
+        <h3><Icon name="user" size={15} /> Personal</h3>
+        <Row label="Name" value={p.name} />
+        <Row label="Home" value={[p.home_district, p.home_state].filter(Boolean).join(", ")} />
+        <Row label="Mother tongue" value={p.mother_tongue} />
+        <Row label="Languages" value={join(p.languages_known)} />
+        <Row label="Medium of interview" value={p.medium_of_interview} />
+        <Row label="Category" value={p.category} />
+      </div>
+      <div className="daf-view-group">
+        <h3><Icon name="book" size={15} /> Education</h3>
+        <Row label="Graduation" value={eduLine(grad)} />
+        <Row label="Post-graduation" value={eduLine(pg)} />
+        <Row label="Class 12" value={eduLine(edu.intermediate || {})} />
+        <Row label="Optional subject" value={daf.optional_subject} />
+      </div>
+      {work.length ? (
+        <div className="daf-view-group">
+          <h3><Icon name="target" size={15} /> Work experience</h3>
+          {work.map((w, i) => (
+            <Row key={i} label={w.designation || "Role"} value={[w.organization, w.duration].filter(Boolean).join(" · ")} />
+          ))}
+        </div>
+      ) : null}
+      <div className="daf-view-group">
+        <h3><Icon name="sparkles" size={15} /> Hobbies &amp; achievements</h3>
+        <Row label="Hobbies" value={join(daf.hobbies_and_interests)} />
+        <Row label="Prizes & awards" value={join(ach.prizes_and_awards)} />
+        <Row label="Positions" value={join(ach.positions_of_responsibility)} />
+        <Row label="Extracurricular" value={join(ach.extracurricular)} />
+      </div>
+      <div className="daf-view-group">
+        <h3><Icon name="clipboard" size={15} /> Preferences &amp; motivation</h3>
+        <Row label="Service preferences" value={join(daf.service_preferences)} />
+        <Row label="Cadre preferences" value={join(daf.cadre_preferences)} />
+        <Row label="Why civil services" value={career.why_civil_services} />
+        <Row label="Unique points" value={join(career.unique_points_in_daf)} />
+      </div>
+    </div>
+  );
+}
+
 export default function InterviewPage() {
-  const { auth } = useAuth();
+  useAuth();
   const { requireCredits, refreshCredits } = useCredits();
-  const [mode, setMode] = useState("list"); // list | live | detail
+  const [mode, setMode] = useState("list"); // list | live | detail | daf
   const [interviews, setInterviews] = useState([]);
   const [listLoading, setListLoading] = useState(false);
 
   // detail view
-  const [detail, setDetail] = useState(null); // {session, ...}
+  const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  // DAF
+  const [daf, setDaf] = useState(null);
+  const [dafFilled, setDafFilled] = useState(false);
+  const [dafUpdatedAt, setDafUpdatedAt] = useState(null);
+  const [dafEditing, setDafEditing] = useState(false);
+  const [dafSaving, setDafSaving] = useState(false);
+  const [dafError, setDafError] = useState("");
 
   // live interview
   const [status, setStatus] = useState("idle"); // idle | starting | active | ended | report
@@ -147,13 +217,14 @@ export default function InterviewPage() {
   const [activeMember, setActiveMember] = useState("");
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState([]);
-  const [recording, setRecording] = useState(false);
+  const [micOn, setMicOn] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState("");
   const [busy, setBusy] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [chatOpen, setChatOpen] = useState(true);
   const [error, setError] = useState("");
   const [report, setReport] = useState(null);
-  const [textAnswer, setTextAnswer] = useState("");
 
   const startRef = useRef(0);
   const questionShownRef = useRef(0);
@@ -161,6 +232,8 @@ export default function InterviewPage() {
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
   const audioRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const finalCaptionRef = useRef("");
 
   const loadInterviews = useCallback(async () => {
     if (!API_BASE_URL) return;
@@ -178,7 +251,21 @@ export default function InterviewPage() {
     }
   }, []);
 
-  useEffect(() => { loadInterviews(); }, [loadInterviews]);
+  const loadDaf = useCallback(async () => {
+    if (!API_BASE_URL) return;
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/interview/daf`);
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setDaf(data.daf || null);
+      setDafFilled(!!data.filled);
+      setDafUpdatedAt(data.updated_at || null);
+    } catch (_) {
+      // Non-fatal: the list still works; DAF simply reads as unfilled.
+    }
+  }, []);
+
+  useEffect(() => { loadInterviews(); loadDaf(); }, [loadInterviews, loadDaf]);
 
   useEffect(() => {
     if (status !== "active") return undefined;
@@ -188,6 +275,7 @@ export default function InterviewPage() {
 
   useEffect(() => () => {
     try { audioRef.current?.pause(); } catch (_) {}
+    try { recognitionRef.current?.stop(); } catch (_) {}
     streamRef.current?.getTracks?.().forEach((t) => t.stop());
   }, []);
 
@@ -207,12 +295,49 @@ export default function InterviewPage() {
   };
 
   const memberName = (id) => panel.find((m) => m.id === id)?.name || "Board";
+  const memberInitial = (id) => (memberName(id) || "B").charAt(0).toUpperCase();
+
+  const saveDaf = async (nextDaf) => {
+    setDafSaving(true);
+    setDafError("");
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/interview/daf`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ daf: nextDaf }),
+      });
+      if (!res.ok) {
+        let msg = await res.text();
+        try { msg = JSON.parse(msg).detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      setDaf(data.daf || nextDaf);
+      setDafFilled(true);
+      setDafUpdatedAt(data.updated_at || null);
+      setDafEditing(false);
+    } catch (err) {
+      setDafError(String(err.message || err));
+    } finally {
+      setDafSaving(false);
+    }
+  };
+
+  const openDaf = () => { setError(""); setDafError(""); setDafEditing(false); setMode("daf"); };
 
   const startInterview = async () => {
+    if (!dafFilled) {
+      setError("");
+      setDafEditing(!daf); // straight to the form if there's nothing yet
+      setMode("daf");
+      return;
+    }
     if (!requireCredits("interview")) return;
     setError("");
     setReport(null);
     setTurns([]);
+    setLiveTranscript("");
+    setChatOpen(true);
     setMode("live");
     setStatus("starting");
     try {
@@ -222,7 +347,11 @@ export default function InterviewPage() {
         body: JSON.stringify({}),
       });
       if (res.status === 402) { setStatus("idle"); setMode("list"); return; } // popup shown
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        let msg = await res.text();
+        try { msg = JSON.parse(msg).detail || msg; } catch (_) {}
+        throw new Error(msg);
+      }
       const data = await res.json();
       setPanel(data.panel || []);
       setSessionId(data.session_id);
@@ -257,11 +386,12 @@ export default function InterviewPage() {
       const data = await res.json();
       setTurns((t) => [
         ...t,
-        { role: "user", text: data.transcript || payload.text || "(answer)" },
+        { role: "user", text: data.transcript || "(answer)" },
         { role: "assistant", member: data.panel_member, text: data.question },
       ]);
       setActiveMember(data.panel_member);
       setQuestion(data.question);
+      setLiveTranscript("");
       questionShownRef.current = Date.now();
       playAudio(data.audio);
       if (data.ended) setStatus("ended");
@@ -270,6 +400,36 @@ export default function InterviewPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  // Best-effort live captions while the candidate speaks (browser SpeechRecognition).
+  const startCaptions = () => {
+    const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SR) return;
+    try {
+      const rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-IN";
+      finalCaptionRef.current = "";
+      rec.onresult = (e) => {
+        let interim = "";
+        for (let i = e.resultIndex; i < e.results.length; i += 1) {
+          const chunk = e.results[i][0].transcript;
+          if (e.results[i].isFinal) finalCaptionRef.current += chunk + " ";
+          else interim += chunk;
+        }
+        setLiveTranscript((finalCaptionRef.current + interim).trim());
+      };
+      rec.onerror = () => {};
+      recognitionRef.current = rec;
+      rec.start();
+    } catch (_) {}
+  };
+
+  const stopCaptions = () => {
+    try { recognitionRef.current?.stop(); } catch (_) {}
+    recognitionRef.current = null;
   };
 
   const startRecording = async () => {
@@ -291,22 +451,25 @@ export default function InterviewPage() {
         await submitAnswer({ audio_base64: b64, audio_mime_type: blob.type || "audio/webm" });
       };
       rec.start();
-      setRecording(true);
+      setMicOn(true);
+      setLiveTranscript("");
+      startCaptions();
     } catch (err) {
       setError(`Microphone error: ${String(err.message || err)}`);
     }
   };
 
   const stopRecording = () => {
+    stopCaptions();
     try { recorderRef.current?.stop(); } catch (_) {}
-    setRecording(false);
+    setMicOn(false);
   };
 
-  const sendText = async () => {
-    const t = textAnswer.trim();
-    if (!t) return;
-    setTextAnswer("");
-    await submitAnswer({ text: t });
+  // The single mic control: unmute to answer, mute to send.
+  const toggleMic = () => {
+    if (busy || speaking) return;
+    if (micOn) stopRecording();
+    else startRecording();
   };
 
   const fetchReport = async () => {
@@ -328,6 +491,7 @@ export default function InterviewPage() {
 
   const endEarly = async () => {
     if (!(await confirmDialog({ title: "End interview", message: "End the interview now and get your evaluation?", confirmLabel: "End & evaluate" }))) return;
+    if (micOn) stopRecording();
     setStatus("ended");
     await fetchReport();
   };
@@ -351,6 +515,8 @@ export default function InterviewPage() {
   };
 
   const backToList = () => {
+    try { audioRef.current?.pause(); } catch (_) {}
+    if (micOn) stopRecording();
     setMode("list");
     setStatus("idle");
     setSessionId("");
@@ -358,8 +524,127 @@ export default function InterviewPage() {
     loadInterviews();
   };
 
-  const remaining = Math.max(0, MAX_SECONDS - elapsed);
-  const timePct = Math.min(100, (elapsed / MAX_SECONDS) * 100);
+  // ── Live interview stage ────────────────────────────────────────────────────
+  const renderLive = () => {
+    if (status === "starting") {
+      return <div className="iv-start"><p className="iv-intro">Assembling the board…</p></div>;
+    }
+    if (status === "report" && report) {
+      return (
+        <>
+          <h2 className="iv-report-title">Evaluation</h2>
+          <ReportView report={report} />
+          <QuestionByQuestion
+            messages={turns.map((t) => ({ role: t.role, panel_member: t.member, content: t.text }))}
+            panel={panel}
+          />
+          <div className="iv-controls">
+            <button className="btn-day" onClick={startInterview}><Icon name="refresh" size={16} /> New interview</button>
+            <button className="btn-cancel" onClick={backToList}>Back to interviews</button>
+          </div>
+        </>
+      );
+    }
+
+    // active / ended: the panel stage
+    return (
+      <div className={`ivx-stage ${chatOpen ? "chat-open" : ""}`}>
+        <div className="ivx-main">
+          <div className="ivx-topbar">
+            <span className="ivx-elapsed"><Icon name="clock" size={15} /> {fmt(elapsed)}</span>
+            <div className="ivx-panelrow">
+              {panel.map((m) => (
+                <div key={m.id} className={`ivx-pill ${activeMember === m.id ? "active" : ""}`} title={m.name}>
+                  <span className="ivx-pill-dot">{m.name.charAt(0)}</span>
+                  <span className="ivx-pill-name">{m.name}</span>
+                </div>
+              ))}
+            </div>
+            <button className="ivx-chat-toggle" onClick={() => setChatOpen((v) => !v)}>
+              <Icon name="chat" size={15} /> Transcript
+              <span className="ivx-chat-count">{turns.length}</span>
+            </button>
+          </div>
+
+          <div className="ivx-center">
+            <div className={`ivx-avatar ${speaking ? "speaking" : ""}`}>
+              <span>{memberInitial(activeMember)}</span>
+            </div>
+            <div className="ivx-active-name">
+              {memberName(activeMember)}
+              <span className="ivx-active-tag">{speaking ? "speaking…" : status === "ended" ? "" : "asking"}</span>
+            </div>
+
+            {status === "ended" ? (
+              <div className="ivx-question ended">
+                <p>{question}</p>
+                <p className="iv-intro">The interview has concluded.</p>
+                <button className="btn-day" onClick={fetchReport} disabled={busy}>
+                  <Icon name="clipboard" size={16} /> {busy ? "Evaluating…" : "View my evaluation"}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="ivx-question">
+                  <span className="iv-q-who">{memberName(activeMember)}</span>
+                  <p className="ivx-q-text">{question}</p>
+                </div>
+
+                {(micOn || liveTranscript || busy) ? (
+                  <div className={`ivx-answer ${micOn ? "live" : ""} ${busy ? "processing" : ""}`}>
+                    <span className="iv-q-who">{busy ? "Sending your answer" : "You"}</span>
+                    <p>{liveTranscript || (micOn ? "Listening… speak your answer." : busy ? "The board is considering your answer…" : "")}</p>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          {status === "active" ? (
+            <div className="ivx-controls">
+              <button
+                className={`meet-ctrl ${micOn ? "ctrl-live" : "ctrl-muted"}`}
+                onClick={toggleMic}
+                disabled={busy || speaking}
+                title={micOn ? "Mute & send answer" : "Unmute to answer"}
+              >
+                <Icon name={micOn ? "mic" : "mic-off"} size={20} />
+              </button>
+              <span className="ivx-ctrl-hint">
+                {speaking ? "The board is speaking…" : busy ? "Sending…" : micOn ? "Recording — tap to send" : "Tap the mic to answer"}
+              </span>
+              <button className="meet-end" onClick={endEarly} disabled={busy} title="End interview">
+                <Icon name="phone-off" size={18} /> End
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        {chatOpen ? (
+          <aside className="ivx-chat">
+            <div className="ivx-chat-head">
+              <span>Conversation</span>
+              <button className="ivx-chat-close" onClick={() => setChatOpen(false)} aria-label="Hide transcript"><Icon name="x" size={16} /></button>
+            </div>
+            <div className="ivx-chat-body">
+              {turns.map((t, i) => (
+                <div key={i} className={`iv-turn ${t.role}`}>
+                  <span className="iv-turn-who">{t.role === "user" ? "You" : memberName(t.member)}</span>
+                  <p>{t.text}</p>
+                </div>
+              ))}
+              {micOn && liveTranscript ? (
+                <div className="iv-turn user pending">
+                  <span className="iv-turn-who">You (speaking)</span>
+                  <p>{liveTranscript}</p>
+                </div>
+              ) : null}
+            </div>
+          </aside>
+        ) : null}
+      </div>
+    );
+  };
 
   return (
     <main className="app-shell">
@@ -367,8 +652,17 @@ export default function InterviewPage() {
       <div className="bg-orb orb-2" />
       <header className="hero">
         <MainMenu active="interview" />
-        <h1>UPSC Interview Panel</h1>
-        <p className="subtext">A virtual five-member board. Speak your answers — the interview runs 20–30 minutes.</p>
+        <div className="iv-hero-row">
+          <div>
+            <h1>UPSC Interview Panel</h1>
+            <p className="subtext">A virtual five-member board that interviews you on your own DAF. Speak your answers.</p>
+          </div>
+          {mode === "list" ? (
+            <button className="iv-daf-btn" onClick={openDaf}>
+              <Icon name="file" size={16} /> {dafFilled ? "View DAF" : "Fill your DAF"}
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <section className="milestone-panel">
@@ -385,7 +679,9 @@ export default function InterviewPage() {
                   <span className="iv-list-new-icon"><Icon name="plus" size={22} /></span>
                   <span className="iv-list-new-text">
                     <strong>Start a new interview</strong>
-                    <span>Face the virtual board and get a full personality-test evaluation.</span>
+                    <span>{dafFilled
+                      ? "Face the virtual board and get a full personality-test evaluation."
+                      : "Fill your DAF first — the board will interview you on it."}</span>
                   </span>
                 </button>
 
@@ -412,6 +708,44 @@ export default function InterviewPage() {
               </div>
             ) : null}
 
+            {/* ── DAF VIEW / EDIT ── */}
+            {mode === "daf" ? (
+              dafEditing ? (
+                <DafForm
+                  initial={daf}
+                  saving={dafSaving}
+                  error={dafError}
+                  onSave={saveDaf}
+                  onCancel={() => (daf ? setDafEditing(false) : backToList())}
+                />
+              ) : (
+                <div className="daf-view-wrap">
+                  <div className="iv-hero-row">
+                    <button className="iv-back" onClick={backToList}><Icon name="arrow-left" size={16} /> Back to interviews</button>
+                    <button className="btn-day" onClick={() => { setDafError(""); setDafEditing(true); }}>
+                      <Icon name="edit" size={15} /> {daf ? "Update DAF" : "Fill DAF"}
+                    </button>
+                  </div>
+                  {daf ? (
+                    <>
+                      <div className="daf-view-head">
+                        <h2>Your DAF</h2>
+                        {dafUpdatedAt ? <span className="daf-updated">Updated {fmtDateTime(dafUpdatedAt)}</span> : null}
+                      </div>
+                      <DafSummary daf={daf} />
+                      <div className="iv-controls">
+                        <button className="btn-day" onClick={() => { setMode("list"); setTimeout(startInterview, 0); }}>
+                          <Icon name="gavel" size={16} /> Start interview
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="iv-empty">You haven&apos;t filled your DAF yet. Click <strong>Fill DAF</strong> above to begin.</p>
+                  )}
+                </div>
+              )
+            ) : null}
+
             {/* ── DETAIL VIEW ── */}
             {mode === "detail" ? (
               <div className="iv-detail">
@@ -434,101 +768,7 @@ export default function InterviewPage() {
             ) : null}
 
             {/* ── LIVE INTERVIEW ── */}
-            {mode === "live" ? (
-              <>
-                {status === "starting" ? (
-                  <div className="iv-start"><p className="iv-intro">Assembling the board…</p></div>
-                ) : null}
-
-                {status !== "idle" && status !== "starting" ? (
-                  <>
-                    <div className="iv-timer">
-                      <div className="iv-timer-row">
-                        <span className="iv-clock">{fmt(elapsed)}</span>
-                        <span className="iv-clock-sub">/ {fmt(MAX_SECONDS)} · {status === "active" ? `~${fmt(remaining)} left` : "ended"}</span>
-                      </div>
-                      <div className="iv-timer-bar"><div className="iv-timer-fill" style={{ width: `${timePct}%` }} /></div>
-                    </div>
-
-                    <div className="iv-panel">
-                      {panel.map((m) => (
-                        <div key={m.id} className={`iv-member ${activeMember === m.id ? "active" : ""} ${activeMember === m.id && speaking ? "speaking" : ""}`}>
-                          <div className="iv-avatar">{m.name.charAt(0)}</div>
-                          <div className="iv-member-name">{m.name}</div>
-                          {activeMember === m.id ? <div className="iv-member-tag">{speaking ? "speaking…" : "asking"}</div> : null}
-                        </div>
-                      ))}
-                    </div>
-
-                    {status === "active" || status === "ended" ? (
-                      <div className="iv-question">
-                        <span className="iv-q-who">{memberName(activeMember)}</span>
-                        <p className="iv-q-text">{question}</p>
-                      </div>
-                    ) : null}
-
-                    {status === "active" ? (
-                      <div className="iv-controls">
-                        {!recording ? (
-                          <button className="btn-ticket" onClick={startRecording} disabled={busy || speaking}>
-                            <Icon name="mic" size={16} /> {busy ? "Sending…" : speaking ? "Listening to the board…" : "Answer"}
-                          </button>
-                        ) : (
-                          <button className="meet-end" onClick={stopRecording}><Icon name="stop" size={16} /> Done answering</button>
-                        )}
-                        <div className="iv-text-fallback">
-                          <input
-                            className="task-input"
-                            placeholder="…or type your answer"
-                            value={textAnswer}
-                            onChange={(e) => setTextAnswer(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
-                            disabled={busy || recording}
-                          />
-                          <button className="btn-day" onClick={sendText} disabled={busy || recording || !textAnswer.trim()}>Send</button>
-                        </div>
-                        <button className="btn-cancel iv-end-early" onClick={endEarly} disabled={busy}>End &amp; evaluate</button>
-                      </div>
-                    ) : null}
-
-                    {status === "ended" ? (
-                      <div className="iv-controls">
-                        <p className="iv-intro">The interview has concluded.</p>
-                        <button className="btn-ticket" onClick={fetchReport} disabled={busy}>
-                          <Icon name="clipboard" size={16} /> {busy ? "Evaluating…" : "View my evaluation"}
-                        </button>
-                      </div>
-                    ) : null}
-
-                    {turns.length > 0 && status !== "report" ? (
-                      <div className="iv-transcript">
-                        {turns.map((t, i) => (
-                          <div key={i} className={`iv-turn ${t.role}`}>
-                            <span className="iv-turn-who">{t.role === "user" ? "You" : memberName(t.member)}</span>
-                            <p>{t.text}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    {status === "report" && report ? (
-                      <>
-                        <h2 className="iv-report-title">Evaluation</h2>
-                        <ReportView report={report} />
-                        <QuestionByQuestion
-                          messages={turns.map((t) => ({ role: t.role, panel_member: t.member, content: t.text }))}
-                          panel={panel}
-                        />
-                        <div className="iv-controls">
-                          <button className="btn-ticket" onClick={startInterview}><Icon name="refresh" size={16} /> New interview</button>
-                          <button className="btn-cancel" onClick={backToList}>Back to interviews</button>
-                        </div>
-                      </>
-                    ) : null}
-                  </>
-                ) : null}
-              </>
-            ) : null}
+            {mode === "live" ? renderLive() : null}
           </>
         )}
       </section>

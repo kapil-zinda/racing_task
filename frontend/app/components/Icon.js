@@ -12,13 +12,16 @@ import {
   Music, Scale, PartyPopper, Lightbulb, Rabbit, Salad, Puzzle, User, TreePine,
   Timer, Disc, MoreHorizontal, Plus, Minus, Circle as Dot, Loader2, Layers,
   CalendarDays, ClipboardList, Paperclip, StickyNote, CreditCard,
-  Eye, EyeOff, Wallet, Zap,
+  Eye, EyeOff, Wallet, Zap, MicOff, PhoneOff,
 } from "lucide-react";
 
 const MAP = {
   home: Home,
   recorder: Mic,
   mic: Mic,
+  "mic-off": MicOff,
+  "phone-off": PhoneOff,
+  "end-call": PhoneOff,
   interview: Gavel,
   gavel: Gavel,
   "answer-eval": FileText,

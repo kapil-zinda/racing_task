@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import DayTracker from "../components/DayTracker";
+import DayReport from "../components/DayReport";
+import Icon from "../components/Icon";
 import { apiFetch, useAuth } from "../lib/auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -45,6 +47,7 @@ function extraKindClass(value) {
 
 export default function HomePage() {
   const { auth } = useAuth();
+  const [reportOpen, setReportOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState("");
   // Mirrors the Day Log's selected date so Extras load for the same day.
@@ -219,6 +222,9 @@ export default function HomePage() {
 
       <header className="hero">
         <MainMenu active="home" />
+        <button className="home-report-btn" onClick={() => setReportOpen(true)}>
+          <Icon name="file" size={16} /> Generate report of the day
+        </button>
         <p className="subtext">"{heroQuote.quote}"</p>
         {heroQuote.author ? <p className="subtext subtext-author">— {heroQuote.author}</p> : null}
         {!API_BASE_URL ? (
@@ -283,6 +289,8 @@ export default function HomePage() {
           </div>
         </article>
       </section>
+
+      <DayReport open={reportOpen} onClose={() => setReportOpen(false)} />
 
       {toast ? <div className="reward-toast">{toast}</div> : null}
 
