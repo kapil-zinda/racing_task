@@ -129,6 +129,9 @@ def settings() -> Dict[str, Any]:
         "price_vector_search_usd": float(os.getenv("PRICE_VECTOR_SEARCH_USD", "0.01")),
         "llm_markup": float(os.getenv("LLM_MARKUP", "1.5")),
         "llm_usd_per_1k_tokens": float(os.getenv("LLM_USD_PER_1K_TOKENS", "0.005")),
+        # --- Daily storage cost (INR; standalone from the USD credit ledger above) ---
+        "price_storage_inr_per_gb_month": float(os.getenv("PRICE_STORAGE_INR_PER_GB_MONTH", "2")),
+        "price_vector_inr_per_gb_month": float(os.getenv("PRICE_VECTOR_INR_PER_GB_MONTH", "4")),
         "free_answer_eval": int(os.getenv("FREE_ANSWER_EVAL", "5")),
         "free_interview": int(os.getenv("FREE_INTERVIEW", "2")),
         "free_vector_search": int(os.getenv("FREE_VECTOR_SEARCH", "100")),

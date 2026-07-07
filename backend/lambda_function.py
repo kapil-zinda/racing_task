@@ -22,4 +22,9 @@ def lambda_handler(event, context):
         from race_api.goal_schedule_domain import run_due_reminders
 
         return run_due_reminders()
+    # EventBridge schedule: {"task": "storage_cost_daily"} computes today's per-user storage cost.
+    if isinstance(event, dict) and event.get("task") == "storage_cost_daily":
+        from race_api.storage_cost_domain import run_storage_cost_task
+
+        return run_storage_cost_task()
     return handler(event, context)

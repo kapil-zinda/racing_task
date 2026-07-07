@@ -188,6 +188,13 @@ run long enough:
 - **S3 CORS:** expose the `ETag` header (multipart uploads need it).
 - **Optional EventBridge schedule:** invoke the function every few minutes with
   `{"task":"reap_stale"}` to auto-finalize recordings abandoned on a closed tab/crash.
+- **Optional EventBridge schedule (daily storage cost):** invoke the function once a
+  day with `{"task":"storage_cost_daily"}` to compute each user's storage cost for the
+  day and append it to their `billingHistory`. For 4am IST, use the UTC cron expression
+  `cron(30 22 * * ? *)`. Pricing is configured via `PRICE_STORAGE_INR_PER_GB_MONTH`
+  (default `2`) and `PRICE_VECTOR_INR_PER_GB_MONTH` (default `4`, charged in addition
+  to the regular storage cost for documents marked Searchable); the free tier reuses
+  `USER_STORAGE_LIMIT_GB` (default `10`).
 
 ## Storage backend (S3 / Backblaze B2)
 
