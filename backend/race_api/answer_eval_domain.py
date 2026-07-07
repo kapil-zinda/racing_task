@@ -110,13 +110,21 @@ def _evaluate_with_llm(pages: List[str], question: str, max_marks: int) -> Dict[
         "Aayog', 'Missing: federalism dimension', 'Add a recent example', 'Conclusion too generic'). Tag each comment "
         "good/missing/improve and the page it belongs to.\n\n" + _EVAL_SCHEMA
     )
-    hint = ""
+    hint = (
+        "The PDF may contain answers to MORE THAN ONE question. Detect every distinct question and "
+        "evaluate each one separately as its own item in \"questions\" (with its own marks, breakdown and comments).\n"
+    )
     if question.strip():
-        hint += f"The question is: {question.strip()}\n"
+        hint += f"The question(s) provided by the candidate: {question.strip()}\n"
     if max_marks:
-        hint += f"Total marks for this submission: {max_marks}.\n"
+        hint += f"Total marks for this submission: {max_marks} (split it sensibly across the detected questions).\n"
     else:
-        hint += "Detect the question(s) and their mark allotment (UPSC questions are usually 10 or 15 markers).\n"
+        hint += (
+            "Max marks were NOT provided. Detect each question's mark allotment from the paper itself "
+            "(look for '(10 marks)', '(15 marks)', word limits like 150/250 words → 10/15 markers). "
+            "If it is genuinely not stated, default to 10 marks for ~150-word questions and 15 for ~250-word ones. "
+            "Always set a positive max_marks for every question and a correct total_max.\n"
+        )
     user = f"{hint}\nCandidate answer (page-numbered, OCR/extracted):\n{joined}"
 
     client = _openai_client()
@@ -237,7 +245,7 @@ def _annotate_pdf(pdf_bytes: bytes, result: Dict[str, Any]) -> bytes:
     if qmarks:
         header += "   (" + ", ".join(qmarks) + ")"
     w0, h0 = dims[0]
-    ops[0].append(_text_block(28, h0 - 32, 11, _wrap(header, max(20, int((w0 - 56) / 5.5)))))
+    ops[0].append(_text_block(28, h0 - 34, 14, _wrap(header, max(16, int((w0 - 56) / 7.0)))))
 
     # 2) Margin comments (red), stacked down the right column of their page.
     for q in result.get("questions", []) or []:
@@ -247,24 +255,24 @@ def _annotate_pdf(pdf_bytes: bytes, result: Dict[str, Any]) -> bytes:
             if not text:
                 continue
             w, h = dims[page]
-            x = w * 0.58
-            max_chars = max(14, int((w - 20 - x) / 4.6))
+            x = w * 0.56
+            max_chars = max(12, int((w - 20 - x) / 6.0))
             lines = _wrap("- " + text, max_chars)
-            leading = 12
-            needed = len(lines) * leading + 6
+            leading = 15
+            needed = len(lines) * leading + 8
             if cursors[page] - needed < 40:
                 continue  # column full on this page
-            ops[page].append(_text_block(x, cursors[page], 9, lines))
+            ops[page].append(_text_block(x, cursors[page], 12, lines))
             cursors[page] -= needed
 
     # 3) Overall remark (red) across the bottom of the last page.
     remark = str(result.get("overall_remark", "")).strip()
     if remark:
         wl, hl = dims[n_pages - 1]
-        lines = _wrap("Examiner remark: " + remark, max(30, int((wl - 56) / 4.6)))
-        leading = 12
-        start_y = 26 + (len(lines) - 1) * leading
-        ops[n_pages - 1].append(_text_block(28, start_y, 9, lines))
+        lines = _wrap("Examiner remark: " + remark, max(24, int((wl - 56) / 6.0)))
+        leading = 15
+        start_y = 28 + (len(lines) - 1) * leading
+        ops[n_pages - 1].append(_text_block(28, start_y, 12, lines))
 
     for i in range(n_pages):
         if ops[i]:
@@ -430,18 +438,23 @@ def _run_evaluation(eval_id: str) -> Dict[str, Any]:
             "updated_at": _now_iso(),
         }},
     )
-    logger.info("answer-eval completed id=%s marks=%s/%s", eval_id, result.get("total_awarded"), result.get("total_max"))
+    # One PDF may contain several questions; each detected question counts as one
+    # answer evaluation for billing and usage.
+    n_questions = max(1, len(result.get("questions") or []))
+    logger.info("answer-eval completed id=%s marks=%s/%s questions=%s", eval_id,
+                result.get("total_awarded"), result.get("total_max"), n_questions)
     # Charge on successful completion (free while within the free allowance). Best-effort
     # in the worker: the presign pre-check already gated affordability, so a charge here
     # should not fail — if it somehow does, don't undo a completed evaluation.
     try:
         from . import billing_domain as billing
-        billing.charge_fixed(doc.get("user_id", ""), billing.ANSWER_EVAL, {"eval_id": eval_id})
+        billing.charge_fixed(doc.get("user_id", ""), billing.ANSWER_EVAL,
+                             {"eval_id": eval_id, "questions": n_questions}, units=n_questions)
     except Exception:
         logger.exception("answer-eval billing charge failed id=%s", eval_id)
     try:
         from .storage_domain import incr_answers_evaluated
-        incr_answers_evaluated(doc.get("user_id", ""), 1)
+        incr_answers_evaluated(doc.get("user_id", ""), n_questions)
     except Exception:
         logger.exception("usage incr_answers_evaluated failed")
     return {"eval_id": eval_id, "status": "completed", "result": result}
