@@ -163,22 +163,29 @@ def _record(user_id: str, entry_type: str, kind: str, usd: float, meta: Optional
 
 # ----------------------------------------------------------------------------- charging
 
-def charge_fixed(user_id: str, kind: str, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def charge_fixed(user_id: str, kind: str, meta: Optional[Dict[str, Any]] = None, units: int = 1) -> Dict[str, Any]:
     """Charge a fixed-price action (answer_eval / interview / vector_search).
 
-    Free while the user is within the free allowance; otherwise deducts the price or
-    raises InsufficientCreditsError. Returns {"free": bool, "charged_usd": float}.
+    ``units`` bills more than one unit in a single action — e.g. an answer PDF
+    that contains N questions counts as N answer evaluations. Units are drawn
+    from the free allowance first, then charged at the fixed price each.
+    Free while within the allowance; otherwise deducts or raises
+    InsufficientCreditsError. Returns {"free": bool, "charged_usd": float, "units": int}.
     """
     uid = _uid(user_id)
+    units = max(1, int(units or 1))
     price = float(settings().get(_FIXED_PRICE_KEYS[kind]) or 0)
     used = _free_used(uid).get(kind, 0)
-    if used < _free_limit(kind):
-        return {"free": True, "charged_usd": 0.0}
+    free_remaining = max(0, _free_limit(kind) - used)
+    paid_units = max(0, units - free_remaining)
+    if paid_units == 0:
+        return {"free": True, "charged_usd": 0.0, "units": units}
+    cost = round(price * paid_units, 6)
     bal = balance_usd(uid)
-    if bal < price:
-        raise InsufficientCreditsError(kind, price, bal)
-    _record(uid, "charge", kind, price, meta)
-    return {"free": False, "charged_usd": price}
+    if bal < cost:
+        raise InsufficientCreditsError(kind, cost, bal)
+    _record(uid, "charge", kind, cost, {**(meta or {}), "units": units, "paid_units": paid_units})
+    return {"free": False, "charged_usd": cost, "units": units}
 
 
 def ensure_can_afford(user_id: str, kind: str) -> None:
