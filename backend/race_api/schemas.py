@@ -78,6 +78,10 @@ class InterviewStartRequest(BaseModel):
     daf: Optional[dict] = None
 
 
+class DafSaveRequest(BaseModel):
+    daf: dict
+
+
 class AnswerEvalPresignRequest(BaseModel):
     filename: str = "answer.pdf"
     content_type: str = "application/pdf"

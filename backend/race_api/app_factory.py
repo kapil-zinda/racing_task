@@ -36,11 +36,14 @@ from .answer_eval_domain import (
 from .extras_domain import get_extras_payload, save_extras_payload
 from .interview_domain import (
     finalize_report_payload,
+    get_daf_payload,
     get_interview_payload,
     list_interviews_payload,
+    save_daf_payload,
     start_interview_payload,
     submit_answer_payload,
 )
+from .report_domain import day_report_payload
 from .activity_tracker_domain import (
     create_activity,
     create_category,
@@ -168,6 +171,7 @@ from .schemas import (
     ChunkConcatRequest,
     ChunkPresignRequest,
     CreateSessionRequest,
+    DafSaveRequest,
     InterviewAnswerRequest,
     InterviewStartRequest,
     SessionNotesRequest,
@@ -1306,6 +1310,22 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "POST /sessions/{id}/heartbeat")
 
     # ── UPSC mock interview (virtual panel) ───────────────────────────────
+    # DAF profile (one per user). Registered before /interview/{session_id} so
+    # the literal /interview/daf path is not swallowed by the dynamic route.
+    @app.get("/interview/daf")
+    def interview_daf_get(request: Request):
+        try:
+            return get_daf_payload(_require_auth(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /interview/daf")
+
+    @app.put("/interview/daf")
+    def interview_daf_save(request: Request, payload: DafSaveRequest):
+        try:
+            return save_daf_payload(_require_auth(request), payload.daf)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "PUT /interview/daf")
+
     @app.post("/interview/start")
     def interview_start(request: Request, payload: InterviewStartRequest):
         try:
@@ -1346,6 +1366,15 @@ def create_app() -> FastAPI:
             return get_interview_payload(session_id)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /interview/{id}")
+
+    # ── Report of the day ─────────────────────────────────────────────────
+    @app.get("/report/day")
+    def report_day(request: Request, date: str = Query(default=""), sections: str = Query(default="")):
+        try:
+            picked = [s.strip() for s in (sections or "").split(",") if s.strip()]
+            return day_report_payload(_require_auth(request), date, picked or None)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /report/day")
 
     # ── UPSC Mains answer evaluation ──────────────────────────────────────
     @app.post("/answer-eval/presign")

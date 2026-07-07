@@ -65,6 +65,7 @@ def settings() -> Dict[str, Any]:
         "mongodb_agent_v2_memory_collection": os.getenv("MONGODB_AGENT_V2_MEMORY_COLLECTION", "agent_v2_memory"),
         "mongodb_agent_v2_nudges_collection": os.getenv("MONGODB_AGENT_V2_NUDGES_COLLECTION", "agent_v2_nudges"),
         "mongodb_interview_sessions_collection": os.getenv("MONGODB_INTERVIEW_SESSIONS_COLLECTION", "interview_sessions"),
+        "mongodb_daf_profiles_collection": os.getenv("MONGODB_DAF_PROFILES_COLLECTION", "daf_profiles"),
         "mongodb_answer_evaluations_collection": os.getenv("MONGODB_ANSWER_EVALUATIONS_COLLECTION", "answer_evaluations"),
         "mongodb_user_usage_collection": os.getenv("MONGODB_USER_USAGE_COLLECTION", "user_usage"),
         "app_timezone": os.getenv("APP_TIMEZONE", "Asia/Kolkata"),
@@ -173,6 +174,11 @@ def events_collection():
 def interview_sessions_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_interview_sessions_collection"]]
+
+
+def daf_profiles_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_daf_profiles_collection"]]
 
 
 def answer_evaluations_collection():

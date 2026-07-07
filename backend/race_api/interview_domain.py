@@ -3,7 +3,9 @@
 A director LLM role-plays the whole board and decides, each turn, WHO speaks
 next and WHAT they ask — DAF-driven, transcript-styled, escalating-funnel
 probing. Each member has a distinct TTS voice so it feels like a real panel.
-The interview is paced to finish in 20–30 minutes, and a final report scores the
+The board conducts a full personality test grounded in the candidate's own DAF;
+it ends when the board has naturally exhausted its lines of questioning (never
+before the minimum, never past the hard cap). A final report scores the
 candidate on the seven official UPSC qualities.
 """
 
@@ -20,32 +22,77 @@ from .agent_v2_chat_domain import (
     _synthesize_voice_base64,
     _transcribe_audio_bytes,
 )
-from .context import interview_sessions_collection, logger
+from .context import daf_profiles_collection, interview_sessions_collection, logger
 
 # ── Timing ───────────────────────────────────────────────────────────────────
-INTERVIEW_MIN_SECONDS = 20 * 60
-INTERVIEW_MAX_SECONDS = 30 * 60
-WRAP_WINDOW_SECONDS = 4 * 60   # within the last 4 min the chairman starts closing
-HARD_MAX_QUESTIONS = 40        # safety cap
+# The board is NOT run against a pre-decided countdown. It runs until the
+# director decides the board has covered the candidate's DAF and had its rounds
+# — organically between the min and the hard cap. The min stops it closing too
+# early; the hard cap is only a safety backstop.
+INTERVIEW_MIN_SECONDS = 30 * 60
+INTERVIEW_MAX_SECONDS = 45 * 60
+WRAP_WINDOW_SECONDS = 5 * 60   # within the last 5 min the chairman starts closing
+HARD_MAX_QUESTIONS = 60        # safety cap
 
 # ── The board ──────────────────────────────────────────────────────────────--
 # Voices restricted to the TTS-allowed set; chosen to sound distinct from each other.
 PANEL: List[Dict[str, str]] = [
     {"id": "chairman", "name": "Chairman", "voice": "onyx",
-     "persona": "Warm, fatherly anchor. Opens with DAF-based ice-breakers, controls hand-offs between members, and closes the interview. Measured, with occasional light humour."},
-    {"id": "economy_member", "name": "Economy Member", "voice": "echo",
-     "persona": "Sharp and analytical. Probes economy, fiscal policy, budget and development; presses for exact numbers and concrete reasons."},
-    {"id": "ethics_member", "name": "Ethics Member", "voice": "sage",
-     "persona": "Calm and Socratic. Poses specific ethical dilemmas and real situational traps; makes the candidate choose and justify."},
+     "persona": "Warm, fatherly anchor who sets the candidate at ease ('how are you feeling? have some water'). Opens with a DAF ice-breaker, controls hand-offs between members, occasionally mediates when a member is unfair, and closes the interview. Anchors questions to the candidate's home state, motivation for civil services, and one current-affairs debate near the end."},
+    {"id": "domain_member", "name": "Subject Member", "voice": "echo",
+     "persona": "Sharp and analytical. Drills the candidate's graduation discipline and OPTIONAL SUBJECT into concrete territory; presses for exact numbers, definitions, and 'give me two reasons'. Ties the optional/graduation back to governance ('as a DM, how would you use this?')."},
+    {"id": "ethics_member", "name": "Situational Member", "voice": "sage",
+     "persona": "Calm and Socratic. Poses one concrete ethical/situational dilemma grounded in a district-officer posting (protest vs project, integrity trap, development-vs-tribal). Makes the candidate CHOOSE and justify; never asks abstract definitions of ethics."},
     {"id": "daf_member", "name": "DAF Member", "voice": "coral",
-     "persona": "Curious and friendly. Drills hometown, education, hobbies, optional subject and work experience; quotes the candidate's own words back to them."},
+     "persona": "Curious and friendly. Drills hometown, home-state specifics (GI tags, forests, industries, culture), hobbies, positions of responsibility and work experience; quotes the candidate's own DAF words back at them and pivots a hobby into a governance question."},
     {"id": "current_affairs_member", "name": "Current Affairs Member", "voice": "ash",
-     "persona": "Rapid-fire devil's advocate. Current events, foreign policy and government schemes; challenges answers with 'but…' pushbacks."},
+     "persona": "Rapid-fire devil's advocate. Recent events, foreign policy, schemes and Supreme Court judgements — always anchored to the candidate's background. Challenges answers with 'but…' pushbacks and asks for the exact scheme/operation/case name."},
 ]
 PANEL_BY_ID = {m["id"]: m for m in PANEL}
 DEFAULT_VOICE = "onyx"
 
-# ── Default candidate DAF (used until a real DAF form is wired up) ────────────-
+# ── Empty DAF template (the shape the frontend form fills in) ─────────────────
+# One document per user; the interview personalises every question from this.
+DAF_TEMPLATE: Dict[str, Any] = {
+    "personal_details": {
+        "name": "",
+        "date_of_birth": "",
+        "gender": "",
+        "father_name": "",
+        "mother_name": "",
+        "home_district": "",
+        "home_state": "",
+        "mother_tongue": "",
+        "languages_known": [],
+        "medium_of_interview": "English",
+        "category": "",
+    },
+    "educational_details": {
+        "matriculation": {"board": "", "year": "", "school": ""},
+        "intermediate": {"board": "", "year": "", "school": "", "stream": ""},
+        "graduation": {"degree": "", "discipline": "", "college_university": "", "year": ""},
+        "post_graduation": {"degree": "", "discipline": "", "college_university": "", "year": ""},
+    },
+    "optional_subject": "",
+    "employment_details": {
+        "currently_employed": False,
+        "work_experience": [],  # [{designation, organization, duration}]
+    },
+    "hobbies_and_interests": [],
+    "achievements": {
+        "prizes_and_awards": [],
+        "positions_of_responsibility": [],
+        "extracurricular": [],
+    },
+    "service_preferences": [],   # ordered, e.g. ["IAS", "IPS", "IFS"]
+    "cadre_preferences": [],
+    "career_details": {
+        "why_civil_services": "",
+        "unique_points_in_daf": [],
+    },
+}
+
+# ── Default candidate DAF (demo fallback only) ────────────────────────────────
 DEFAULT_DAF: Dict[str, Any] = {
     "personal_details": {
         "name": "Aarav Sharma",
@@ -68,17 +115,22 @@ DEFAULT_DAF: Dict[str, Any] = {
     },
 }
 
-# ── Distilled style exemplars (real UPSC chains; keep the board human, not robotic) ──
+# ── Distilled style exemplars (drawn from real UPSC/IFoS board transcripts) ────
+# These are the actual rhythms of real boards — short questions, chains built on
+# the candidate's own DAF words, escalation to exact facts, and devil's advocacy.
 STYLE_EXEMPLARS = """\
-Example probing chains from real UPSC boards (mimic this rhythm — short questions, follow-ups built on the candidate's own words, escalation, and devil's advocacy):
+Real probing chains from actual UPSC/IFoS boards (mimic this rhythm — short questions, chains anchored to the candidate's DAF, escalation to exact facts, devil's advocacy, and occasional light moments):
 
-- Current-affairs funnel: "Australia banned social media for under-16s. Should India?" -> "If we did, what practical steps are needed?" -> "If a cyber crime happens, who are the stakeholders?" -> "What are personality rights?"
-- Integrity trap (no one watching): "Driving to office you break a traffic rule. The cop will let you go for two hundred rupees. No one from office saw it. What will you do?"
-- Devil's advocate: "You mentioned the Tata Nano. Why did it fail?" -> "If you re-marketed it, how?" -> "Tata folks are smart — why didn't they relaunch it?" -> "Would it succeed today?"
-- Contradiction cross-question: "Engineering, then MBA, now civil services — isn't this internal brain drain?"
-- Hobby -> governance pivot: "You said you read non-fiction — name the last book." -> "Posted as DM, what would you do for adolescent girls in your district?"
-- Exact-number drill: "What is the PLF of solar versus thermal plants?" -> "No — the exact number?"
-- Single-word interrupts when the candidate over-explains: "Second?" / "Why?" / "Only that?"
+- Home-state deep-dive (candidate from Bundelkhand): "Tell me about the forests of Bundelkhand." -> "What forests are in the Himalayas?" -> "What is a tree line?" -> "Name environmental movements that changed Indian forest policy." -> "What changed after the Chipko movement?"
+- Exact-figure drill: "What percentage of India's — and your state's — area is forest cover?" -> "I've read a different figure, are you sure?" (candidate had combined forest + tree cover). Also: "Exact figure of India's current account deficit?" / "Largest dam in the North-East and its exact MW?"
+- Hobby pivot into physics/reasoning (Badminton hobby): "Can we play badminton on the Moon?" -> "Can we play it in space?" -> "Which shuttle stays longer in air, nylon or feather?"
+- Optional-subject depth (Public Administration): "Compare the three Minnowbrook conferences." -> "How does Minnowbrook III show both change and continuity?" (Forestry/Geography optional): "What is ecological succession?" -> "This leads to?" -> "What is a climax species?"
+- DAF-word callback: candidate lists 'reflective journalling' -> "How is it different from a diary entry? Take this pen and paper and write how you'd record today's interview." Candidate has caste-name in surname -> "Is the role of caste in society increasing or decreasing? Should reservation be abolished — caste or economic criteria?"
+- Situational / district-officer dilemma: "You're a DM. The Centre and State both want a big project but people are protesting hard. How do you handle it?" / "Development vs tribal rights — your approach?"
+- Current-affairs with 'but…' pushback and exact-name demand: "Undersea cables were cut recently — how many, and total how many?" -> "Which operations, launched by which countries — who joined, who didn't?" -> "What did India launch — the exact operation name?" Also SC judgements: "Recent Fundamental Rights judgement?" (M.K. Ranjith Singh / Article 21 & climate change).
+- Motivation, kept honest: "Why civil services? — don't give me the coaching-class answer, tell me the true reason." (Chairman may offer water.)
+- Single-word interrupts when the candidate over-explains: "Second?" / "Why?" / "Only that?" / "Are you sure?"
+- Board dynamics: an incoming member briefly references the previous topic; the Chairman occasionally defends the candidate when a member is unfair, then moves on.
 """
 
 # ── 10 board rules (ported & tightened from the reference simulator) ──────────-
@@ -105,36 +157,64 @@ def _now_iso() -> str:
 def _format_daf(daf: Dict[str, Any]) -> str:
     d = daf or {}
     p = d.get("personal_details", {}) or {}
-    edu = (d.get("educational_details", {}) or {}).get("graduation", {}) or {}
+    edu = d.get("educational_details", {}) or {}
+    grad = edu.get("graduation", {}) or {}
+    pg = edu.get("post_graduation", {}) or {}
+    ach = d.get("achievements", {}) or {}
+    career = d.get("career_details", {}) or {}
     work = (d.get("employment_details", {}) or {}).get("work_experience", []) or []
-    work_str = "; ".join(f"{w.get('designation','')} at {w.get('organization','')} ({w.get('duration','')})" for w in work) or "None"
+    work_str = "; ".join(
+        f"{w.get('designation','')} at {w.get('organization','')} ({w.get('duration','')})".strip()
+        for w in work if isinstance(w, dict)
+    ) or "None"
+
+    def _join(items):
+        return ", ".join(str(x) for x in (items or []) if str(x).strip())
+
+    def _edu_line(stage):
+        parts = [stage.get("degree") or stage.get("stream"), stage.get("discipline"),
+                 stage.get("college_university") or stage.get("school"), stage.get("board"), stage.get("year")]
+        return " · ".join(str(x) for x in parts if x)
+
     lines = [
         f"Name: {p.get('name','')}",
-        f"Home: {p.get('home_district','')}, {p.get('home_state','')}",
-        f"Languages: {', '.join(p.get('languages_known', []) or [])}",
-        f"Education: {edu.get('degree','')} in {edu.get('discipline','')} ({edu.get('college_university','')})",
+        f"Home district & state: {p.get('home_district','')}, {p.get('home_state','')}",
+        f"Mother tongue: {p.get('mother_tongue','')} | Languages: {_join(p.get('languages_known'))} | Medium of interview: {p.get('medium_of_interview','')}",
+        f"Graduation: {_edu_line(grad)}" if _edu_line(grad) else "Graduation: (not given)",
+    ]
+    if _edu_line(pg):
+        lines.append(f"Post-graduation: {_edu_line(pg)}")
+    lines += [
         f"Optional subject: {d.get('optional_subject','')}",
         f"Work experience: {work_str}",
-        f"Hobbies/interests: {', '.join(d.get('hobbies_and_interests', []) or [])}",
-        f"Service preferences: {', '.join(d.get('service_preferences', []) or [])}",
-        f"Unique points: {', '.join((d.get('career_details', {}) or {}).get('unique_points_in_daf', []) or [])}",
+        f"Hobbies/interests: {_join(d.get('hobbies_and_interests'))}",
+        f"Prizes & awards: {_join(ach.get('prizes_and_awards'))}",
+        f"Positions of responsibility: {_join(ach.get('positions_of_responsibility'))}",
+        f"Extracurricular: {_join(ach.get('extracurricular'))}",
+        f"Service preferences (in order): {_join(d.get('service_preferences'))}",
+        f"Why civil services (their own reason): {career.get('why_civil_services','')}",
+        f"Unique / notable points: {_join(career.get('unique_points_in_daf'))}",
     ]
-    return "\n".join(lines)
+    return "\n".join(ln for ln in lines if ln and not ln.strip().endswith(":"))
 
 
 def _panel_roster_text() -> str:
     return "\n".join(f"- {m['id']} ({m['name']}): {m['persona']}" for m in PANEL)
 
 
-def _build_director_prompt(daf: Dict[str, Any], elapsed_s: int, wrap: bool, must_close: bool) -> str:
-    remaining = max(0, INTERVIEW_MAX_SECONDS - elapsed_s)
+def _build_director_prompt(daf: Dict[str, Any], elapsed_s: int, wrap: bool, must_close: bool, before_min: bool) -> str:
     timing = (
-        f"Time elapsed: {elapsed_s // 60} min. Time remaining (hard cap 30 min): {remaining // 60} min.\n"
+        f"Time elapsed: {elapsed_s // 60} min. A real board runs roughly 30–45 minutes, but the length is NOT fixed — "
+        "the board keeps going until it has genuinely covered the candidate's DAF (home state, education, optional subject, "
+        "hobbies, work, achievements) and every member has had at least one full round, then the Chairman closes naturally.\n"
     )
     if must_close:
-        timing += "TIME IS UP. The Chairman must give a short, warm closing remark and END now. Set \"closing\": true. Do not ask another question.\n"
+        timing += "The board has run its full course. The Chairman must give a short, warm closing remark and END now. Set \"closing\": true. Do not ask another question.\n"
     elif wrap:
-        timing += "Time is almost up. Begin wrapping up: at most one or two final questions, then the Chairman closes. You MAY set \"closing\": true with a closing remark.\n"
+        timing += "The board has covered a lot. Begin wrapping up: at most one or two final questions, then the Chairman closes. You MAY set \"closing\": true with a warm closing remark.\n"
+    elif before_min:
+        timing += ("The interview is still early — there is much more of the DAF to explore. Do NOT close yet; "
+                   "keep the conversation going and hand off between members. \"closing\" MUST be false.\n")
 
     return (
         "You ARE a five-member UPSC Civil Services interview board conducting a personality test. "
@@ -166,7 +246,8 @@ def _director_messages(prompt: str, history: List[Dict[str, Any]]) -> List[Dict[
 
 
 def _run_director(history: List[Dict[str, Any]], daf: Dict[str, Any], elapsed_s: int, wrap: bool, must_close: bool):
-    prompt = _build_director_prompt(daf, elapsed_s, wrap, must_close)
+    before_min = (not must_close) and (not wrap) and elapsed_s < INTERVIEW_MIN_SECONDS
+    prompt = _build_director_prompt(daf, elapsed_s, wrap, must_close, before_min)
     client = _openai_client()
     resp = client.chat.completions.create(
         model=_chat_model(),
@@ -188,6 +269,9 @@ def _run_director(history: List[Dict[str, Any]], daf: Dict[str, Any], elapsed_s:
         member_id = "chairman"
     if must_close:
         closing = True
+    elif before_min:
+        # Never let the board wrap up before the minimum — there's more DAF to cover.
+        closing = False
     if not question:
         question = "Thank you. That brings us to the end. We wish you the very best." if closing else "Could you tell us a little about yourself?"
     return member_id, question, closing
@@ -223,12 +307,68 @@ def _elapsed_seconds(doc: Dict[str, Any]) -> int:
         return 0
 
 
+# ── DAF profile (one per user) ────────────────────────────────────────────────
+def _daf_has_content(daf: Optional[dict]) -> bool:
+    """A DAF counts as 'filled' once the core identifying fields are present."""
+    if not isinstance(daf, dict):
+        return False
+    p = daf.get("personal_details", {}) or {}
+    grad = (daf.get("educational_details", {}) or {}).get("graduation", {}) or {}
+    return bool((p.get("name") or "").strip() and (p.get("home_state") or "").strip()
+                and (grad.get("degree") or grad.get("discipline")))
+
+
+def get_daf_payload(user_id: str) -> Dict[str, Any]:
+    uid = (user_id or "").strip()
+    if not uid:
+        raise ValueError("Authentication required")
+    doc = daf_profiles_collection().find_one({"_id": uid})
+    daf = (doc or {}).get("daf") if doc else None
+    return {
+        "daf": daf,
+        "template": DAF_TEMPLATE,
+        "filled": _daf_has_content(daf),
+        "updated_at": (doc or {}).get("updated_at") if doc else None,
+    }
+
+
+def save_daf_payload(user_id: str, daf: dict) -> Dict[str, Any]:
+    uid = (user_id or "").strip()
+    if not uid:
+        raise ValueError("Authentication required")
+    if not isinstance(daf, dict) or not daf:
+        raise ValueError("A DAF is required")
+    if not _daf_has_content(daf):
+        raise ValueError("Please fill at least your name, home state and graduation details.")
+    now = _now_iso()
+    daf_profiles_collection().update_one(
+        {"_id": uid},
+        {"$set": {"daf": daf, "user_id": uid, "updated_at": now},
+         "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+    logger.info("daf saved user=%s", uid)
+    return {"daf": daf, "filled": True, "updated_at": now}
+
+
+def _resolve_daf(user_id: str, daf: Optional[dict]) -> Dict[str, Any]:
+    """Interviews run on the candidate's own stored DAF. An explicit DAF in the
+    request (rare) wins; otherwise load the saved profile and require it."""
+    if isinstance(daf, dict) and _daf_has_content(daf):
+        return daf
+    doc = daf_profiles_collection().find_one({"_id": (user_id or "").strip()})
+    stored = (doc or {}).get("daf") if doc else None
+    if _daf_has_content(stored):
+        return stored
+    raise ValueError("Please fill your DAF before starting the interview.")
+
+
 # ── Public API ─────────────────────────────────────────────────────────────--
 def start_interview_payload(user_id: str, daf: Optional[dict] = None) -> Dict[str, Any]:
+    resolved_daf = _resolve_daf(user_id, daf)
     # Free while within the free allowance, else deduct / raise 402 — before any LLM cost.
     from . import billing_domain as billing
     billing.charge_fixed(user_id, billing.INTERVIEW, {"kind": "interview_start"})
-    resolved_daf = daf if isinstance(daf, dict) and daf else DEFAULT_DAF
     sid = f"interview:{uuid.uuid4().hex}"
     member_id, question, _ = _run_director([], resolved_daf, 0, wrap=False, must_close=False)
     now = _now_iso()
@@ -289,7 +429,11 @@ def submit_answer_payload(
     elapsed = _elapsed_seconds(doc)
     question_count = int(doc.get("question_count", 0))
     must_close = elapsed >= INTERVIEW_MAX_SECONDS or question_count >= HARD_MAX_QUESTIONS
-    wrap = (not must_close) and (elapsed >= (INTERVIEW_MAX_SECONDS - WRAP_WINDOW_SECONDS) or (elapsed >= INTERVIEW_MIN_SECONDS and question_count >= 24))
+    # After the minimum, the board may start wrapping once it has had enough rounds;
+    # otherwise it keeps going. Length is question-driven, not a fixed countdown.
+    wrap = (not must_close) and elapsed >= INTERVIEW_MIN_SECONDS and (
+        elapsed >= (INTERVIEW_MAX_SECONDS - WRAP_WINDOW_SECONDS) or question_count >= 32
+    )
 
     member_id, question, closing = _run_director(history, doc.get("daf", DEFAULT_DAF), elapsed, wrap, must_close)
     history.append({"role": "assistant", "panel_member": member_id, "content": question, "at": _now_iso()})

@@ -37,8 +37,16 @@ function EvalResult({ data }) {
       <div className="ae-score">
         <div className="ae-score-num">{result.total_awarded}<span>/{result.total_max}</span></div>
         <div className="ae-actions">
-          {data.marked_url ? <a className="btn-day" href={data.marked_url} target="_blank" rel="noreferrer">Open marked PDF</a> : null}
-          {data.marked_download_url ? <a className="btn-day" href={data.marked_download_url}>Download marked PDF</a> : null}
+          {data.marked_url ? (
+            <a className="ae-pdf-btn" href={data.marked_url} target="_blank" rel="noreferrer">
+              <Icon name="eye" size={15} /> Open marked PDF
+            </a>
+          ) : null}
+          {data.marked_download_url ? (
+            <a className="ae-pdf-btn primary" href={data.marked_download_url}>
+              <Icon name="download" size={15} /> Download marked PDF
+            </a>
+          ) : null}
         </div>
       </div>
 
