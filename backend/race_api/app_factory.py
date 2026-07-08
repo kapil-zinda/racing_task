@@ -333,6 +333,17 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=401, detail="Not authenticated")
         return user
 
+    # Manual trigger for the storage_cost_daily cron task (see lambda_function.py) —
+    # lets it be exercised over uvicorn locally instead of only via Lambda self-invoke.
+    @app.post("/admin/storage-cost-daily")
+    def admin_storage_cost_daily():
+        try:
+            from .storage_cost_domain import run_storage_cost_task
+
+            return run_storage_cost_task()
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /admin/storage-cost-daily")
+
     @app.get("/state")
     def get_state(date: Optional[str] = Query(default=None)):
         try:
@@ -1398,6 +1409,15 @@ def create_app() -> FastAPI:
             return storage_status_payload(_req_user_id(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /storage")
+
+    @app.get("/storage/cost-history")
+    def storage_cost_history(request: Request):
+        try:
+            from .storage_cost_domain import storage_cost_history_payload
+
+            return storage_cost_history_payload(_req_user_id(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /storage/cost-history")
 
     # ── Day Activity Tracker ──────────────────────────────────────────────
     @app.get("/tracker/activities")

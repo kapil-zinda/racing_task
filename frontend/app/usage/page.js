@@ -4,22 +4,34 @@
 // go through Razorpay in INR, converted from the USD amount at the server's rate.
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { apiFetch, useAuth } from "../lib/auth";
 import { useCredits } from "../lib/credits";
 import MainMenu from "../components/MainMenu";
 import RazorpayCheckout from "../components/RazorpayCheckout";
 import Icon from "../components/Icon";
 
+const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
 const fmtUsd = (n) => `$${Number(n || 0).toFixed(2)}`;
+const fmtInr = (n) => `₹${Number(n || 0).toFixed(2)}`;
 const fmtNum = (n) => Number(n || 0).toLocaleString();
+
+const CHART_DARK = {
+  paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+  font: { color: "#c7cede" }, margin: { t: 10, r: 10, b: 40, l: 40 },
+  barmode: "stack",
+  legend: { orientation: "h", y: -0.2 },
+};
 
 export default function UsagePage() {
   const { auth } = useAuth();
   const { credits, refreshCredits } = useCredits();
 
   const [storage, setStorage] = useState(null);
+  const [costHistory, setCostHistory] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [addUsd, setAddUsd] = useState("5");
@@ -39,9 +51,22 @@ export default function UsagePage() {
     }
   }, []);
 
-  useEffect(() => { loadStorage(); refreshCredits(); }, [loadStorage, refreshCredits]);
+  const loadCostHistory = useCallback(async () => {
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/storage/cost-history`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+      setCostHistory(body);
+    } catch (err) {
+      setError(String(err.message || err));
+    }
+  }, []);
 
-  const refreshAll = () => { loadStorage(); refreshCredits(); };
+  useEffect(() => { loadStorage(); loadCostHistory(); refreshCredits(); }, [loadStorage, loadCostHistory, refreshCredits]);
+
+  const refreshAll = () => { loadStorage(); loadCostHistory(); refreshCredits(); };
+
+  const history_ = costHistory?.history || [];
 
   // Storage
   const usedGb = storage?.used_gb ?? 0;
@@ -191,6 +216,41 @@ export default function UsagePage() {
               <div className="goal-stat"><span className="goal-stat-num">{fmtNum(storage.qna_questions)}</span><span className="goal-stat-lbl">QnA questions</span></div>
             </section>
           </>
+        )}
+
+        {/* Storage cost (INR) — from billingHistory */}
+        {costHistory && (
+          <section className="usage-card">
+            <div className="usage-card-head">
+              <h3>Storage cost</h3>
+              <span className="usage-of">{fmtInr(costHistory.thisMonth?.total)} this month</span>
+            </div>
+
+            <div className="goal-stat-row" style={{ marginBottom: history_.length ? 20 : 0 }}>
+              <div className="goal-stat">
+                <span className="goal-stat-num">{fmtInr(costHistory.today?.total)}</span>
+                <span className="goal-stat-lbl">Today ({fmtInr(costHistory.today?.cost)} storage + {fmtInr(costHistory.today?.additionalCost)} vector)</span>
+              </div>
+              <div className="goal-stat">
+                <span className="goal-stat-num">{fmtInr(costHistory.thisMonth?.total)}</span>
+                <span className="goal-stat-lbl">This month ({fmtInr(costHistory.thisMonth?.cost)} storage + {fmtInr(costHistory.thisMonth?.additionalCost)} vector)</span>
+              </div>
+            </div>
+
+            {history_.length ? (
+              <Plot
+                data={[
+                  { type: "bar", name: "Storage", x: history_.map((h) => h.date), y: history_.map((h) => h.cost), marker: { color: "#6366f1" } },
+                  { type: "bar", name: "Searchable / vector", x: history_.map((h) => h.date), y: history_.map((h) => h.additionalCost), marker: { color: "#ec4899" } },
+                ]}
+                layout={{ ...CHART_DARK, height: 260 }}
+                config={{ displayModeBar: false, responsive: true }}
+                style={{ width: "100%" }}
+              />
+            ) : (
+              <div className="goal-empty sm">No storage charges yet.</div>
+            )}
+          </section>
         )}
       </div>
     </div>
