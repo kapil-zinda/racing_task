@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { friendlyApiError } from "../../lib/errors";
 import MainMenu from "../../components/MainMenu";
 import Icon from "../../components/Icon";
 import GoalTree from "../../components/goal/GoalTree";
@@ -40,7 +41,7 @@ export default function GoalDetailPage() {
       setNodes(tree.nodes || []);
       setActivity(act.activity || []);
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
     } finally {
       setLoading(false);
     }
@@ -58,7 +59,7 @@ export default function GoalDetailPage() {
         getGoal(goalId), getTree(goalId), getActivity(goalId, 200),
       ]);
       setGoal(g); setNodes(tree.nodes || []); setActivity(act.activity || []);
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
   }, [goalId]);
 
   const handleAddChild = async (parentId) => {
@@ -68,7 +69,7 @@ export default function GoalDetailPage() {
       const created = await createNode({ goal_id: goalId, parent_id: parentId, title: title.trim() });
       await refresh();
       setSelectedId(created.id);
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
   };
 
   const handleAddRoot = async () => {
@@ -78,7 +79,7 @@ export default function GoalDetailPage() {
       const created = await createNode({ goal_id: goalId, title: title.trim() });
       await refresh();
       setSelectedId(created.id);
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
   };
 
   const handleUpdate = async (nodeId, patch) => {
@@ -96,7 +97,7 @@ export default function GoalDetailPage() {
       await deleteNode(node.id);
       if (selectedId === node.id) setSelectedId(null);
       await refresh();
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
   };
 
   const handleDeleteGoal = async () => {
@@ -110,12 +111,12 @@ export default function GoalDetailPage() {
     try {
       await deleteGoal(goalId);
       router.push("/goals");
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
   };
 
   const handleMove = async (nodeId, newParentId) => {
     try { await moveNode(nodeId, { new_parent_id: newParentId }); await refresh(); }
-    catch (err) { setError(String(err.message || err)); }
+    catch (err) { setError(friendlyApiError(err)); }
   };
 
   return (

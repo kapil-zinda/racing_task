@@ -13,6 +13,7 @@ import ComparisonCharts from "../components/goal/ComparisonCharts";
 import Icon from "../components/Icon";
 import styles from "../components/goal/MindfulHero.module.css"; // hero + goals-list skeleton styles
 import { listGoals, createGoal, getDashboard } from "../lib/goalApi";
+import { friendlyApiError } from "../lib/errors";
 
 export default function GoalsPage() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function GoalsPage() {
       setGoals(data.goals || []);
       setDash(dashboard);
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
     } finally {
       setLoading(false);
     }
