@@ -13,6 +13,7 @@ from .constants import PLAYERS, POINTS_MAP
 from . import auth_service as _auth_service
 from .auth_router import router as auth_router
 from .context import settings as _settings
+from .rate_limit import check_rate_limit
 from .content_domain import (
     copy_item,
     complete_upload,
@@ -33,7 +34,13 @@ from .answer_eval_domain import (
     list_answer_evals_payload,
     presign_answer_upload_payload,
 )
-from .extras_domain import get_extras_payload, save_extras_payload
+from .extras_domain import (
+    create_extra_category,
+    delete_extra_category,
+    get_extra_categories,
+    get_extras_payload,
+    save_extras_payload,
+)
 from .interview_domain import (
     finalize_report_payload,
     get_daf_payload,
@@ -55,6 +62,31 @@ from .activity_tracker_domain import (
     update_activity,
 )
 from .context import current_date_str, logger
+from .live_session_domain import (
+    get_active_live_session,
+    get_day_full,
+    get_day_full_summary,
+    get_member_day_focus,
+    get_member_month_overview,
+    heartbeat_live_session,
+    init_live_session_service,
+    pause_live_session,
+    resume_live_session,
+    start_live_session,
+    stop_live_session,
+)
+from .group_domain import (
+    create_group,
+    get_group,
+    get_group_live_status,
+    init_group_service,
+    join_group,
+    join_group_by_code,
+    leave_group,
+    list_my_groups,
+    search_groups,
+)
+from .leaderboard_domain import global_leaderboard, group_leaderboard, list_leaderboard_categories
 from .race_domain import (
     add_points_payload,
     build_mission_control_payload,
@@ -149,11 +181,17 @@ from .mindmap_domain import (
     list_mindmaps,
     update_mindmap,
 )
-from .payment_domain import create_order_payload, verify_payment_payload, credit_balance_payload
+from .payment_domain import create_order_payload, verify_payment_payload, verify_webhook_payload, credit_balance_payload
 from .contact_domain import send_contact_message
 from .schemas import (
     ActivityCategoryRequest,
     ActivityUpsertRequest,
+    LiveSessionStartRequest,
+    LiveSessionHeartbeatRequest,
+    LiveSessionSyncRequest,
+    GroupCreateRequest,
+    GroupJoinRequest,
+    GroupJoinByCodeRequest,
     MindmapUpsertRequest,
     AddPointsRequest,
     DeletePointsEventRequest,
@@ -176,6 +214,7 @@ from .schemas import (
     InterviewStartRequest,
     SessionNotesRequest,
     ExtrasUpsertRequest,
+    ExtraCategoryRequest,
     MultipartAbortRequest,
     MultipartCompleteRequest,
     MultipartPartRequest,
@@ -234,7 +273,22 @@ from .session_domain import (
 )
 
 
-_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/contact"}
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/contact", "/razorpay/webhook"}
+
+# (method, path) -> (limit, window_seconds, key_kind). "ip" keys off the client address;
+# "user" keys off the authenticated user_id (falls back to IP if somehow unauthenticated —
+# these routes require auth anyway). Auth-endpoint limits guard against OTP email spam and
+# credential stuffing; paid-endpoint limits guard against burst free-tier farming.
+_RATE_LIMITS = {
+    ("POST", "/auth/signup"): (5, 3600, "ip"),
+    ("POST", "/auth/resend-otp"): (3, 300, "ip"),
+    ("POST", "/auth/verify-otp"): (10, 300, "ip"),
+    ("POST", "/auth/signin"): (10, 300, "ip"),
+    ("POST", "/interview/start"): (5, 60, "user"),
+    ("POST", "/answer-eval/presign"): (10, 60, "user"),
+    ("GET", "/pdf-search/query"): (30, 60, "user"),
+    ("POST", "/qna/ask"): (20, 60, "user"),
+}
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -257,6 +311,17 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         elif auth_required and not is_public:
             logger.warning("%s %s -> 401 missing API key", method, path)
             return JSONResponse({"detail": "Missing X-API-Key header"}, status_code=401)
+
+        policy = _RATE_LIMITS.get((method, path))
+        if policy:
+            limit, window, key_kind = policy
+            client_ip = request.client.host if request.client else "unknown"
+            rl_key = f"{method}:{path}:{user_id or client_ip}" if key_kind == "user" else f"{method}:{path}:{client_ip}"
+            try:
+                check_rate_limit(rl_key, limit, window)
+            except HTTPException as err:
+                logger.warning("%s %s -> 429 rate limited (%s)", method, path, rl_key)
+                return JSONResponse({"detail": err.detail}, status_code=err.status_code)
 
         logger.info("--> %s %s user=%s", method, path, user_id or "-")
         start = time.monotonic()
@@ -306,6 +371,9 @@ def _raise_as_http(err: Exception, endpoint_name: str) -> None:
     if isinstance(err, ValueError):
         logger.warning("%s -> 400 (ValueError): %s", endpoint_name, err)
         raise HTTPException(status_code=400, detail=str(err))
+    if isinstance(err, PermissionError):
+        logger.warning("%s -> 403: %s", endpoint_name, err)
+        raise HTTPException(status_code=403, detail=str(err))
     if isinstance(err, (LookupError, FileNotFoundError)):
         logger.warning("%s -> 404: %s", endpoint_name, err)
         raise HTTPException(status_code=404, detail=str(err))
@@ -319,7 +387,7 @@ def create_app() -> FastAPI:
     app.add_middleware(APIKeyMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=_settings().get("cors_allowed_origins") or [],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -329,6 +397,8 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def _startup():
         _auth_service.init_auth_service()
+        init_live_session_service()
+        init_group_service()
 
     @app.get("/user/me")
     def user_me(request: Request):
@@ -1129,6 +1199,27 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "PUT /extras")
 
+    @app.get("/extras/categories")
+    def extras_get_categories(request: Request):
+        try:
+            return {"categories": get_extra_categories(_req_user_id(request))}
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /extras/categories")
+
+    @app.post("/extras/categories")
+    def extras_create_category(request: Request, payload: ExtraCategoryRequest):
+        try:
+            return create_extra_category(_req_user_id(request), payload.name, payload.color)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /extras/categories")
+
+    @app.delete("/extras/categories/{name}")
+    def extras_delete_category(name: str, request: Request):
+        try:
+            return delete_extra_category(_req_user_id(request), name)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "DELETE /extras/categories/{name}")
+
     @app.post("/points")
     def add_points(request: Request, payload: AddPointsRequest):
         try:
@@ -1383,6 +1474,7 @@ def create_app() -> FastAPI:
             return presign_answer_upload_payload(
                 _req_user_id(request), payload.filename, payload.content_type,
                 payload.question, payload.max_marks, payload.subject,
+                payload.has_diagrams, payload.language,
             )
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /answer-eval/presign")
@@ -1489,6 +1581,175 @@ def create_app() -> FastAPI:
         except Exception as err:
             _raise_as_http(err, "DELETE /tracker/categories/{name}")
 
+    @app.get("/tracker/day-full")
+    def tracker_day_full(request: Request, date: Optional[str] = Query(default=None)):
+        try:
+            return get_day_full(_req_user_id(request), date or "")
+        except Exception as err:
+            _raise_as_http(err, "GET /tracker/day-full")
+
+    @app.get("/tracker/day-full-summary")
+    def tracker_day_full_summary(
+        request: Request,
+        start_date: Optional[str] = Query(default=None),
+        end_date: Optional[str] = Query(default=None),
+    ):
+        try:
+            return get_day_full_summary(_req_user_id(request), start_date or "", end_date or "")
+        except Exception as err:
+            _raise_as_http(err, "GET /tracker/day-full-summary")
+
+    # ── Live study timer (YeolPumTa-style) ─────────────────────────────────
+    @app.post("/live/start")
+    def live_start(request: Request, payload: LiveSessionStartRequest):
+        try:
+            return start_live_session(_req_user_id(request), payload.model_dump())
+        except Exception as err:
+            _raise_as_http(err, "POST /live/start")
+
+    @app.get("/live/active")
+    def live_active(request: Request):
+        try:
+            return get_active_live_session(_req_user_id(request))
+        except Exception as err:
+            _raise_as_http(err, "GET /live/active")
+
+    @app.post("/live/{session_id}/heartbeat")
+    def live_heartbeat(session_id: str, request: Request, payload: LiveSessionHeartbeatRequest):
+        try:
+            return heartbeat_live_session(_req_user_id(request), session_id, payload.elapsed_seconds)
+        except Exception as err:
+            _raise_as_http(err, "POST /live/{id}/heartbeat")
+
+    @app.post("/live/{session_id}/pause")
+    def live_pause(session_id: str, request: Request, payload: LiveSessionSyncRequest):
+        try:
+            return pause_live_session(_req_user_id(request), session_id, payload.elapsed_seconds, payload.reason)
+        except Exception as err:
+            _raise_as_http(err, "POST /live/{id}/pause")
+
+    @app.post("/live/{session_id}/resume")
+    def live_resume(session_id: str, request: Request, payload: LiveSessionSyncRequest):
+        try:
+            return resume_live_session(_req_user_id(request), session_id, payload.elapsed_seconds, payload.reason)
+        except Exception as err:
+            _raise_as_http(err, "POST /live/{id}/resume")
+
+    @app.post("/live/{session_id}/stop")
+    def live_stop(session_id: str, request: Request, payload: LiveSessionSyncRequest):
+        try:
+            return stop_live_session(_req_user_id(request), session_id, payload.elapsed_seconds)
+        except Exception as err:
+            _raise_as_http(err, "POST /live/{id}/stop")
+
+    # ── Study groups ────────────────────────────────────────────────────────
+    @app.post("/groups")
+    def groups_create(request: Request, payload: GroupCreateRequest):
+        try:
+            return create_group(_req_user_id(request), payload.model_dump())
+        except Exception as err:
+            _raise_as_http(err, "POST /groups")
+
+    @app.get("/groups/search")
+    def groups_search(
+        request: Request,
+        q: str = Query(default=""),
+        category: str = Query(default=""),
+        limit: int = Query(default=20),
+        skip: int = Query(default=0),
+    ):
+        try:
+            return search_groups(_req_user_id(request), q, category, limit, skip)
+        except Exception as err:
+            _raise_as_http(err, "GET /groups/search")
+
+    @app.get("/groups/mine")
+    def groups_mine(request: Request):
+        try:
+            return list_my_groups(_req_user_id(request))
+        except Exception as err:
+            _raise_as_http(err, "GET /groups/mine")
+
+    @app.post("/groups/join-by-code")
+    def groups_join_by_code(request: Request, payload: GroupJoinByCodeRequest):
+        try:
+            return join_group_by_code(_req_user_id(request), payload.join_code)
+        except Exception as err:
+            _raise_as_http(err, "POST /groups/join-by-code")
+
+    @app.post("/groups/{group_id}/join")
+    def groups_join(group_id: str, request: Request, payload: GroupJoinRequest):
+        try:
+            return join_group(_req_user_id(request), group_id, payload.join_code)
+        except Exception as err:
+            _raise_as_http(err, "POST /groups/{id}/join")
+
+    @app.post("/groups/{group_id}/leave")
+    def groups_leave(group_id: str, request: Request):
+        try:
+            return leave_group(_req_user_id(request), group_id)
+        except Exception as err:
+            _raise_as_http(err, "POST /groups/{id}/leave")
+
+    @app.get("/groups/{group_id}")
+    def groups_get(group_id: str, request: Request):
+        try:
+            return get_group(_req_user_id(request), group_id)
+        except Exception as err:
+            _raise_as_http(err, "GET /groups/{id}")
+
+    @app.get("/groups/{group_id}/live-status")
+    def groups_live_status(group_id: str, request: Request):
+        try:
+            return get_group_live_status(_req_user_id(request), group_id)
+        except Exception as err:
+            _raise_as_http(err, "GET /groups/{id}/live-status")
+
+    @app.get("/groups/{group_id}/members/{member_user_id}/overview")
+    def groups_member_overview(group_id: str, member_user_id: str, request: Request, month: str = Query(default="")):
+        try:
+            return get_member_month_overview(_req_user_id(request), group_id, member_user_id, month)
+        except Exception as err:
+            _raise_as_http(err, "GET /groups/{id}/members/{id}/overview")
+
+    @app.get("/groups/{group_id}/members/{member_user_id}/day")
+    def groups_member_day(group_id: str, member_user_id: str, request: Request, date: str = Query(default="")):
+        try:
+            return get_member_day_focus(_req_user_id(request), group_id, member_user_id, date)
+        except Exception as err:
+            _raise_as_http(err, "GET /groups/{id}/members/{id}/day")
+
+    # ── Leaderboard ────────────────────────────────────────────────────────
+    @app.get("/leaderboard/group/{group_id}")
+    def leaderboard_group(
+        group_id: str,
+        request: Request,
+        period: str = Query(default="week"),
+        category: str = Query(default=""),
+    ):
+        try:
+            return group_leaderboard(_req_user_id(request), group_id, period, category)
+        except Exception as err:
+            _raise_as_http(err, "GET /leaderboard/group/{id}")
+
+    @app.get("/leaderboard/global")
+    def leaderboard_global(
+        request: Request,
+        period: str = Query(default="week"),
+        category: str = Query(default=""),
+    ):
+        try:
+            return global_leaderboard(_req_user_id(request), period, category)
+        except Exception as err:
+            _raise_as_http(err, "GET /leaderboard/global")
+
+    @app.get("/leaderboard/categories")
+    def leaderboard_categories(request: Request):
+        try:
+            return list_leaderboard_categories(_req_user_id(request))
+        except Exception as err:
+            _raise_as_http(err, "GET /leaderboard/categories")
+
     # ── Mind Map Studio ───────────────────────────────────────────────────
     @app.get("/mindmaps")
     def mindmaps_list(
@@ -1539,7 +1800,7 @@ def create_app() -> FastAPI:
                 payload.currency,
                 payload.receipt,
                 notes=payload.notes,
-                user_id=_req_user_id(request),
+                user_id=_require_auth(request),
             )
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /payments/create-order")
@@ -1551,7 +1812,7 @@ def create_app() -> FastAPI:
                 payload.razorpay_order_id,
                 payload.razorpay_payment_id,
                 payload.razorpay_signature,
-                user_id=_req_user_id(request),
+                user_id=_require_auth(request),
             )
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /payments/verify")
@@ -1559,9 +1820,21 @@ def create_app() -> FastAPI:
     @app.get("/payments/credits")
     def payments_credits(request: Request):
         try:
-            return credit_balance_payload(_req_user_id(request))
+            return credit_balance_payload(_require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /payments/credits")
+
+    @app.post("/razorpay/webhook")
+    async def razorpay_webhook(request: Request):
+        # Razorpay calls this with no X-API-Key — the HMAC signature check below is its
+        # authentication. Must read the raw body (not a parsed Pydantic model): signature
+        # verification is over the exact bytes Razorpay sent.
+        try:
+            raw_body = await request.body()
+            signature = request.headers.get("X-Razorpay-Signature", "")
+            return verify_webhook_payload(raw_body, signature)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /razorpay/webhook")
 
     @app.post("/contact")
     def contact(payload: ContactRequest):
