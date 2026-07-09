@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "../lib/auth";
 import { useCredits } from "../lib/credits";
 import Icon from "./Icon";
@@ -41,7 +40,10 @@ const NAV_GROUPS = [
   },
   {
     heading: "Account",
-    items: [{ key: "usage", label: "Usage", href: "/usage", icon: "usage" }],
+    items: [
+      { key: "usage", label: "Usage", href: "/usage", icon: "usage" },
+      { key: "settings", label: "Settings", href: "/settings", icon: "settings" },
+    ],
   },
 ];
 
@@ -51,9 +53,8 @@ const DRAWER_ID = "main-menu-drawer";
 
 export default function MainMenu({ active = "" }) {
   const [open, setOpen] = useState(false);
-  const { auth, signOut } = useAuth();
+  const { auth } = useAuth();
   const { credits, refreshCredits } = useCredits();
-  const router = useRouter();
 
   // Ambient credit awareness: make sure the summary is loaded once we're signed in.
   // (CreditsProvider caches it; this is a no-op refresh if already fetched elsewhere.)
@@ -65,12 +66,6 @@ export default function MainMenu({ active = "" }) {
   const showChip = Boolean(auth) && balance != null;
   const chipZero = showChip && balance <= 0;
   const chipLabel = showChip ? `$${balance.toFixed(2)}` : "";
-
-  const handleSignOut = () => {
-    signOut();
-    setOpen(false);
-    router.push("/auth/signin");
-  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -102,18 +97,6 @@ export default function MainMenu({ active = "" }) {
         <span className="nav-bar-line" />
         <span className="nav-bar-line" />
       </button>
-
-      {showChip && (
-        <Link
-          href="/usage"
-          className={`nav-credit-chip ${open ? "is-hidden" : ""} ${chipZero ? "zero" : ""}`}
-          aria-label={`Credit balance ${chipLabel} — open usage`}
-          tabIndex={open ? -1 : 0}
-        >
-          <Icon name="wallet" size={13} />
-          <span>{chipLabel}</span>
-        </Link>
-      )}
 
       {/* Reserves the header space the old inline menu used, so page layout is unchanged. */}
       <div className="main-menu-spacer" aria-hidden="true" />
@@ -183,10 +166,17 @@ export default function MainMenu({ active = "" }) {
             </Link>
           )}
           {auth ? (
-            <div className="side-auth-row">
+            <Link
+              href="/settings"
+              className="side-auth-row"
+              onClick={() => setOpen(false)}
+              tabIndex={drawerTab}
+            >
               <span className="side-auth-email">{auth.name || auth.email}</span>
-              <button className="side-signout-btn" onClick={handleSignOut} tabIndex={drawerTab}>Sign out</button>
-            </div>
+              <span className="side-settings-chip">
+                <Icon name="settings" size={14} /> Settings
+              </span>
+            </Link>
           ) : (
             <Link href="/auth/signin" className="side-signin-link" onClick={() => setOpen(false)} tabIndex={drawerTab}>
               Sign in
