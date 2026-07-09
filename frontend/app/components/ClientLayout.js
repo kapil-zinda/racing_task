@@ -5,6 +5,7 @@ import { CreditsProvider } from "../lib/credits";
 import AuthGuard from "./AuthGuard";
 import DialogHost from "./DialogHost";
 import CreditGuard from "./CreditGuard";
+import KeyboardShortcuts from "./KeyboardShortcuts";
 
 export default function ClientLayout({ children }) {
   return (
@@ -13,6 +14,7 @@ export default function ClientLayout({ children }) {
         <AuthGuard>{children}</AuthGuard>
         <DialogHost />
         <CreditGuard />
+        <KeyboardShortcuts />
       </CreditsProvider>
     </AuthProvider>
   );
