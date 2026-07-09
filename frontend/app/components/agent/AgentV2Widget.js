@@ -394,31 +394,27 @@ export default function AgentV2Widget() {
   return (
     <div className="agent-v2-wrap">
       <button
-        className="agent-v2-fab animal"
+        className="agent-v2-fab"
         onClick={() => {
           if (recorderRunning) return;
           setOpen((v) => !v);
         }}
-        aria-label="Voice Animal Agent"
+        aria-label="Voice study assistant"
+        aria-expanded={open}
         disabled={recorderRunning}
       >
-        <span className="animal-icon"><Icon name="rabbit" /></span>
+        <Icon name="mic" />
       </button>
       {open ? (
-        <div className="agent-v2-panel animal-only">
-          <div className="pet-stage">
-            <div className={`pet-bunny ${userSpeaking ? "user-speaking" : ""} ${agentSpeaking ? "agent-speaking" : ""}`}>
-              <span className="pet-ear left" />
-              <span className="pet-ear right" />
-              <span className="pet-face">
-                <span className="pet-eye left" />
-                <span className="pet-eye right" />
-                <span className="pet-nose" />
-                <span className="pet-mouth" />
-              </span>
-            </div>
+        <div className="agent-v2-panel voice-only">
+          <div className="agent-voice-stage" aria-hidden="true">
+            <span
+              className={`agent-voice-ring ${userSpeaking ? "user-speaking" : ""} ${agentSpeaking ? "agent-speaking" : ""}`}
+            >
+              <Icon name="audio" size={22} />
+            </span>
           </div>
-          <div className="pet-status-row">
+          <div className="pet-status-row" role="status">
             <span className={`pet-dot ${status === "live" ? "live" : status === "connecting" ? "connecting" : "idle"}`} />
             <span className="agent-v2-state">{statusText}</span>
           </div>
