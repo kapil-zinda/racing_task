@@ -7,7 +7,7 @@ import { useCallback, useState } from "react";
 import { createOrder, verifyPayment, loadRazorpayScript } from "../lib/paymentApi";
 
 export default function RazorpayCheckout({
-  amount,                 // in paise (integer); minimum 100
+  amount,                 // in paise (integer); minimum 100 — ignored when createOrderFn is passed
   currency = "INR",
   receipt = "",
   notes = {},
@@ -18,6 +18,7 @@ export default function RazorpayCheckout({
   label = "Pay now",
   className = "goal-btn primary",
   disabled = false,
+  createOrderFn,          // optional: () => Promise<order> — defaults to the credit top-up order
   onSuccess,              // (verifyResult, razorpayResponse) => void
   onFailure,              // (error) => void
   onDismiss,              // () => void
@@ -31,7 +32,9 @@ export default function RazorpayCheckout({
       await loadRazorpayScript();
 
       // 1. Create the order on the backend (amount validated + Razorpay order created there).
-      const order = await createOrder({ amount, currency, receipt, notes });
+      const order = createOrderFn
+        ? await createOrderFn()
+        : await createOrder({ amount, currency, receipt, notes });
 
       // 2. Resolve the public key: backend response first, then the Next.js public env var.
       const keyId = order.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "";
@@ -83,7 +86,7 @@ export default function RazorpayCheckout({
       setBusy(false);
       onFailure?.(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [busy, amount, currency, receipt, notes, name, description, prefill, theme, onSuccess, onFailure, onDismiss]);
+  }, [busy, amount, currency, receipt, notes, name, description, prefill, theme, createOrderFn, onSuccess, onFailure, onDismiss]);
 
   return (
     <button type="button" className={className} onClick={handleClick} disabled={disabled || busy}>

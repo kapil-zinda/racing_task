@@ -20,11 +20,22 @@ class VerifyOtpRequest(BaseModel):
 
 class ResendOtpRequest(BaseModel):
     email: str
+    purpose: str = "signup"
 
 
 class SigninRequest(BaseModel):
     email: str
     password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    otp: str
+    new_password: str
 
 
 def _raise_http(err: Exception):
@@ -56,7 +67,7 @@ def verify_otp(payload: VerifyOtpRequest):
 @router.post("/resend-otp")
 def resend_otp(payload: ResendOtpRequest):
     try:
-        return auth_service.resend_otp(payload.email)
+        return auth_service.resend_otp(payload.email, payload.purpose)
     except Exception as err:
         _raise_http(err)
 
@@ -65,5 +76,21 @@ def resend_otp(payload: ResendOtpRequest):
 def signin(payload: SigninRequest):
     try:
         return auth_service.signin(payload.email, payload.password)
+    except Exception as err:
+        _raise_http(err)
+
+
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest):
+    try:
+        return auth_service.forgot_password(payload.email)
+    except Exception as err:
+        _raise_http(err)
+
+
+@router.post("/reset-password")
+def reset_password(payload: ResetPasswordRequest):
+    try:
+        return auth_service.reset_password(payload.email, payload.otp, payload.new_password)
     except Exception as err:
         _raise_http(err)

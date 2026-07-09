@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
+import { friendlyApiError } from "../lib/errors";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
@@ -74,7 +75,7 @@ export default function TimeTracker({ onLogActivity }) {
       const data = await res.json();
       setDays(Array.isArray(data.days) ? data.days : []);
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
     } finally {
       setLoading(false);
     }

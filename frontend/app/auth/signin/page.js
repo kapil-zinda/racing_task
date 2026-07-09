@@ -5,6 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, apiSignin } from "../../lib/auth";
 import Icon from "../../components/Icon";
+import { friendlyAuthError } from "../../lib/errors";
+import styles from "../auth.module.css";
+
+// Map errors to friendly copy — never surface raw backend/fetch strings.
+const friendlyError = (err) =>
+  friendlyAuthError(err, "We couldn't sign you in — check your email and password and try again.");
 
 export default function SigninPage() {
   const { signIn } = useAuth();
@@ -23,7 +29,7 @@ export default function SigninPage() {
       signIn(data);
       router.replace("/home");
     } catch (err) {
-      setError(err.message);
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -41,21 +47,30 @@ export default function SigninPage() {
           </div>
           <h1 className="auth-title">Sign in</h1>
           <form onSubmit={handleSubmit} className="auth-form">
-            <label className="auth-label">Email</label>
+            <label className="auth-label" htmlFor="signin-email">Email</label>
             <input
+              id="signin-email"
               className="auth-input"
               type="email"
+              autoComplete="email"
               placeholder="you@example.com"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               required
               autoFocus
             />
-            <label className="auth-label">Password</label>
+            <div className={styles.labelRow}>
+              <label className="auth-label" htmlFor="signin-password">Password</label>
+              <Link href="/auth/forgot-password" className="auth-link">
+                Forgot password?
+              </Link>
+            </div>
             <div className="auth-pass-wrap">
               <input
+                id="signin-password"
                 className="auth-input"
                 type={showPass ? "text" : "password"}
+                autoComplete="current-password"
                 placeholder="••••••••"
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
@@ -72,11 +87,19 @@ export default function SigninPage() {
                 <Icon name={showPass ? "eye-off" : "eye"} size={18} />
               </button>
             </div>
-            {error && <p className="auth-error">{error}</p>}
+            {error && (
+              <p className="auth-error" role="alert">
+                {error}
+              </p>
+            )}
             <button className="auth-btn" type="submit" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
+          <p className={styles.helpLine}>
+            Trouble signing in? Email{" "}
+            <a href="mailto:support@dias.uchhal.in">support@dias.uchhal.in</a>
+          </p>
           <p className="auth-foot">
             No account?{" "}
             <Link href="/auth/signup" className="auth-link">

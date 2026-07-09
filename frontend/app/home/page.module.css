@@ -1,0 +1,272 @@
+/* Home page — hero row, local quote, onboarding checklist, extras helpers.
+   Tokens: bg #0b0f1a · card #131826 · border #222a3d · ink #e7ecf5 · muted #8b95a7
+   gold #ffd166 (one per screen) · cyan #72ddf7 · mint #80ed99 */
+
+/* ── Hero ──────────────────────────────────────────────────────────────── */
+.heroRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.heroDate {
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e7ecf5;
+}
+
+.heroQuote {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #8b95a7;
+  max-width: 62ch;
+}
+
+.heroQuoteAuthor {
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+/* Secondary pill button in the hero row (replaces the absolute-positioned CTA) */
+.reportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: #131826;
+  border: 1px solid #222a3d;
+  color: #e7ecf5;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.18s ease, border-color 0.15s, background 0.15s, color 0.15s;
+}
+.reportBtn:hover {
+  transform: translateY(-2px);
+  border-color: rgba(114, 221, 247, 0.6);
+  background: rgba(114, 221, 247, 0.08);
+  color: #72ddf7;
+}
+.reportBtn:focus-visible {
+  outline: 2px solid #72ddf7;
+  outline-offset: 2px;
+}
+
+/* ── Onboarding checklist ─────────────────────────────────────────────── */
+.onboardCard {
+  background: #131826;
+  border: 1px solid #222a3d;
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.onboardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.onboardTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #e7ecf5;
+}
+
+.onboardSub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #8b95a7;
+}
+
+.onboardSkip {
+  background: none;
+  border: none;
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: #8b95a7;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  flex-shrink: 0;
+}
+.onboardSkip:hover { color: #e7ecf5; }
+
+.onboardSteps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step,
+.stepDone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.stepNum {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 209, 102, 0.55);
+  color: #ffd166;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stepDone .stepNum {
+  border-color: rgba(128, 237, 153, 0.5);
+  color: #80ed99;
+}
+
+.stepBody {
+  flex: 1;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 10px;
+  margin-left: -10px;
+  border-radius: 10px;
+  text-decoration: none;
+}
+a.stepBody:hover { background: rgba(114, 221, 247, 0.07); }
+a.stepBody:focus-visible {
+  outline: 2px solid #72ddf7;
+  outline-offset: 2px;
+}
+
+.stepTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e7ecf5;
+}
+a.stepBody .stepTitle { color: #72ddf7; }
+
+.stepDone .stepTitle {
+  color: #8b95a7;
+  text-decoration: line-through;
+  text-decoration-color: rgba(139, 149, 167, 0.6);
+}
+
+.stepDesc {
+  font-size: 12.5px;
+  color: #8b95a7;
+}
+
+.stepDoneBtn {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: none;
+  border: 1px solid #222a3d;
+  color: #8b95a7;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.stepDoneBtn:hover {
+  border-color: rgba(128, 237, 153, 0.55);
+  color: #80ed99;
+}
+
+/* ── Layout: one calm focal point (Day Tracker), Extras collapsed below ──── */
+.primaryFocus {
+  margin-bottom: 24px;
+}
+
+.extrasCard {
+  margin-top: 24px;
+}
+
+.extrasToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: 44px;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+.extrasToggle:focus-visible {
+  outline: 2px solid #72ddf7;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+.extrasToggleLead {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #8b95a7;
+}
+/* Secondary section — visually quieter than Day Tracker's dt-title (1.15rem/700). */
+.extrasToggleLead .player-name {
+  margin: 0;
+  font-size: 1.1875rem;
+  font-weight: 700;
+  color: #e7ecf5;
+}
+.extrasToggleLead svg { flex-shrink: 0; }
+
+.extrasCount {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8b95a7;
+}
+
+/* ── Extras helpers ───────────────────────────────────────────────────── */
+.extrasHeadActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 12px;
+}
+
+.savedNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #8b95a7;
+  animation: savedFade 0.2s ease;
+}
+.savedNote svg { color: #80ed99; }
+
+@keyframes savedFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  .heroRow { flex-direction: column; }
+}

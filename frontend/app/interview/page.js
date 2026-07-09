@@ -7,6 +7,8 @@ import { apiFetch, useAuth } from "../lib/auth";
 import { useCredits } from "../lib/credits";
 import { confirmDialog } from "../lib/dialog";
 import DafForm from "./DafForm";
+import styles from "./page.module.css";
+import { friendlyApiError } from "../lib/errors";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -46,7 +48,10 @@ function ReportView({ report }) {
     <div className="iv-report">
       {report.overall ? (
         <div className="iv-overall">
-          <div className="iv-overall-score">{report.overall.score}/10</div>
+          <div className={`display-num ${styles.overallNum}`}>
+            {report.overall.score}
+            <span className={styles.overallDen}>/10</span>
+          </div>
           <p>{report.overall.verdict}</p>
         </div>
       ) : null}
@@ -211,7 +216,9 @@ export default function InterviewPage() {
   const [dafError, setDafError] = useState("");
 
   // live interview
-  const [status, setStatus] = useState("idle"); // idle | starting | active | ended | report
+  const [status, setStatus] = useState("idle"); // idle | briefing | starting | active | ended | report
+  const [micTest, setMicTest] = useState("idle"); // idle | testing | ok | fail
+  const [micTestNote, setMicTestNote] = useState("");
   const [panel, setPanel] = useState([]);
   const [sessionId, setSessionId] = useState("");
   const [activeMember, setActiveMember] = useState("");
@@ -244,8 +251,8 @@ export default function InterviewPage() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setInterviews(Array.isArray(data.interviews) ? data.interviews : []);
-    } catch (err) {
-      setError(`Could not load interviews: ${String(err.message || err)}`);
+    } catch (_) {
+      setError("Your past interviews couldn't be loaded — check your connection and refresh.");
     } finally {
       setListLoading(false);
     }
@@ -295,7 +302,12 @@ export default function InterviewPage() {
   };
 
   const memberName = (id) => panel.find((m) => m.id === id)?.name || "Board";
-  const memberInitial = (id) => (memberName(id) || "B").charAt(0).toUpperCase();
+  // "Member 3" → "3", "Chairman" → "C". Keeps the numbered members visually distinct.
+  const badgeFor = (name) => {
+    const m = /(\d+)\s*$/.exec(name || "");
+    return m ? m[1] : (name || "B").charAt(0).toUpperCase();
+  };
+  const memberInitial = (id) => badgeFor(memberName(id));
 
   const saveDaf = async (nextDaf) => {
     setDafSaving(true);
@@ -317,7 +329,7 @@ export default function InterviewPage() {
       setDafUpdatedAt(data.updated_at || null);
       setDafEditing(false);
     } catch (err) {
-      setDafError(String(err.message || err));
+      setDafError(friendlyApiError(err));
     } finally {
       setDafSaving(false);
     }
@@ -325,13 +337,46 @@ export default function InterviewPage() {
 
   const openDaf = () => { setError(""); setDafError(""); setDafEditing(false); setMode("daf"); };
 
-  const startInterview = async () => {
+  // Step 1: the briefing. Shown before any credit is spent — the session only
+  // starts when the candidate presses "Enter the interview" below.
+  const startInterview = () => {
     if (!dafFilled) {
       setError("");
       setDafEditing(!daf); // straight to the form if there's nothing yet
       setMode("daf");
       return;
     }
+    if (!requireCredits("interview")) return;
+    setError("");
+    setMicTest("idle");
+    setMicTestNote("");
+    setMode("live");
+    setStatus("briefing");
+  };
+
+  // Briefing mic check: ask for the mic once and release it immediately.
+  const testMicrophone = async () => {
+    setMicTest("testing");
+    setMicTestNote("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      setMicTest("ok");
+    } catch (err) {
+      const name = err?.name || "";
+      setMicTest("fail");
+      setMicTestNote(
+        name === "NotAllowedError" || name === "PermissionDeniedError"
+          ? "Microphone access is blocked. Allow the microphone for this site in your browser settings, then test again."
+          : name === "NotFoundError" || name === "DevicesNotFoundError"
+            ? "No microphone was found. Plug one in or pick an input device in your system settings, then test again."
+            : "We couldn't reach your microphone. Close other apps that may be using it, then test again."
+      );
+    }
+  };
+
+  // Step 2: actually convene the board (this is where the credit is spent).
+  const beginInterview = async () => {
     if (!requireCredits("interview")) return;
     setError("");
     setReport(null);
@@ -364,8 +409,8 @@ export default function InterviewPage() {
       setStatus("active");
       refreshCredits();
       playAudio(data.audio);
-    } catch (err) {
-      setError(`Could not start interview: ${String(err.message || err)}`);
+    } catch (_) {
+      setError("The board couldn't be convened — check your connection and try again.");
       setStatus("idle");
       setMode("list");
     }
@@ -395,8 +440,8 @@ export default function InterviewPage() {
       questionShownRef.current = Date.now();
       playAudio(data.audio);
       if (data.ended) setStatus("ended");
-    } catch (err) {
-      setError(`Answer failed: ${String(err.message || err)}`);
+    } catch (_) {
+      setError("Your answer didn't reach the board — check your connection and try once more.");
     } finally {
       setBusy(false);
     }
@@ -454,8 +499,8 @@ export default function InterviewPage() {
       setMicOn(true);
       setLiveTranscript("");
       startCaptions();
-    } catch (err) {
-      setError(`Microphone error: ${String(err.message || err)}`);
+    } catch (_) {
+      setError("We couldn't reach your microphone. Check the browser permission, then tap the mic again.");
     }
   };
 
@@ -482,8 +527,8 @@ export default function InterviewPage() {
       const data = await res.json();
       setReport(data.report || {});
       setStatus("report");
-    } catch (err) {
-      setError(`Could not generate report: ${String(err.message || err)}`);
+    } catch (_) {
+      setError("Your report couldn't be prepared just now — give it a moment and try again.");
     } finally {
       setBusy(false);
     }
@@ -507,8 +552,8 @@ export default function InterviewPage() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setDetail(data.session || null);
-    } catch (err) {
-      setError(`Could not load interview: ${String(err.message || err)}`);
+    } catch (_) {
+      setError("This interview couldn't be opened — go back and try again.");
     } finally {
       setDetailLoading(false);
     }
@@ -526,8 +571,78 @@ export default function InterviewPage() {
 
   // ── Live interview stage ────────────────────────────────────────────────────
   const renderLive = () => {
+    if (status === "briefing") {
+      return (
+        <div className={styles.briefWrap}>
+          <div className={styles.briefCard}>
+            <h2 className={styles.briefTitle}>Before you face the board</h2>
+            <p className={styles.briefSub}>A quick word before the session begins.</p>
+            <ul className={styles.briefList}>
+              <li>
+                <Icon name="clock" size={16} />
+                <span>The board decides the length — typically 30 to 45 minutes. There&apos;s no countdown; stay until they close.</span>
+              </li>
+              <li>
+                <Icon name="mic" size={16} />
+                <span>You answer by voice. Unmute to speak; mute again to send your answer to the board.</span>
+              </li>
+              <li>
+                <Icon name="chat" size={16} />
+                <span>Live captions appear as you speak, so you can see what the board hears.</span>
+              </li>
+              <li>
+                <Icon name="volume" size={16} />
+                <span>Find a quiet room — background noise makes your answers harder to hear.</span>
+              </li>
+              <li>
+                <Icon name="scale" size={16} />
+                <span>The board stays neutral on purpose — no praise, no reaction either way. That&apos;s how the real panel behaves, not a sign of how you&apos;re doing. Your written report afterward is the real read.</span>
+              </li>
+            </ul>
+            <div className={styles.micTest} aria-live="polite">
+              {micTest === "ok" ? (
+                <p className={styles.micOk}><Icon name="check-circle" size={16} /> Microphone ready</p>
+              ) : (
+                <>
+                  {micTest === "fail" ? (
+                    <p className={styles.micFail}><Icon name="warning" size={16} /> {micTestNote}</p>
+                  ) : null}
+                  <button className={styles.micTestBtn} onClick={testMicrophone} disabled={micTest === "testing"}>
+                    <Icon name="mic" size={16} />
+                    {micTest === "testing" ? "Checking your microphone…" : micTest === "fail" ? "Test again" : "Test your microphone"}
+                  </button>
+                </>
+              )}
+            </div>
+            <div className={styles.briefActions}>
+              <button className={styles.enterBtn} onClick={beginInterview} disabled={micTest !== "ok"}>
+                <Icon name="gavel" size={16} /> Enter the interview
+              </button>
+              <button className="btn-cancel" onClick={backToList}>Not now</button>
+            </div>
+            {micTest !== "ok" ? (
+              <p className={styles.enterHint}>Test your microphone first — the board can&apos;t hear you without it.</p>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
     if (status === "starting") {
-      return <div className="iv-start"><p className="iv-intro">Assembling the board…</p></div>;
+      return (
+        <div className={styles.assembleWrap}>
+          <div className={styles.assembleCard}>
+            <div className={styles.seatRow}>
+              {["Chairman", "Member 1", "Member 2", "Member 3", "Member 4"].map((role, i) => (
+                <div key={role} className={styles.seat} style={{ animationDelay: `${i * 0.3}s` }}>
+                  <span className={styles.seatAvatar}>{badgeFor(role)}</span>
+                  <span className={styles.seatRole}>{role}</span>
+                </div>
+              ))}
+            </div>
+            <p className={styles.assembleLine} aria-live="polite">The board is taking their seats…</p>
+          </div>
+        </div>
+      );
     }
     if (status === "report" && report) {
       return (
@@ -555,7 +670,7 @@ export default function InterviewPage() {
             <div className="ivx-panelrow">
               {panel.map((m) => (
                 <div key={m.id} className={`ivx-pill ${activeMember === m.id ? "active" : ""}`} title={m.name}>
-                  <span className="ivx-pill-dot">{m.name.charAt(0)}</span>
+                  <span className="ivx-pill-dot">{badgeFor(m.name)}</span>
                   <span className="ivx-pill-name">{m.name}</span>
                 </div>
               ))}
@@ -576,16 +691,24 @@ export default function InterviewPage() {
             </div>
 
             {status === "ended" ? (
-              <div className="ivx-question ended">
+              <div className="ivx-question ended" aria-live="polite">
                 <p>{question}</p>
-                <p className="iv-intro">The interview has concluded.</p>
+                <div className={styles.concluded}>
+                  <p className={styles.concludedLead}>
+                    That&apos;s a full board interview — {Math.max(1, Math.round(elapsed / 60))} minutes.
+                  </p>
+                  <p className={styles.concludedSub}>Your report is being prepared.</p>
+                  <p className={styles.concludedNote}>
+                    However neutral the room felt, that was by design — it&apos;s not a signal of how you did. The report below is the real assessment.
+                  </p>
+                </div>
                 <button className="btn-day" onClick={fetchReport} disabled={busy}>
                   <Icon name="clipboard" size={16} /> {busy ? "Evaluating…" : "View my evaluation"}
                 </button>
               </div>
             ) : (
               <>
-                <div className="ivx-question">
+                <div className="ivx-question" aria-live="polite">
                   <span className="iv-q-who">{memberName(activeMember)}</span>
                   <p className="ivx-q-text">{question}</p>
                 </div>
@@ -607,10 +730,11 @@ export default function InterviewPage() {
                 onClick={toggleMic}
                 disabled={busy || speaking}
                 title={micOn ? "Mute & send answer" : "Unmute to answer"}
+                aria-label={micOn ? "Mute to send your answer to the board" : "Unmute to answer; mute again to send"}
               >
                 <Icon name={micOn ? "mic" : "mic-off"} size={20} />
               </button>
-              <span className="ivx-ctrl-hint">
+              <span className="ivx-ctrl-hint" role="status" aria-live="polite">
                 {speaking ? "The board is speaking…" : busy ? "Sending…" : micOn ? "Recording — tap to send" : "Tap the mic to answer"}
               </span>
               <button className="meet-end" onClick={endEarly} disabled={busy} title="End interview">
@@ -696,11 +820,19 @@ export default function InterviewPage() {
                       <span className="iv-list-sub">
                         {it.question_count} question{it.question_count === 1 ? "" : "s"}
                         {" · "}
-                        <span className={`iv-status iv-status-${it.status}`}>{it.status}</span>
+                        <span className={`iv-status iv-status-${it.status}`}>
+                          {it.status === "active" ? "interrupted" : it.status}
+                        </span>
                       </span>
                     </span>
                     <span className="iv-list-score">
-                      {it.overall_score != null ? <span className="iv-list-score-num">{it.overall_score}/10</span> : <span className="iv-list-score-num muted">—</span>}
+                      {it.overall_score != null ? (
+                        <span className="iv-list-score-num">{it.overall_score}/10</span>
+                      ) : it.status === "active" ? (
+                        <span className={styles.interruptedTag}>No report</span>
+                      ) : (
+                        <span className="iv-list-score-num muted">—</span>
+                      )}
                       <Icon name="chevron-right" size={18} />
                     </span>
                   </button>
@@ -758,8 +890,16 @@ export default function InterviewPage() {
                     </div>
                     {detail.report ? (
                       <ReportView report={detail.report} />
+                    ) : detail.status === "active" ? (
+                      <div className={styles.interruptedNote}>
+                        <Icon name="warning" size={16} />
+                        <div>
+                          <p>This session was interrupted and can&apos;t be resumed yet.</p>
+                          <p>The questions and answers below were saved, but the board never issued a report.</p>
+                        </div>
+                      </div>
                     ) : (
-                      <p className="iv-empty">This interview has no evaluation report{detail.status === "active" ? " yet — it was left in progress." : "."}</p>
+                      <p className="iv-empty">This interview has no evaluation report.</p>
                     )}
                     <QuestionByQuestion messages={detail.messages || []} panel={detail.panel || []} />
                   </>

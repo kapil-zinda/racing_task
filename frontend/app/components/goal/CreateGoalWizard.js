@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { aiGenerate, listTemplates, useTemplate } from "../../lib/goalApi";
 import Icon from "../Icon";
+import { friendlyApiError } from "../../lib/errors";
 
 const ICONS = ["target", "book", "trophy", "food", "idea", "file", "chart", "chat", "fire", "brain", "tree", "timer"];
 const COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#ef4444", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6"];
@@ -22,7 +23,7 @@ export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
 
   useEffect(() => {
     if (step === 1 && mode === "template" && templates.length === 0) {
-      listTemplates().then((d) => setTemplates(d.templates || [])).catch((e) => setError(String(e.message || e)));
+      listTemplates().then((d) => setTemplates(d.templates || [])).catch((e) => setError(friendlyApiError(e)));
     }
   }, [step, mode, templates.length]);
 
@@ -30,7 +31,7 @@ export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
     if (!form.name.trim()) { setError("Name is required"); setStep(0); return; }
     setSaving(true); setError("");
     try { await onCreate(form); onClose(); }
-    catch (e) { setError(String(e.message || e)); }
+    catch (e) { setError(friendlyApiError(e)); }
     finally { setSaving(false); }
   };
 
@@ -41,7 +42,7 @@ export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
       const res = await aiGenerate(aiPrompt.trim());
       onCreated && onCreated(res.goal?.id);
       onClose();
-    } catch (e) { setError(String(e.message || e)); }
+    } catch (e) { setError(friendlyApiError(e)); }
     finally { setSaving(false); }
   };
 
@@ -51,7 +52,7 @@ export default function CreateGoalWizard({ onClose, onCreate, onCreated }) {
       const res = await useTemplate(t.id, form.name.trim() || t.name);
       onCreated && onCreated(res.goal_id);
       onClose();
-    } catch (e) { setError(String(e.message || e)); }
+    } catch (e) { setError(friendlyApiError(e)); }
     finally { setSaving(false); }
   };
 

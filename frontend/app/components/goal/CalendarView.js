@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCalendar } from "../../lib/goalApi";
 import { toIsoDate } from "../../lib/dateUtils";
 import Icon from "../Icon";
+import { friendlyApiError } from "../../lib/errors";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -16,7 +17,7 @@ export default function CalendarView({ goalId = "" }) {
 
   const load = useCallback(async () => {
     setError("");
-    try { setData(await getCalendar(goalId)); } catch (e) { setError(String(e.message || e)); }
+    try { setData(await getCalendar(goalId)); } catch (e) { setError(friendlyApiError(e)); }
   }, [goalId]);
   useEffect(() => { load(); }, [load]);
 

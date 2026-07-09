@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { friendlyApiError } from "../lib/errors";
 
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
@@ -322,7 +323,7 @@ function ExplainerCanvas({ files, fileIdx, zoom, onZoomChange, onRecorded, onRec
       setDuration(0);
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
     } catch (err) {
-      setRecError(`Mic access failed: ${err.message}`);
+      setRecError(`Mic access failed — ${friendlyApiError(err)}`);
     }
   };
 

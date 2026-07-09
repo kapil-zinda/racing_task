@@ -39,11 +39,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _limit_bytes() -> int:
+def _limit_bytes(user_id: str) -> int:
+    from . import plans_domain
+
     try:
-        gb = float(settings().get("user_storage_limit_gb") or 10)
+        gb = plans_domain.storage_limit_gb(user_id)
     except (TypeError, ValueError):
-        gb = 10.0
+        gb = 5.0
     return int(gb * 1024 * 1024 * 1024)
 
 
@@ -140,10 +142,14 @@ def incr_qna_questions(user_id: str, n: int = 1) -> None:
     _incr(user_id, "qna_questions", int(n or 0))
 
 
+def incr_goal_ai_generations(user_id: str, n: int = 1) -> None:
+    _incr(user_id, "goal_ai_generations", int(n or 0))
+
+
 def storage_status_payload(user_id: str) -> Dict[str, Any]:
     doc = get_usage(user_id)
     used = max(0, int(doc.get("storage_bytes", 0) or 0))
-    limit = _limit_bytes()
+    limit = _limit_bytes(user_id)
     return {
         "used_bytes": used,
         "limit_bytes": limit,
@@ -163,7 +169,7 @@ def assert_storage_available(user_id: str, incoming_bytes: int = 0) -> None:
     """Raise ValueError (-> HTTP 400) if this upload would exceed the user's quota."""
     doc = get_usage(user_id)
     used = max(0, int(doc.get("storage_bytes", 0) or 0))
-    limit = _limit_bytes()
+    limit = _limit_bytes(user_id)
     if used + max(0, int(incoming_bytes or 0)) > limit:
         raise ValueError(
             f"Storage limit reached: using {used / (1024 ** 3):.2f} GB of "

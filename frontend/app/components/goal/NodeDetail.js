@@ -10,6 +10,7 @@ import {
   listAttachments, createAttachment, deleteAttachment, uploadAttachment,
 } from "../../lib/goalApi";
 import Icon from "../Icon";
+import { friendlyApiError } from "../../lib/errors";
 
 const TABS = ["Overview", "Metrics", "Files", "Activity"];
 
@@ -24,7 +25,7 @@ export default function NodeDetail({ node, onUpdate, onDelete, onChanged, activi
 
   const loadMetrics = useCallback(async () => {
     try { const d = await listNodeMetrics(node.id); setMetrics(d.metrics || []); }
-    catch (e) { setErr(String(e.message || e)); }
+    catch (e) { setErr(friendlyApiError(e)); }
   }, [node.id]);
 
   useEffect(() => { loadMetrics(); }, [loadMetrics]);
@@ -32,7 +33,7 @@ export default function NodeDetail({ node, onUpdate, onDelete, onChanged, activi
   const saveField = async (patch) => {
     setBusy(true); setErr("");
     try { await onUpdate(node.id, patch); }
-    catch (e) { setErr(String(e.message || e)); }
+    catch (e) { setErr(friendlyApiError(e)); }
     finally { setBusy(false); }
   };
 
@@ -143,7 +144,7 @@ function FilesTab({ node, setErr }) {
 
   const load = useCallback(async () => {
     try { const d = await listAttachments(node.id); setItems(d.attachments || []); }
-    catch (e) { setErr(String(e.message || e)); }
+    catch (e) { setErr(friendlyApiError(e)); }
   }, [node.id]);
   useEffect(() => { load(); }, [load]);
 
@@ -152,7 +153,7 @@ function FilesTab({ node, setErr }) {
     try {
       await createAttachment({ node_id: node.id, type: "link", name: name.trim() || url.trim(), url: url.trim() });
       setName(""); setUrl(""); load();
-    } catch (e) { setErr(String(e.message || e)); }
+    } catch (e) { setErr(friendlyApiError(e)); }
   };
 
   const onFile = async (e) => {
@@ -161,7 +162,7 @@ function FilesTab({ node, setErr }) {
     if (!file) return;
     setUploading(true); setErr("");
     try { await uploadAttachment(node.id, file); load(); }
-    catch (err) { setErr(String(err.message || err)); }
+    catch (err) { setErr(friendlyApiError(err)); }
     finally { setUploading(false); }
   };
 
@@ -174,7 +175,7 @@ function FilesTab({ node, setErr }) {
         <div key={a.id} className="metric-row">
           <div className="metric-row-top">
             <a className="metric-name" href={a.url || "#"} target="_blank" rel="noreferrer"><Icon name={iconName(a.type)} /> {a.name}</a>
-            <button className="goal-icon-btn danger sm" onClick={async () => { try { await deleteAttachment(a.id); load(); } catch (e) { setErr(String(e.message || e)); } }}><Icon name="trash" /></button>
+            <button className="goal-icon-btn danger sm" onClick={async () => { try { await deleteAttachment(a.id); load(); } catch (e) { setErr(friendlyApiError(e)); } }}><Icon name="trash" /></button>
           </div>
         </div>
       ))}
@@ -203,12 +204,12 @@ function MetricsTab({ node, metrics, reload, setErr }) {
       await createMetric({ node_id: node.id, name: form.name.trim(),
         target_value: Number(form.target_value) || 0, unit: form.unit.trim() });
       setForm({ name: "", target_value: 1, unit: "" }); setAdding(false); reload();
-    } catch (e) { setErr(String(e.message || e)); }
+    } catch (e) { setErr(friendlyApiError(e)); }
   };
 
   const bump = async (m, delta) => {
     try { await incrementMetric(m.id, delta); reload(); }
-    catch (e) { setErr(String(e.message || e)); }
+    catch (e) { setErr(friendlyApiError(e)); }
   };
 
   return (
@@ -229,7 +230,7 @@ function MetricsTab({ node, metrics, reload, setErr }) {
               <button className="goal-btn tiny" onClick={() => bump(m, -1)} disabled={cur <= 0}>−</button>
               <button className="goal-btn tiny primary" onClick={() => bump(m, 1)}>+1 done</button>
               <button className="goal-icon-btn danger sm" title="Delete metric"
-                      onClick={async () => { try { await deleteMetric(m.id); reload(); } catch (e) { setErr(String(e.message || e)); } }}><Icon name="trash" /></button>
+                      onClick={async () => { try { await deleteMetric(m.id); reload(); } catch (e) { setErr(friendlyApiError(e)); } }}><Icon name="trash" /></button>
             </div>
           </div>
         );

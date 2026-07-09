@@ -1,5 +1,20 @@
 import "./globals.css";
+import { Bebas_Neue, Manrope } from "next/font/google";
 import ClientLayout from "./components/ClientLayout";
+
+const bebas = Bebas_Neue({
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-bebas",
+});
+
+const manrope = Manrope({
+  weight: ["400", "600", "700", "800"],
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-manrope",
+});
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://dias.uchhal.in";
 
@@ -66,7 +81,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${bebas.variable} ${manrope.variable}`}>
       <body>
         <ClientLayout>{children}</ClientLayout>
       </body>

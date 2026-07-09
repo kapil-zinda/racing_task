@@ -7,22 +7,21 @@ import Icon from "./Icon";
 import { useAuth } from "../lib/auth";
 import PublicNav from "./PublicNav";
 import PublicFooter from "./PublicFooter";
+import styles from "./Landing.module.css";
 
-const FEATURES = [
-  { icon: "mic", title: "Study Recorder", desc: "Record audio, video, or screen sessions that upload as you go — a dropped connection or closed tab never loses your work." },
-  { icon: "gavel", title: "Mock Interview", desc: "Face a virtual 5-member UPSC board by voice and get a report scored on all seven official qualities." },
-  { icon: "file", title: "Answer Evaluation", desc: "Upload a Mains answer PDF — typed or handwritten — and get red-ink marks and margin comments back on it." },
-  { icon: "target", title: "Goals & Missions", desc: "Break big goals into tasks and metrics, set an overarching mission, and watch progress roll up automatically." },
-  { icon: "search", title: "Smart Search", desc: "Semantic search across your own PDFs — find the right passage by meaning, not exact keywords." },
-  { icon: "chat", title: "Grounded QnA", desc: "Ask questions in plain language and get answers cited straight from your indexed material." },
-  { icon: "brain", title: "Mind Maps", desc: "Lay topics out visually and save your maps to revisit and revise from later." },
-  { icon: "sparkles", title: "Voice Assistant", desc: "A hands-free study companion that talks with you and can navigate the app and log your work." },
-  { icon: "chart", title: "Progress Analytics", desc: "Dashboards for study time, streaks, and where your day really goes — so you can adjust fast." },
+const BOARD_SEATS = [
+  { role: "Chairman", chair: true },
+  { role: "Member 1" },
+  { role: "Member 2" },
+  { role: "Member 3" },
+  { role: "Member 4" },
 ];
+
+const ALSO_INSIDE = ["study recorder", "goal tracker", "day tracker", "mind maps", "analytics"];
 
 const STEPS = [
   { n: "1", title: "Create your account", desc: "Sign up with your email and verify with a one-time code. You're in within a minute." },
-  { n: "2", title: "Bring in your material", desc: "Upload PDFs, record study sessions, and set the goals you're working toward." },
+  { n: "2", title: "Bring in your material", desc: "Upload your notes as PDFs and fill in your DAF — the board interviews you on your own background, and answers come from your own material." },
   { n: "3", title: "Study smarter", desc: "Search, ask, self-evaluate, and track — with an AI study buddy alongside you." },
 ];
 
@@ -59,37 +58,110 @@ export default function LandingPage() {
           {!signedIn && <p className="lp-note">Free to start · No card required</p>}
         </div>
 
-        {/* CSS product preview */}
-        <div className="lp-hero-art" aria-hidden="true">
-          <div className="lp-window">
-            <div className="lp-window-bar">
-              <span className="lp-dot r" /><span className="lp-dot y" /><span className="lp-dot g" />
-              <span className="lp-window-title">Dias · Dashboard</span>
-            </div>
-            <div className="lp-window-body">
-              <div className="lp-tile gold"><Icon name="trophy" size={20} /><b>Race</b><small>+42 today</small></div>
-              <div className="lp-tile blue"><Icon name="mic" size={20} /><b>Recorder</b><small>3 sessions</small></div>
-              <div className="lp-tile mint"><Icon name="file" size={20} /><b>Answer Eval</b><small>Scored 7/10</small></div>
-              <div className="lp-tile"><Icon name="target" size={20} /><b>Goals</b><small>64% done</small></div>
-              <div className="lp-tile"><Icon name="search" size={20} /><b>Search</b><small>PDF index</small></div>
-              <div className="lp-tile"><Icon name="chat" size={20} /><b>QnA</b><small>Cited answers</small></div>
+        {/* Interview-board vignette — product-true UI, not a fake screenshot */}
+        <div className={styles.heroArt}>
+          <div className={styles.board}>
+            <p className={styles.boardHead}>
+              <span className={styles.boardHeadIcon}><Icon name="gavel" size={16} /></span>
+              UPSC Personality Test — Mock Board
+            </p>
+            <ul className={styles.seats} aria-label="Board members">
+              {BOARD_SEATS.map((s) => (
+                <li key={s.role} className={`${styles.seat} ${s.chair ? styles.seatChair : ""}`}>
+                  <span className={styles.seatAvatar}><Icon name="user" size={18} /></span>
+                  <span className={styles.seatRole}>{s.role}</span>
+                </li>
+              ))}
+            </ul>
+            <div className={styles.question}>
+              <p className={styles.questionWho}>Chairman</p>
+              <p className={styles.questionText}>
+                &ldquo;Your DAF says you worked in fintech. Why should the state employ you?&rdquo;
+              </p>
             </div>
           </div>
+          <p className={styles.boardCaption}>A five-voice board interviews you on your own DAF.</p>
         </div>
       </section>
 
-      {/* Features */}
+      {/* Feature story */}
       <section className="lp-section">
-        <h2 className="lp-h2">Everything you need to prepare</h2>
-        <p className="lp-section-sub">One workspace that replaces a dozen scattered tools.</p>
-        <div className="lp-feature-grid">
-          {FEATURES.map((f) => (
-            <article key={f.title} className="lp-feature">
-              <span className="lp-feature-icon"><Icon name={f.icon} size={22} /></span>
-              <h3>{f.title}</h3>
-              <p>{f.desc}</p>
-            </article>
+        <h2 className="lp-h2">Built around the hardest parts of the exam</h2>
+        <p className="lp-section-sub">Three tools carry most of the weight. The rest keep your routine honest.</p>
+        <div className={styles.storyGrid}>
+          <article className={styles.spotlight}>
+            <div className={styles.cardTitleRow}>
+              <span className={styles.spotlightIcon}><Icon name="gavel" size={20} /></span>
+              <h3>Mock Interview</h3>
+            </div>
+            <p>
+              Face a five-member board that has read your DAF — your education, your work,
+              your hobbies — and questions you on it by voice, the way the real panel does.
+              Members roam across topics, probe once, and move on: no scripts, no turn-taking
+              theatre, and no answers fed back to you.
+            </p>
+            <p className={styles.spotlightNote}>
+              Every session ends with a written report scored on the seven official qualities the board assesses.
+            </p>
+          </article>
+
+          <article className={styles.storyCard}>
+            <div className={styles.cardTitleRow}>
+              <span className={styles.inlineIcon}><Icon name="file" size={18} /></span>
+              <h3>Answer Evaluation</h3>
+            </div>
+            <p>
+              Upload a Mains answer PDF, typed or handwritten. Your PDF comes back with
+              red-ink marks and margin comments written on the page itself, plus a score
+              for every question it finds.
+            </p>
+          </article>
+
+          <article className={styles.storyCard}>
+            <div className={styles.cardTitleRow}>
+              <span className={styles.inlineIcon}><Icon name="chat" size={18} /></span>
+              <h3>Ask your own notes</h3>
+            </div>
+            <p>
+              Index your PDFs, then ask questions in plain language. Answers are grounded
+              in — and cited from — your own material, not the open internet.
+            </p>
+          </article>
+        </div>
+
+        <p className={styles.alsoRow}>
+          <strong>Also inside:</strong>{" "}
+          {ALSO_INSIDE.map((item, i) => (
+            <span key={item}>
+              {i > 0 && <span className={styles.alsoSep} aria-hidden="true">·</span>}
+              {item}
+            </span>
           ))}
+        </p>
+      </section>
+
+      {/* Start free */}
+      <section className="lp-section">
+        <h2 className="lp-h2">Start free</h2>
+        <p className="lp-section-sub">Try the tools that matter before you spend anything.</p>
+        <div className={styles.pricingPanel}>
+          <ul className={styles.pricingList}>
+            <li className={styles.pricingItem}>
+              <span className={styles.pricingCheck}><Icon name="check" size={16} /></span>
+              Your first mock interviews and answer evaluations are free.
+            </li>
+            <li className={styles.pricingItem}>
+              <span className={styles.pricingCheck}><Icon name="check" size={16} /></span>
+              After that, get a Pro or Max plan for more — or just top up credits and pay per use.
+            </li>
+            <li className={styles.pricingItem}>
+              <span className={styles.pricingCheck}><Icon name="check" size={16} /></span>
+              No card required to get started.
+            </li>
+          </ul>
+          <a href="/pricing" className="lp-btn ghost" style={{ marginTop: 18, display: "inline-flex" }}>
+            See full pricing →
+          </a>
         </div>
       </section>
 
@@ -106,6 +178,8 @@ export default function LandingPage() {
           ))}
         </div>
       </section>
+
+      <p className={styles.quiet}>Built with working aspirants preparing for the 2026 cycle.</p>
 
       {/* Closing CTA */}
       <section className="lp-closing">

@@ -22,4 +22,10 @@ def lambda_handler(event, context):
         from race_api.goal_schedule_domain import run_due_reminders
 
         return run_due_reminders()
+    # Optional EventBridge schedule: {"task": "reap_stale_live"} force-pauses live
+    # study-timer sessions with a stale heartbeat (crashed/killed app).
+    if isinstance(event, dict) and event.get("task") == "reap_stale_live":
+        from race_api.live_session_domain import reap_stale_live_sessions
+
+        return reap_stale_live_sessions()
     return handler(event, context)

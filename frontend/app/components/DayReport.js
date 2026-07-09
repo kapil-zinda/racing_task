@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Icon from "./Icon";
 import { apiFetch } from "../lib/auth";
+import { friendlyApiError } from "../lib/errors";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -125,7 +126,7 @@ export default function DayReport({ open, onClose }) {
       setPhase("done");
       setStatusMsg("");
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
       setPhase("select");
       setStatusMsg("");
     }

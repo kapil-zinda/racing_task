@@ -1,5 +1,5 @@
 "use client";
-// Goal OS — goals dashboard + list. Replaces the old /mission journey list.
+// Goals dashboard + list. Replaces the old /mission journey list.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -11,7 +11,9 @@ import MindfulHero from "../components/goal/MindfulHero";
 import ContributionHeatmap from "../components/goal/ContributionHeatmap";
 import ComparisonCharts from "../components/goal/ComparisonCharts";
 import Icon from "../components/Icon";
+import styles from "../components/goal/MindfulHero.module.css"; // hero + goals-list skeleton styles
 import { listGoals, createGoal, getDashboard } from "../lib/goalApi";
+import { friendlyApiError } from "../lib/errors";
 
 export default function GoalsPage() {
   const router = useRouter();
@@ -28,7 +30,7 @@ export default function GoalsPage() {
       setGoals(data.goals || []);
       setDash(dashboard);
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
     } finally {
       setLoading(false);
     }
@@ -37,12 +39,8 @@ export default function GoalsPage() {
   useEffect(() => { load(); }, [load]);
 
   const stats = useMemo(() => {
-    const active = goals.filter((g) => g.status === "active");
-    const avg = active.length
-      ? Math.round(active.reduce((s, g) => s + (g.progress || 0), 0) / active.length)
-      : 0;
-    const done = goals.filter((g) => g.status === "completed" || (g.progress || 0) >= 100).length;
-    return { total: goals.length, active: active.length, avg, done };
+    const active = goals.filter((g) => g.status === "active").length;
+    return { total: goals.length, active };
   }, [goals]);
 
   const handleCreate = async (form) => {
@@ -57,7 +55,7 @@ export default function GoalsPage() {
         <header className="goal-header">
           <div>
             <h1>Goals</h1>
-            <p className="goal-sub">Your Goal OS — every goal is a tree of nodes with metrics and progress.</p>
+            <p className="goal-sub">Your goals — break each into tasks and metrics.</p>
           </div>
           <div className="goal-header-actions">
             <GoalHeaderTools />
@@ -71,14 +69,10 @@ export default function GoalsPage() {
                        avgProgress={dash.avg_progress || 0} onChanged={load} />
         )}
 
+        {/* Streak + avg progress live in the hero above (one source of truth). */}
         <section className="goal-stat-row">
           <div className="goal-stat"><span className="goal-stat-num">{stats.total}</span><span className="goal-stat-lbl">Total goals</span></div>
           <div className="goal-stat"><span className="goal-stat-num">{stats.active}</span><span className="goal-stat-lbl">Active</span></div>
-          <div className="goal-stat"><span className="goal-stat-num">{stats.avg}%</span><span className="goal-stat-lbl">Avg progress</span></div>
-          <div className="goal-stat">
-            <span className="goal-stat-num"><Icon name="fire" size={18} /> {dash?.streak_current ?? 0}</span>
-            <span className="goal-stat-lbl">Current streak (best {dash?.streak_longest ?? 0})</span>
-          </div>
         </section>
 
         {dash && (
@@ -93,14 +87,21 @@ export default function GoalsPage() {
         {error && <div className="goal-error">{error}</div>}
 
         {loading ? (
-          <div className="goal-empty">Loading…</div>
+          <div className={styles.skeletonGrid} role="status" aria-label="Loading goals">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className={styles.skeletonCard} aria-hidden="true">
+                <div className={styles.skeletonShimmer} />
+              </div>
+            ))}
+            <span className="sr-only">Loading goals…</span>
+          </div>
         ) : goals.length === 0 ? (
           <div className="goal-empty">
             <p>No goals yet.</p>
             <button className="goal-btn primary" onClick={() => setWizardOpen(true)}>Create your first goal</button>
           </div>
         ) : (
-          <div className="goal-grid">
+          <div className="goal-grid" id="goal-list">
             {goals.map((g) => <GoalCard key={g.id} goal={g} />)}
           </div>
         )}

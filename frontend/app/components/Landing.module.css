@@ -1,0 +1,307 @@
+/* Landing page structures that don't exist in the global lp-* system:
+   hero board vignette, feature story hierarchy, pricing panel, quiet line. */
+
+/* ---------- Hero: interview-board vignette ---------- */
+
+.heroArt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.board {
+  width: 100%;
+  max-width: 460px;
+  background: var(--card, #131826);
+  border: 1px solid var(--card-border, #222a3d);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 8px 22px rgba(8, 12, 30, 0.25);
+}
+
+.boardHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text, #e7ecf5);
+}
+
+.boardHeadIcon {
+  display: inline-flex;
+  color: var(--blue, #72ddf7);
+  flex: none;
+}
+
+.seats {
+  list-style: none;
+  margin: 18px 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 14px;
+}
+
+.seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 52px;
+}
+
+.seatAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #0e1320;
+  border: 1px solid #2b3348;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted, #8b95a7);
+}
+
+.seatChair .seatAvatar {
+  border-color: rgba(114, 221, 247, 0.55);
+  color: var(--blue, #72ddf7);
+}
+
+.seatRole {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted, #8b95a7);
+  white-space: nowrap;
+}
+
+.question {
+  background: #0e1320;
+  border: 1px solid var(--card-border, #222a3d);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.questionWho {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--blue, #72ddf7);
+}
+
+.questionText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text, #e7ecf5);
+}
+
+.boardCaption {
+  margin: 0;
+  max-width: 360px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted, #8b95a7);
+}
+
+/* ---------- Feature story: spotlight + supporting cards ---------- */
+
+.storyGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 34px;
+}
+
+.spotlight,
+.storyCard {
+  background: var(--card, #131826);
+  border-radius: 16px;
+  transition: transform 0.18s ease-out, border-color 0.18s ease-out;
+}
+
+.spotlight {
+  grid-column: 1 / -1;
+  border: 1px solid var(--card-border-strong, #2b3348);
+  border-radius: 18px;
+  padding: 28px;
+}
+
+.storyCard {
+  border: 1px solid var(--card-border, #222a3d);
+  padding: 22px;
+}
+
+.spotlight:hover,
+.storyCard:hover {
+  transform: translateY(-2px);
+  border-color: rgba(114, 221, 247, 0.4);
+}
+
+.cardTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+
+.spotlightIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(114, 221, 247, 0.12);
+  color: var(--blue, #72ddf7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.inlineIcon {
+  display: inline-flex;
+  color: var(--blue, #72ddf7);
+  flex: none;
+}
+
+.spotlight h3 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.storyCard h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.spotlight p,
+.storyCard p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--muted, #8b95a7);
+  max-width: 70ch;
+}
+
+.storyCard p {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.spotlightNote {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--card-border, #222a3d);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text, #e7ecf5);
+}
+
+.alsoRow {
+  margin: 24px 0 0;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--muted, #8b95a7);
+}
+
+.alsoRow strong {
+  color: var(--text, #e7ecf5);
+  font-weight: 700;
+}
+
+.alsoSep {
+  margin: 0 8px;
+  color: #4a556c;
+}
+
+/* ---------- Start free ---------- */
+
+.pricingPanel {
+  max-width: 640px;
+  margin: 28px auto 0;
+  background: var(--card, #131826);
+  border: 1px solid var(--card-border, #222a3d);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.pricingList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pricingItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text, #e7ecf5);
+}
+
+.pricingCheck {
+  display: inline-flex;
+  color: var(--mint, #80ed99);
+  flex: none;
+  margin-top: 3px;
+}
+
+/* ---------- Quiet line ---------- */
+
+.quiet {
+  margin: 0 auto;
+  max-width: 720px;
+  padding: 34px 24px 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted, #8b95a7);
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 720px) {
+  .storyGrid {
+    grid-template-columns: 1fr;
+  }
+  .spotlight {
+    padding: 22px;
+  }
+}
+
+@media (max-width: 400px) {
+  .board {
+    padding: 16px;
+  }
+  .seats {
+    gap: 10px;
+  }
+  .seat {
+    min-width: 48px;
+  }
+  .seatAvatar {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spotlight,
+  .storyCard {
+    transition: none;
+  }
+  .spotlight:hover,
+  .storyCard:hover {
+    transform: none;
+  }
+}

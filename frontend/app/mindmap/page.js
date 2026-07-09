@@ -629,7 +629,7 @@ export default function MindmapPage() {
       setMapOffset(Number(payload.nextOffset) || incoming.length);
       setMapHasMore(!!payload.hasMore);
     } catch (error) {
-      say(error.message || "Could not load saved maps.", "error");
+      say("Could not load saved maps.", "error");
     } finally {
       setMapsLoading(false);
     }
@@ -671,7 +671,7 @@ export default function MindmapPage() {
       await loadSavedMaps();
       if (!options.quiet) say(`Saved "${data.map.title}".`, "success");
     } catch (error) {
-      say(error.message || "Could not save this map.", "error");
+      say("Could not save this map.", "error");
     } finally {
       saveInProgress.current = false;
       setSaving(false);
@@ -788,7 +788,7 @@ export default function MindmapPage() {
     } catch (error) {
       treeRef.current = null;
       bumpTree();
-      say(error.message || "Could not generate map.", "error");
+      say("Could not generate map.", "error");
     }
   };
 
@@ -857,7 +857,7 @@ export default function MindmapPage() {
       if (!res.ok) throw new Error(data?.detail || data?.error || `Load failed: ${res.status}`);
       loadMapIntoEditor(data.map);
     } catch (error) {
-      say(error.message || "Could not load that map.", "error");
+      say("Could not load that map.", "error");
     }
   };
 
@@ -870,7 +870,7 @@ export default function MindmapPage() {
       await loadSavedMaps();
       say("Mind map deleted.", "success");
     } catch (error) {
-      say(error.message || "Could not delete that map.", "error");
+      say("Could not delete that map.", "error");
     }
   };
 
@@ -891,7 +891,7 @@ export default function MindmapPage() {
       loadOutlineFromMarkdown(text);
       say(`Loaded ${file.name}. You can edit the outline and generate the map.`, "success");
     } catch (error) {
-      say(error.message || "Could not read that file.", "error");
+      say("Could not read that file.", "error");
     }
   };
 
@@ -912,7 +912,7 @@ export default function MindmapPage() {
         setHashModal((p) => ({ ...p, open: false }));
         say("Inserted # code into the outline editor.", "success");
       } catch (error) {
-        say(error.message || "Could not parse the # code.", "error");
+        say("Could not parse the # code.", "error");
       }
       return;
     }
@@ -972,7 +972,7 @@ export default function MindmapPage() {
         say(`Downloaded high-resolution PNG (${exportScale}x).`, "success");
       }, "image/png");
     } catch (error) {
-      say(error.message || "Could not export PNG for this view.", "error");
+      say("Could not export PNG for this view.", "error");
     }
   };
 
@@ -1064,7 +1064,7 @@ html, body { margin: 0; padding: 0; background: #ffffff; }
       printWindow.focus();
       say(`PDF print view ready (landscape, progressive pages, up to ~${maxCellsPerPage} visible cells).`, "success");
     } catch (error) {
-      say(error.message || "Could not prepare PDF export.", "error");
+      say("Could not prepare PDF export.", "error");
     } finally {
       setExportingPdf(false);
     }

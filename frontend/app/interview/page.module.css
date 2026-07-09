@@ -1,0 +1,300 @@
+/* Interview page — scoped styles for briefing, assembling, conclusion,
+   report numeral and interrupted-session states. Tokens mirror globals.css. */
+
+/* ── Pre-start briefing ─────────────────────────────────────────────── */
+.briefWrap {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+.briefCard {
+  background: #131826;
+  border: 1px solid #222a3d;
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 540px;
+  width: 100%;
+}
+
+.briefTitle {
+  color: #e7ecf5;
+  font-size: 1.35rem;
+  margin: 0 0 6px;
+}
+
+.briefSub {
+  color: #8b95a7;
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.briefList {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.briefList li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  color: #8b95a7;
+  line-height: 1.55;
+}
+
+.briefList li svg {
+  color: #72ddf7;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.micTest {
+  border-top: 1px solid #222a3d;
+  padding-top: 18px;
+  margin-bottom: 20px;
+}
+
+.micOk {
+  color: #80ed99;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.micFail {
+  color: #ff6b6b;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.micFail svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.micTestBtn {
+  background: transparent;
+  border: 1px solid #72ddf7;
+  color: #72ddf7;
+  border-radius: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 0.95rem;
+}
+
+.micTestBtn:hover:not(:disabled) {
+  background: rgba(114, 221, 247, 0.08);
+}
+
+.micTestBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.micTestBtn:focus-visible {
+  outline: 2px solid #72ddf7;
+  outline-offset: 2px;
+}
+
+.briefActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.enterBtn {
+  background: #ffd166;
+  color: #0b0f1a;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-weight: 700;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.enterBtn:not(:disabled):hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+}
+
+.enterBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.enterBtn:focus-visible {
+  outline: 2px solid #72ddf7;
+  outline-offset: 2px;
+}
+
+.enterHint {
+  color: #8b95a7;
+  font-size: 0.85rem;
+  margin: 12px 0 0;
+}
+
+/* ── "Assembling the board…" waiting state ──────────────────────────── */
+.assembleWrap {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.assembleCard {
+  background: #131826;
+  border: 1px solid #222a3d;
+  border-radius: 16px;
+  padding: 36px 32px;
+  text-align: center;
+  max-width: 560px;
+  width: 100%;
+}
+
+.seatRow {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 26px;
+  flex-wrap: wrap;
+}
+
+.seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  animation: seatIn 0.5s ease forwards;
+}
+
+.seatAvatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #0b0f1a;
+  border: 1px solid #222a3d;
+  color: #72ddf7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.seatRole {
+  color: #8b95a7;
+  font-size: 0.75rem;
+}
+
+@keyframes seatIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.assembleLine {
+  color: #8b95a7;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seat {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ── Conclusion acknowledgment ──────────────────────────────────────── */
+.concluded {
+  margin: 14px 0 18px;
+}
+
+.concludedLead {
+  color: #e7ecf5;
+  font-size: 1.05rem;
+  margin: 0 0 4px;
+}
+
+.concludedSub {
+  color: #8b95a7;
+  margin: 0;
+}
+
+.concludedNote {
+  color: #8b95a7;
+  font-size: 0.85rem;
+  margin: 10px 0 0;
+  max-width: 46ch;
+}
+
+/* ── Report overall numeral ─────────────────────────────────────────── */
+.overallNum {
+  color: #ffd166;
+  font-size: 4.5rem;
+  line-height: 1;
+}
+
+.overallDen {
+  font-size: 1.6rem;
+  color: #8b95a7;
+  margin-left: 4px;
+}
+
+/* ── Interrupted sessions ───────────────────────────────────────────── */
+.interruptedTag {
+  color: #8b95a7;
+  font-size: 0.8rem;
+  border: 1px solid #222a3d;
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.interruptedNote {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid #222a3d;
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: #8b95a7;
+  margin: 12px 0;
+}
+
+.interruptedNote svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.interruptedNote p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.interruptedNote p:first-child {
+  color: #e7ecf5;
+}

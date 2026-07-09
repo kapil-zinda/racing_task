@@ -7,11 +7,14 @@ import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
 import { confirmDialog } from "../lib/dialog";
 import { listGoals } from "../lib/goalApi";
+import styles from "./content.module.css";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
 // Content is tagged against a goal (or kept "Global"); options are loaded from the user's goals.
 const CONTENT_GLOBAL_OPTION = { value: "global", label: "Global (all goals)" };
+// localStorage flag: "1" once the user dismisses the searchability pipeline hint.
+const PIPELINE_HINT_KEY = "race_hub_content_pipeline_hint";
 
 function formatBytes(bytes) {
   const n = Number(bytes || 0);
@@ -131,8 +134,28 @@ export default function ContentPage() {
   const [makingSearchable, setMakingSearchable] = useState(false);
   const [goals, setGoals] = useState([]);
 
+  const [showPipelineHint, setShowPipelineHint] = useState(false);
+
   const uploadInputRef = useRef(null);
   const folderInputRef = useRef(null);
+
+  // Show the pipeline hint until the user dismisses it (persisted in localStorage).
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(PIPELINE_HINT_KEY) !== "1") setShowPipelineHint(true);
+    } catch {
+      setShowPipelineHint(true);
+    }
+  }, []);
+
+  const dismissPipelineHint = () => {
+    setShowPipelineHint(false);
+    try {
+      window.localStorage.setItem(PIPELINE_HINT_KEY, "1");
+    } catch {
+      // Non-fatal: the hint just reappears next visit.
+    }
+  };
 
   const pathParts = useMemo(() => {
     const path = (folderInfo?.path || "").trim();
@@ -203,7 +226,7 @@ export default function ContentPage() {
       setSelectedFile(null);
       setPreview({ loading: false, data: null, error: "", text: "" });
     } catch (err) {
-      setError(String(err.message || err));
+      setError("Couldn't load this folder. Please try again.");
       setItems([]);
     } finally {
       setLoading(false);
@@ -227,10 +250,10 @@ export default function ContentPage() {
             await Promise.all([loadTree("content_root", contentScope), loadList("content_root", contentScope)]);
             syncFolderInUrl("content_root");
           } catch (fallbackErr) {
-            setError(String(fallbackErr.message || fallbackErr));
+            setError("Couldn't load your content drive. Please refresh the page.");
           }
         } else {
-          setError(String(err.message || err));
+          setError("Couldn't load your content drive. Please refresh the page.");
         }
       }
     };
@@ -242,8 +265,8 @@ export default function ContentPage() {
     const onPopState = () => {
       const requestedFolderId = getUrlFolderId();
       if (requestedFolderId === folderId) return;
-      openFolder(requestedFolderId).catch((err) => {
-        setError(String(err.message || err));
+      openFolder(requestedFolderId).catch(() => {
+        setError("Couldn't open that folder. Please try again.");
       });
     };
     window.addEventListener("popstate", onPopState);
@@ -347,7 +370,7 @@ export default function ContentPage() {
       setDestinationPicker((prev) => ({ ...prev, loading: false }));
     } catch (err) {
       setDestinationPicker((prev) => ({ ...prev, loading: false, open: false }));
-      setError(String(err.message || err));
+      setError("Couldn't load folders. Please try again.");
     }
   };
 
@@ -375,7 +398,7 @@ export default function ContentPage() {
       }));
     } catch (err) {
       setDestinationPicker((prev) => ({ ...prev, loading: false }));
-      setError(String(err.message || err));
+      setError("Couldn't load folders. Please try again.");
     }
   };
 
@@ -407,8 +430,8 @@ export default function ContentPage() {
       setNewFolderName("");
       setShowCreateFolderModal(false);
       await refresh();
-    } catch (err) {
-      setError(String(err.message || err));
+    } catch {
+      setError("Couldn't create the folder. Please try again.");
     } finally {
       setCreating(false);
     }
@@ -431,8 +454,8 @@ export default function ContentPage() {
       }
       setMessage(`${item.type} renamed`);
       await refresh();
-    } catch (err) {
-      setError(String(err.message || err));
+    } catch {
+      setError("Couldn't rename this item. Please try again.");
     }
   };
 
@@ -466,8 +489,8 @@ export default function ContentPage() {
         setPreview({ loading: false, data: null, error: "", text: "" });
       }
       await refresh();
-    } catch (err) {
-      setError(String(err.message || err));
+    } catch {
+      setError("Couldn't delete this item. Please try again.");
     }
   };
 
@@ -498,8 +521,8 @@ export default function ContentPage() {
         setPreview({ loading: false, data: null, error: "", text: "" });
       }
       await refresh();
-    } catch (err) {
-      setError(String(err.message || err));
+    } catch {
+      setError("Couldn't move or copy this item. Please try again.");
     } finally {
       setDestinationPicker((prev) => ({ ...prev, submitting: false }));
     }
@@ -540,8 +563,8 @@ export default function ContentPage() {
         await new Promise((resolve) => setTimeout(resolve, 120));
       }
       setMessage(`Started download for ${files.length} file(s)`);
-    } catch (err) {
-      setError(String(err.message || err));
+    } catch {
+      setError("Couldn't start the download. Please try again.");
     }
   };
 
@@ -582,8 +605,8 @@ export default function ContentPage() {
       const skipped = Number(data.skipped_count || 0);
       setMessage(`Indexed: ${indexed} | Failed: ${failed} | Skipped: ${skipped}`);
       closeMakeSearchableModal();
-    } catch (err) {
-      setError(String(err.message || err));
+    } catch {
+      setError("Couldn't index this file for search. Please try again.");
     } finally {
       setMakingSearchable(false);
     }
@@ -615,7 +638,7 @@ export default function ContentPage() {
       }
       setPreview(p);
     } catch (err) {
-      setPreview({ loading: false, data: null, error: String(err.message || err), text: "" });
+      setPreview({ loading: false, data: null, error: "Couldn't preview this file.", text: "" });
     }
   };
 
@@ -711,8 +734,8 @@ export default function ContentPage() {
       }
       setMessage(`Uploaded ${files.length} file(s).`);
       await refresh();
-    } catch (err) {
-      setError(String(err.message || err));
+    } catch {
+      setError("Upload failed — check your connection and try again.");
       setUploadTasks((prev) => prev.map((t) => (t.status === "uploading" ? { ...t, status: "failed" } : t)));
     } finally {
       setUploading(false);
@@ -762,8 +785,8 @@ export default function ContentPage() {
     if (!Object.prototype.hasOwnProperty.call(treeChildrenByParent, nodeId)) {
       try {
         await loadTree(nodeId, contentScope);
-      } catch (err) {
-        setError(String(err.message || err));
+      } catch {
+        setError("Couldn't load folders. Please try again.");
       }
     }
   };
@@ -970,10 +993,31 @@ export default function ContentPage() {
             </div>
           ) : null}
 
-          {error ? <p className="api-state error">{error}</p> : null}
-          {message ? <p className="api-state ok">{message}</p> : null}
+          {showPipelineHint ? (
+            <div className={styles.hintCard}>
+              <Icon name="search" size={16} className={styles.hintIcon} />
+              <p className={styles.hintText}>
+                Files become searchable when you mark them — open a PDF&rsquo;s menu →{" "}
+                <strong>Make searchable</strong> → pick a goal. Search and QnA only see indexed files.
+              </p>
+              <button className={styles.hintClose} onClick={dismissPipelineHint} aria-label="Dismiss hint">
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+          ) : null}
+          {error ? <p className="api-state error" role="alert">{error}</p> : null}
+          {message ? <p className="api-state ok" role="status">{message}</p> : null}
           {loading ? <p className="day-state">Loading...</p> : null}
-          {!loading && items.length === 0 ? <p className="day-state">No files/folders here. Drop files to upload.</p> : null}
+          {!loading && items.length === 0 ? (
+            <div className={styles.empty}>
+              <Icon name="upload" size={26} className={styles.emptyIcon} />
+              <p className={styles.emptyTitle}>This folder is empty</p>
+              <p className={styles.emptyText}>
+                Drop PDFs here or use Upload. Then open a file&rsquo;s menu and choose{" "}
+                <strong>Make searchable</strong> so Search and QnA can read it.
+              </p>
+            </div>
+          ) : null}
 
           {uploadTasks.length ? (
             <div className="upload-task-list">

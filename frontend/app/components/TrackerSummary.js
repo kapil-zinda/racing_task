@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
 import Icon from "./Icon";
+import { friendlyApiError } from "../lib/errors";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -118,7 +119,7 @@ export default function TrackerSummary({ categories = [] }) {
         format: "png", scale: 2, filename: `time-summary-${label}`,
       });
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
     }
   };
 
@@ -142,7 +143,7 @@ export default function TrackerSummary({ categories = [] }) {
         const data = await res.json();
         if (!cancelled) setSummary(data);
       } catch (err) {
-        if (!cancelled) { setError(String(err.message || err)); setSummary(null); }
+        if (!cancelled) { setError(friendlyApiError(err)); setSummary(null); }
       } finally {
         if (!cancelled) setLoading(false);
       }

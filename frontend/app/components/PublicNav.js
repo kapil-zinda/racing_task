@@ -3,9 +3,11 @@
 // Auth-aware: signed-in users get a single "Go to app" button.
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "../lib/auth";
 
 const LINKS = [
+  { href: "/pricing", label: "Pricing" },
   { href: "/how-to-use", label: "How to use" },
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },
@@ -13,6 +15,7 @@ const LINKS = [
 
 export default function PublicNav() {
   const { auth } = useAuth();
+  const pathname = usePathname();
   const signedIn = !!auth;
   return (
     <header className="lp-nav">
@@ -22,7 +25,14 @@ export default function PublicNav() {
       </Link>
       <nav className="lp-nav-links">
         {LINKS.map((l) => (
-          <Link key={l.href} href={l.href} className="lp-nav-link">{l.label}</Link>
+          <Link
+            key={l.href}
+            href={l.href}
+            className={`lp-nav-link ${pathname === l.href ? "active" : ""}`}
+            aria-current={pathname === l.href ? "page" : undefined}
+          >
+            {l.label}
+          </Link>
         ))}
       </nav>
       <nav className="lp-nav-actions">

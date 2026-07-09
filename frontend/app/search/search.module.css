@@ -1,0 +1,32 @@
+/* Knowledge Finder page-scoped styles. Tokens come from globals.css (:root). */
+
+/* Primary action: gold (brand primary), dark text — red is reserved for
+   destructive actions, so the Search button must not use .btn-ticket. */
+.searchBtn {
+  background: var(--gold);
+  color: #1d1d1d;
+}
+.searchBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.searchBtn:disabled:hover {
+  transform: none;
+  filter: none;
+}
+
+/* Muted cost hint under the search bar. */
+.costHint {
+  margin: -4px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.emptyLink {
+  color: #72ddf7;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.emptyLink:hover {
+  color: #a5e9fb;
+}

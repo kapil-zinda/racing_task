@@ -1,0 +1,77 @@
+/* Content Drive page-scoped styles. Tokens come from globals.css (:root). */
+
+/* ── Pipeline hint card (dismissible) ─────────────────────────────── */
+.hintCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(114, 221, 247, 0.28);
+  background: rgba(114, 221, 247, 0.07);
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #c9d3e4;
+}
+.hintIcon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #72ddf7;
+}
+.hintText {
+  margin: 0;
+}
+.hintText strong {
+  color: #e7ecf5;
+  font-weight: 600;
+}
+.hintClose {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 400;
+  line-height: 1;
+}
+.hintClose:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e7ecf5;
+  transform: none;
+  filter: none;
+}
+
+/* ── Empty folder state ───────────────────────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 44px 20px;
+  color: var(--muted);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  margin-top: 12px;
+}
+.emptyIcon {
+  color: #72ddf7;
+  opacity: 0.85;
+}
+.emptyTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e7ecf5;
+}
+.emptyText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 52ch;
+}

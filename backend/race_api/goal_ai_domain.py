@@ -119,6 +119,9 @@ def generate_goal_from_text(user_id: str, prompt: str) -> Dict[str, Any]:
     if not _openai_api_key():
         raise RuntimeError("OPENAI_API_KEY is required for AI goal generation")
 
+    from . import billing_domain as billing
+    billing.ensure_can_token_charge(uid, billing.GOAL_AI)
+
     try:
         from openai import OpenAI
     except ImportError as err:  # pragma: no cover
@@ -130,6 +133,17 @@ def generate_goal_from_text(user_id: str, prompt: str) -> Dict[str, Any]:
         messages=[{"role": "system", "content": _GEN_SYSTEM}, {"role": "user", "content": text}],
         response_format={"type": "json_object"},
     )
+    tokens = int(getattr(resp.usage, "total_tokens", 0) or 0) if getattr(resp, "usage", None) else 0
+    try:
+        billing.charge_tokens(uid, billing.GOAL_AI, tokens, {"prompt_len": len(text)})
+    except Exception as err:
+        logger.exception("goal-ai billing charge failed for %s", uid)
+        billing._record_failed(uid, billing.GOAL_AI, {"prompt_len": len(text)}, err)
+    try:
+        from .storage_domain import incr_goal_ai_generations
+        incr_goal_ai_generations(uid)
+    except Exception:
+        logger.exception("usage incr_goal_ai_generations failed")
     content = resp.choices[0].message.content or "{}"
     try:
         plan = json.loads(content)

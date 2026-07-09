@@ -47,10 +47,20 @@ export function AuthProvider({ children }) {
       userId: data.user_id,
       name: data.name,
       email: data.email,
+      phone: data.phone || "",
       apiKey: data.api_key,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
     setAuth(session);
+  }, []);
+
+  const updateAuth = useCallback((patch) => {
+    setAuth((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
   }, []);
 
   const signOut = useCallback(() => {
@@ -59,7 +69,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ auth, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ auth, loading, signIn, signOut, updateAuth }}>
       {children}
     </AuthContext.Provider>
   );
@@ -113,11 +123,11 @@ export async function apiVerifyOtp({ email, otp }) {
   return data;
 }
 
-export async function apiResendOtp({ email }) {
+export async function apiResendOtp({ email, purpose = "signup" }) {
   const res = await fetch(`${API_BASE_URL}/auth/resend-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, purpose }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || "Resend failed");
@@ -160,5 +170,60 @@ export async function apiSignin({ email, password }) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || "Signin failed");
+  return data;
+}
+
+export async function apiForgotPassword(email) {
+  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Request failed");
+  return data;
+}
+
+export async function apiResetPassword({ email, otp, newPassword }) {
+  const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp, new_password: newPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Password reset failed");
+  return data;
+}
+
+export async function apiUpdateProfile(name) {
+  const res = await apiFetch(`${API_BASE_URL}/user/me`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Update failed");
+  return data;
+}
+
+export async function apiChangePassword({ currentPassword, newPassword }) {
+  const res = await apiFetch(`${API_BASE_URL}/user/change-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Password change failed");
+  return data;
+}
+
+export async function apiDeleteAccount(password) {
+  const res = await apiFetch(`${API_BASE_URL}/user/delete-account`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Account deletion failed");
   return data;
 }

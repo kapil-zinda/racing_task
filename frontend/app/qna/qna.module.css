@@ -1,0 +1,100 @@
+/* QnA page-scoped styles: typing indicator, empty state, composer scope row.
+   Tokens come from globals.css (:root) — no new colors introduced. Layout
+   (.qna-layout, .qna-sessions, .qna-chat-shell, etc.) lives in globals.css
+   next to the other feature-page shells it now matches. */
+
+/* ── Typing indicator ─────────────────────────────────────────────── */
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 0;
+}
+.typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.35;
+  animation: typingPulse 1.2s ease-in-out infinite;
+}
+.typing span:nth-child(2) { animation-delay: 0.18s; }
+.typing span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes typingPulse {
+  0%, 70%, 100% { opacity: 0.35; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .typing span {
+    animation: typingFade 1.4s ease-in-out infinite;
+    transform: none;
+  }
+  @keyframes typingFade {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 0.85; }
+  }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Empty chat state ─────────────────────────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 20px;
+  margin: auto 0;
+  color: var(--muted);
+}
+.emptyIcon {
+  color: #72ddf7;
+  opacity: 0.85;
+}
+.emptyTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e7ecf5;
+}
+.emptyText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 46ch;
+}
+.emptyLink {
+  color: #72ddf7;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.emptyLink:hover {
+  color: #a5e9fb;
+}
+
+/* ── Composer row: scope select + send ────────────────────────────── */
+.composerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.scopeSelect {
+  flex: 0 1 220px;
+  min-width: 130px;
+}
+.sendBtn {
+  margin-left: auto;
+  flex: 0 0 auto;
+}

@@ -343,7 +343,7 @@ def create_pdf_presigned_upload(payload, user_id: str = "") -> Dict[str, Any]:
     }
 
 
-def _extract_pdf_pages_from_textract(bucket: str, key: str) -> List[Dict[str, Any]]:
+def _extract_pdf_pages_from_textract(bucket: str, key: str, with_bbox: bool = False) -> List[Dict[str, Any]]:
     if not _textract_enabled():
         raise RuntimeError("TEXTRACT_ENABLED is off, cannot OCR/index PDFs")
 
@@ -392,7 +392,11 @@ def _extract_pdf_pages_from_textract(bucket: str, key: str) -> List[Dict[str, An
                 bbox = (block.get("Geometry", {}) or {}).get("BoundingBox", {}) or {}
                 top = float(bbox.get("Top", 0.0) or 0.0)
                 left = float(bbox.get("Left", 0.0) or 0.0)
-                page_lines.setdefault(page_number, []).append({"text": text, "top": top, "left": left})
+                line = {"text": text, "top": top, "left": left}
+                if with_bbox:
+                    line["width"] = float(bbox.get("Width", 0.0) or 0.0)
+                    line["height"] = float(bbox.get("Height", 0.0) or 0.0)
+                page_lines.setdefault(page_number, []).append(line)
 
             next_token = current.get("NextToken")
             if not next_token:
@@ -402,7 +406,10 @@ def _extract_pdf_pages_from_textract(bucket: str, key: str) -> List[Dict[str, An
     for page_number in sorted(page_lines.keys()):
         lines = sorted(page_lines[page_number], key=lambda item: (item["top"], item["left"]))
         merged = "\n".join(line["text"] for line in lines).strip()
-        pages.append({"page_number": page_number, "text": merged})
+        page_entry: Dict[str, Any] = {"page_number": page_number, "text": merged}
+        if with_bbox:
+            page_entry["lines"] = lines
+        pages.append(page_entry)
     return pages
 
 

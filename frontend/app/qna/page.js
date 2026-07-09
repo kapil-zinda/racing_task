@@ -1,9 +1,14 @@
 "use client";
 import { apiFetch } from "../lib/auth";
 import { useCredits } from "../lib/credits";
+import { listGoals } from "../lib/goalApi";
+import { friendlyApiError } from "../lib/errors";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
+import Icon from "../components/Icon";
+import styles from "./qna.module.css";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -49,6 +54,8 @@ export default function QnaPage() {
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [question, setQuestion] = useState("");
+  const [goals, setGoals] = useState([]);
+  const [askCourse, setAskCourse] = useState("");
   const [asking, setAsking] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -83,7 +90,7 @@ export default function QnaPage() {
       setSourcesOpenByMessage({});
       setSourcePopup({ open: false, source: null });
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
       setMessages([]);
     } finally {
       setLoadingMessages(false);
@@ -127,7 +134,7 @@ export default function QnaPage() {
       if (sid) await loadMessages(sid);
       else setMessages([]);
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
       setSessions([]);
       setSelectedSessionId("");
       setMessages([]);
@@ -137,6 +144,10 @@ export default function QnaPage() {
   };
 
   useEffect(() => { loadSessions(); }, []);
+
+  useEffect(() => {
+    listGoals().then((d) => setGoals(d.goals || [])).catch(() => {});
+  }, []);
 
   const onCreateNewChat = async () => {
     if (!API_BASE_URL) return;
@@ -150,7 +161,7 @@ export default function QnaPage() {
       setSourcesOpenByMessage({});
       setSourcePopup({ open: false, source: null });
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
     }
   };
 
@@ -182,7 +193,7 @@ export default function QnaPage() {
         body: JSON.stringify({
           session_id: selectedSessionId,
           question: q,
-          course: "",
+          course: askCourse,
           limit: 8,
         }),
       });
@@ -217,7 +228,7 @@ export default function QnaPage() {
         await loadSessions();
       }
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
       setMessages((prev) => [
         ...prev,
         {
@@ -247,110 +258,134 @@ export default function QnaPage() {
   };
 
   return (
-    <main className="app-shell qna-shell">
-      <div className="bg-orb orb-1" />
-      <div className="bg-orb orb-2" />
+    <div className="goal-page">
+      <MainMenu active="qna" />
+      <div className="goal-container qna-container">
+        <header className="goal-header">
+          <div>
+            <h1>Ask your notes</h1>
+            <p className="goal-sub">Answers come only from your indexed content — every claim cites the exact page.</p>
+          </div>
+          <button className="goal-btn ghost" onClick={onCreateNewChat}>
+            <Icon name="plus" size={15} /> New chat
+          </button>
+        </header>
 
-      <header className="hero qna-hero">
-        <MainMenu active="qna" />
-      </header>
+        {!API_BASE_URL ? <div className="goal-error">Set NEXT_PUBLIC_API_BASE_URL first.</div> : null}
+        {error ? <div className="goal-error" role="alert">{error}</div> : null}
 
-      <section className="pdf-search-single">
-        <article className="milestone-panel qna-panel">
-          {!API_BASE_URL ? <p className="api-state warn">Set NEXT_PUBLIC_API_BASE_URL first.</p> : null}
-          {error ? <p className="api-state error">{error}</p> : null}
-          <div className="qna-layout">
-            <aside className="qna-sessions">
-              <div className="qna-sessions-head">
-                <h3>Chats</h3>
-                <button className="btn-day secondary" onClick={onCreateNewChat}>New</button>
-              </div>
-              {loadingSessions ? <p className="day-state">Loading sessions...</p> : null}
-              <div className="qna-sessions-list">
-                {sessions.map((s) => (
-                  <button
-                    key={s._id}
-                    className={`qna-session-item ${selectedSessionId === s._id ? "active" : ""}`}
-                    onClick={() => selectSession(s._id)}
-                  >
-                    <div className="qna-session-title">{s.title || "New Chat"}</div>
-                    <div className="qna-session-sub">{s.last_question || "No questions yet"}</div>
-                  </button>
-                ))}
-              </div>
-            </aside>
+        <div className="qna-layout">
+          <aside className="qna-sessions">
+            <p className="qna-sessions-heading">Chats</p>
+            {loadingSessions ? <p className="goal-hint">Loading sessions…</p> : null}
+            <div className="qna-sessions-list">
+              {sessions.map((s) => (
+                <button
+                  key={s._id}
+                  className={`qna-session-item ${selectedSessionId === s._id ? "active" : ""}`}
+                  onClick={() => selectSession(s._id)}
+                >
+                  <div className="qna-session-title">{s.title || "New Chat"}</div>
+                  <div className="qna-session-sub">{s.last_question || "No questions yet"}</div>
+                </button>
+              ))}
+            </div>
+          </aside>
 
-            <div className="qna-main">
-              <div className="qna-chat-shell">
-                <div className="qna-chat-list">
-                  {loadingMessages ? <p className="day-state">Loading messages...</p> : null}
-                  {!loadingMessages && messages.length === 0 ? (
-                    <div className="history-item">
-                      <div className="history-detail">Start by asking a question from your saved content.</div>
+          <div className="qna-chat-shell">
+            <div className="qna-chat-list" aria-live="polite">
+              {loadingMessages ? <p className="goal-hint">Loading messages…</p> : null}
+              {!loadingMessages && messages.length === 0 && !asking ? (
+                <div className={styles.empty}>
+                  <Icon name="qna" size={26} className={styles.emptyIcon} />
+                  <p className={styles.emptyTitle}>Ask anything from your uploaded notes</p>
+                  <p className={styles.emptyText}>
+                    Answers cite the exact page. Upload PDFs in{" "}
+                    <Link href="/content" className={styles.emptyLink}>Content</Link>{" "}
+                    and mark them &ldquo;searchable&rdquo; first.
+                  </p>
+                </div>
+              ) : null}
+              {messages.map((msg) => (
+                <div key={msg._id || `${msg.role}-${msg.created_at}`} className={`qna-msg qna-msg-${msg.role}`}>
+                  <div className="qna-msg-bubble">
+                    <div className="qna-msg-text" style={{ whiteSpace: "pre-wrap" }}>
+                      {msg.role === "assistant"
+                        ? renderAnswerWithInlineCitations(msg.text, msg.sources, openSourcePopup)
+                        : msg.text}
                     </div>
-                  ) : null}
-                  {messages.map((msg) => (
-                    <div key={msg._id || `${msg.role}-${msg.created_at}`} className={`qna-msg qna-msg-${msg.role}`}>
-                      <div className="qna-msg-bubble">
-                        <div className="qna-msg-text" style={{ whiteSpace: "pre-wrap" }}>
-                          {msg.role === "assistant"
-                            ? renderAnswerWithInlineCitations(msg.text, msg.sources, openSourcePopup)
-                            : msg.text}
-                        </div>
-                        {msg.role === "assistant" && Array.isArray(msg.sources) && msg.sources.length > 0 ? (
-                          <div className="qna-source-chip-wrap">
-                            <button className="crumb-btn" onClick={() => toggleSourcesForMessage(msg._id)}>
-                              Sources ({msg.sources.length})
-                            </button>
-                            {sourcesOpenByMessage[msg._id]
-                              ? msg.sources.map((src, idx) => (
-                                  <button
-                                    key={`${msg._id || "msg"}-${src.doc_id}-${src.page_number}-${idx}`}
-                                    className="crumb-btn"
-                                    onClick={() => openSourcePopup(src)}
-                                    title={src.snippet || "Open source"}
-                                  >
-                                    [{src.index}] {src.file_name} • p.{src.page_number}
-                                  </button>
-                                ))
-                              : null}
-                          </div>
-                        ) : null}
+                    {msg.role === "assistant" && Array.isArray(msg.sources) && msg.sources.length > 0 ? (
+                      <div className="qna-source-chip-wrap">
+                        <button className="qna-source-chip" onClick={() => toggleSourcesForMessage(msg._id)}>
+                          Sources ({msg.sources.length})
+                        </button>
+                        {sourcesOpenByMessage[msg._id]
+                          ? msg.sources.map((src, idx) => (
+                              <button
+                                key={`${msg._id || "msg"}-${src.doc_id}-${src.page_number}-${idx}`}
+                                className="qna-source-chip"
+                                onClick={() => openSourcePopup(src)}
+                                title={src.snippet || "Open source"}
+                              >
+                                [{src.index}] {src.file_name} • p.{src.page_number}
+                              </button>
+                            ))
+                          : null}
                       </div>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              {asking ? (
+                <div className="qna-msg qna-msg-assistant">
+                  <div className="qna-msg-bubble">
+                    <div className={styles.typing} aria-hidden="true">
+                      <span /><span /><span />
                     </div>
+                    <span className={styles.srOnly}>Looking through your notes…</span>
+                  </div>
+                </div>
+              ) : null}
+              <div ref={chatBottomRef} />
+            </div>
+            <div className="qna-chat-input">
+              <textarea
+                className="qna-textarea"
+                placeholder="Ask anything from your saved content..."
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    askQuestion();
+                  }
+                }}
+              />
+              <div className={styles.composerRow}>
+                <select
+                  className={`qna-scope-select ${styles.scopeSelect}`}
+                  value={askCourse}
+                  onChange={(e) => setAskCourse(e.target.value)}
+                  aria-label="Scope answers to a goal"
+                  title="Scope answers to a goal"
+                >
+                  <option value="">All notes</option>
+                  {goals.map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
                   ))}
-                  {asking ? (
-                    <div className="qna-msg qna-msg-assistant">
-                      <div className="qna-msg-bubble">
-                        <div className="qna-msg-text">Thinking...</div>
-                      </div>
-                    </div>
-                  ) : null}
-                  <div ref={chatBottomRef} />
-                </div>
-                <div className="qna-chat-input">
-                  <textarea
-                    className="task-textarea"
-                    placeholder="Ask anything from your saved content..."
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        askQuestion();
-                      }
-                    }}
-                  />
-                  <button className="btn-day" disabled={!question.trim() || asking || !API_BASE_URL || !selectedSessionId} onClick={askQuestion}>
-                    {asking ? "Thinking..." : "Send"}
-                  </button>
-                </div>
+                </select>
+                <button
+                  className={`goal-btn primary ${styles.sendBtn}`}
+                  disabled={!question.trim() || asking || !API_BASE_URL || !selectedSessionId}
+                  onClick={askQuestion}
+                >
+                  {asking ? "Thinking…" : "Send"}
+                </button>
               </div>
             </div>
           </div>
-
-        </article>
-      </section>
+        </div>
+      </div>
 
       {sourcePopup.open && sourcePopup.source ? (
         <div className="task-modal-overlay" onClick={closeSourcePopup}>
@@ -379,6 +414,6 @@ export default function QnaPage() {
           </div>
         </div>
       ) : null}
-    </main>
+    </div>
   );
 }

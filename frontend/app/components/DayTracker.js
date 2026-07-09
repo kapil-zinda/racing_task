@@ -6,6 +6,7 @@ import { apiFetch } from "../lib/auth";
 import TrackerSummary from "./TrackerSummary";
 import Icon from "./Icon";
 import { confirmDialog } from "../lib/dialog";
+import { friendlyApiError } from "../lib/errors";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -157,7 +158,7 @@ function ClockPicker({ value, onChange, onClose }) {
             <circle cx={CX} cy={CY} r={CX - 6} fill="rgba(99,102,241,0.07)" stroke="rgba(129,140,248,0.18)" strokeWidth="1.5" />
 
             {/* Hand + highlight circle */}
-            <g style={{ transform: `rotate(${dispAngle}deg)`, transformOrigin: `${CX}px ${CY}px`, transition: "transform 0.22s cubic-bezier(0.34,1.56,0.64,1)" }}>
+            <g style={{ transform: `rotate(${dispAngle}deg)`, transformOrigin: `${CX}px ${CY}px`, transition: "transform 0.22s cubic-bezier(0.22, 1, 0.36, 1)" }}>
               <line x1={CX} y1={CY} x2={CX} y2={CY - R_HAND} stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />
               <circle cx={CX} cy={CY - R_HAND} r="18" fill="#6366f1" />
             </g>
@@ -266,7 +267,7 @@ export default function DayTracker({ onDateChange }) {
       if (!res.ok) throw new Error(`${res.status}`);
       const data = await res.json();
       setActivities(Array.isArray(data.activities) ? data.activities : []);
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
     finally { setLoading(false); }
   }, [date]);
 
@@ -306,7 +307,7 @@ export default function DayTracker({ onDateChange }) {
       const res = await apiFetch(url, { method: modal.mode === "edit" ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(`${res.status}`);
       closeModal(); await loadActivities();
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
     finally { setSaving(false); }
   };
 
@@ -326,11 +327,12 @@ export default function DayTracker({ onDateChange }) {
       const cat = await res.json();
       setCategories((p) => [...p, cat]);
       setNewCat({ name: "", color: "#6366f1" });
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
     finally { setCatSaving(false); }
   };
 
   const deleteCategory = async (name) => {
+    if (!(await confirmDialog({ message: `Remove the "${name}" category?`, confirmLabel: "Remove", danger: true }))) return;
     try { await apiFetch(`${API_BASE_URL}/tracker/categories/${encodeURIComponent(name)}`, { method: "DELETE" }); setCategories((p) => p.filter((c) => c.name !== name)); }
     catch (_) {}
   };
@@ -376,16 +378,16 @@ export default function DayTracker({ onDateChange }) {
       <div className="dt-summary">
         <div className="dt-stat">
           <span className="dt-stat-val">{activities.length}</span>
-          <span className="dt-stat-label">Entries</span>
+          <span className="dt-stat-label" style={{ fontSize: 12 }}>Entries</span>
         </div>
         <div className="dt-stat">
           <span className="dt-stat-val">{fmtMins(totalTracked)}</span>
-          <span className="dt-stat-label">Total</span>
+          <span className="dt-stat-label" style={{ fontSize: 12 }}>Total</span>
         </div>
         {catEntries.map(([cat, mins]) => (
           <div className="dt-stat" key={cat}>
             <span className="dt-stat-val" style={{ color: catColor(cat) }}>{fmtMins(mins)}</span>
-            <span className="dt-stat-label">{cat}</span>
+            <span className="dt-stat-label" style={{ fontSize: 12 }}>{cat}</span>
           </div>
         ))}
       </div>

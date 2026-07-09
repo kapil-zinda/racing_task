@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { useAuth } from "../lib/auth";
+import { friendlyApiError } from "../lib/errors";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -35,7 +36,7 @@ export default function ContactForm() {
       setStatus({ kind: "success", text: data?.message || "Thanks — your message has been sent." });
       setForm((f) => ({ ...f, message: "" }));
     } catch (err) {
-      setStatus({ kind: "error", text: `Could not send: ${String(err.message || err)}` });
+      setStatus({ kind: "error", text: `Could not send: ${friendlyApiError(err)}` });
     } finally {
       setSending(false);
     }

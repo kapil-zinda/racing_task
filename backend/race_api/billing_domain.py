@@ -37,6 +37,7 @@ ANSWER_EVAL = "answer_eval"
 INTERVIEW = "interview"
 VECTOR_SEARCH = "vector_search"
 QNA = "qna"
+GOAL_AI = "goal_ai"
 
 _FIXED_PRICE_KEYS = {
     ANSWER_EVAL: "price_answer_eval_usd",
@@ -48,6 +49,7 @@ _FREE_KEYS = {
     INTERVIEW: "free_interview",
     VECTOR_SEARCH: "free_vector_search",
     QNA: "free_qna",
+    GOAL_AI: "free_goal_ai",
 }
 
 
@@ -105,7 +107,7 @@ def spent_usd(user_id: str) -> float:
 
 def spent_breakdown(user_id: str) -> Dict[str, float]:
     uid = _uid(user_id)
-    out = {ANSWER_EVAL: 0.0, INTERVIEW: 0.0, VECTOR_SEARCH: 0.0, QNA: 0.0}
+    out = {ANSWER_EVAL: 0.0, INTERVIEW: 0.0, VECTOR_SEARCH: 0.0, QNA: 0.0, GOAL_AI: 0.0}
     if not uid:
         return out
     try:
@@ -140,6 +142,7 @@ def _free_used(user_id: str) -> Dict[str, int]:
         INTERVIEW: interviews,
         VECTOR_SEARCH: int(usage.get("search_queries", 0) or 0),
         QNA: int(usage.get("qna_questions", 0) or 0),
+        GOAL_AI: int(usage.get("goal_ai_generations", 0) or 0),
     }
 
 
@@ -161,19 +164,46 @@ def _record(user_id: str, entry_type: str, kind: str, usd: float, meta: Optional
         logger.exception("credit ledger record failed (%s/%s)", entry_type, kind)
 
 
+def _record_failed(user_id: str, kind: str, meta: Optional[Dict[str, Any]], error: Exception) -> None:
+    """Durable audit trail for a charge that raised post-hoc (paid output already
+    delivered, e.g. a completed answer-eval or QnA answer). We don't undo the delivered
+    result, but this makes the revenue loss visible for reconciliation instead of a log
+    line that scrolls off CloudWatch.
+    """
+    try:
+        credit_ledger_collection().insert_one({
+            "user_id": _uid(user_id),
+            "type": "charge_failed",
+            "kind": kind,
+            "usd": 0.0,
+            "meta": {**(meta or {}), "error": str(error)},
+            "created_at": _now(),
+        })
+    except Exception:
+        logger.exception("credit ledger charge_failed record failed (%s)", kind)
+
+
 # ----------------------------------------------------------------------------- charging
 
 def charge_fixed(user_id: str, kind: str, meta: Optional[Dict[str, Any]] = None, units: int = 1) -> Dict[str, Any]:
     """Charge a fixed-price action (answer_eval / interview / vector_search).
 
-    ``units`` bills more than one unit in a single action — e.g. an answer PDF
-    that contains N questions counts as N answer evaluations. Units are drawn
-    from the free allowance first, then charged at the fixed price each.
-    Free while within the allowance; otherwise deducts or raises
-    InsufficientCreditsError. Returns {"free": bool, "charged_usd": float, "units": int}.
+    Precedence: active plan quota for this period, then the lifetime free
+    allowance, then the paid balance. ``units`` bills more than one unit in a
+    single action — e.g. an answer PDF that contains N questions counts as N
+    answer evaluations. Free/plan-covered while within an allowance; otherwise
+    deducts or raises InsufficientCreditsError.
+    Returns {"free": bool, "charged_usd": float, "units": int}.
     """
     uid = _uid(user_id)
     units = max(1, int(units or 1))
+
+    from . import plans_domain
+
+    if plans_domain.consume_quota(uid, kind, units):
+        _record(uid, "charge", kind, 0.0, {**(meta or {}), "units": units, "source": "plan_quota"})
+        return {"free": True, "charged_usd": 0.0, "units": units}
+
     price = float(settings().get(_FIXED_PRICE_KEYS[kind]) or 0)
     used = _free_used(uid).get(kind, 0)
     free_remaining = max(0, _free_limit(kind) - used)
@@ -184,13 +214,18 @@ def charge_fixed(user_id: str, kind: str, meta: Optional[Dict[str, Any]] = None,
     bal = balance_usd(uid)
     if bal < cost:
         raise InsufficientCreditsError(kind, cost, bal)
-    _record(uid, "charge", kind, cost, {**(meta or {}), "units": units, "paid_units": paid_units})
+    _record(uid, "charge", kind, cost, {**(meta or {}), "units": units, "paid_units": paid_units, "source": "paid"})
     return {"free": False, "charged_usd": cost, "units": units}
 
 
 def ensure_can_afford(user_id: str, kind: str) -> None:
     """Pre-flight for a fixed-price action: raise if it can't be covered. No charge."""
     uid = _uid(user_id)
+
+    from . import plans_domain
+
+    if plans_domain.has_quota_remaining(uid, kind):
+        return
     price = float(settings().get(_FIXED_PRICE_KEYS[kind]) or 0)
     if _free_used(uid).get(kind, 0) < _free_limit(kind):
         return
@@ -199,33 +234,55 @@ def ensure_can_afford(user_id: str, kind: str) -> None:
         raise InsufficientCreditsError(kind, price, bal)
 
 
-def ensure_can_qna(user_id: str) -> bool:
-    """Pre-flight for a QnA question. Returns True if this one is free.
+def ensure_can_token_charge(user_id: str, kind: str) -> bool:
+    """Pre-flight for a token-billed action (QnA / Goal AI). Returns True if this one is free.
 
     Raises InsufficientCreditsError when the free allowance is spent and the balance is
-    non-positive (QnA is charged on actual LLM cost, so we only require some credit).
+    non-positive (these are charged on actual LLM cost, so we only require some credit).
     """
     uid = _uid(user_id)
-    if _free_used(uid).get(QNA, 0) < _free_limit(QNA):
+
+    from . import plans_domain
+
+    if plans_domain.has_quota_remaining(uid, kind):
+        return True
+    if _free_used(uid).get(kind, 0) < _free_limit(kind):
         return True
     bal = balance_usd(uid)
     if bal <= 0:
-        raise InsufficientCreditsError(QNA, 0.0, bal)
+        raise InsufficientCreditsError(kind, 0.0, bal)
     return False
 
 
-def charge_llm(user_id: str, tokens: int, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Charge a QnA question at markup × the LLM token cost. No-op when this one is free."""
+def charge_tokens(user_id: str, kind: str, tokens: int, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Charge a token-billed action at markup × the LLM token cost. No-op when this one is
+    covered by an active plan's quota (a count, not a token budget) or the free tier."""
     uid = _uid(user_id)
-    if _free_used(uid).get(QNA, 0) < _free_limit(QNA):
+
+    from . import plans_domain
+
+    if plans_domain.consume_quota(uid, kind, 1):
+        _record(uid, "charge", kind, 0.0, {**(meta or {}), "tokens": int(tokens or 0), "source": "plan_quota"})
+        return {"free": True, "charged_usd": 0.0}
+    if _free_used(uid).get(kind, 0) < _free_limit(kind):
         return {"free": True, "charged_usd": 0.0}
     cfg = settings()
     per_1k = float(cfg.get("llm_usd_per_1k_tokens") or 0)
     markup = float(cfg.get("llm_markup") or 1)
     usd = (int(tokens or 0) / 1000.0) * per_1k * markup
     if usd > 0:
-        _record(uid, "charge", QNA, usd, {**(meta or {}), "tokens": int(tokens or 0)})
+        _record(uid, "charge", kind, usd, {**(meta or {}), "tokens": int(tokens or 0), "source": "paid"})
     return {"free": False, "charged_usd": round(usd, 6)}
+
+
+def ensure_can_qna(user_id: str) -> bool:
+    """Pre-flight for a QnA question. See ``ensure_can_token_charge``."""
+    return ensure_can_token_charge(user_id, QNA)
+
+
+def charge_llm(user_id: str, tokens: int, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Charge a QnA question at markup × the LLM token cost. See ``charge_tokens``."""
+    return charge_tokens(user_id, QNA, tokens, meta)
 
 
 # ----------------------------------------------------------------------------- summary
@@ -249,6 +306,8 @@ def summary_payload(user_id: str) -> Dict[str, Any]:
     except Exception:
         payments = 0
 
+    from . import plans_domain
+
     return {
         "currency": "USD",
         "balance_usd": round(added - spent, 4),
@@ -265,11 +324,14 @@ def summary_payload(user_id: str) -> Dict[str, Any]:
             "answer_eval": free_block(ANSWER_EVAL),
             "interview": free_block(INTERVIEW),
             "vector_search": free_block(VECTOR_SEARCH),
+            "goal_ai": free_block(GOAL_AI),
         },
         "spent_breakdown": {
             "answer_eval_usd": breakdown[ANSWER_EVAL],
             "interview_usd": breakdown[INTERVIEW],
             "vector_search_usd": breakdown[VECTOR_SEARCH],
             "qna_usd": breakdown[QNA],
+            "goal_ai_usd": breakdown[GOAL_AI],
         },
+        "plan": plans_domain.current_subscription_payload(uid),
     }

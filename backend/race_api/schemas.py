@@ -88,6 +88,8 @@ class AnswerEvalPresignRequest(BaseModel):
     question: str = ""
     subject: str = ""
     max_marks: int = 0
+    has_diagrams: bool = True
+    language: str = "English"
 
 
 class AnswerEvalEvaluateRequest(BaseModel):
@@ -480,6 +482,41 @@ class ActivityCategoryRequest(BaseModel):
     color: str = "#6366f1"
 
 
+class ExtraCategoryRequest(BaseModel):
+    name: str
+    color: str = "#94a3b8"
+
+
+class LiveSessionStartRequest(BaseModel):
+    category: str = "Study"
+    title: str = ""
+    local_date: str = ""  # client-computed local YYYY-MM-DD; falls back to server tz if blank
+
+
+class LiveSessionHeartbeatRequest(BaseModel):
+    elapsed_seconds: int = 0
+
+
+class LiveSessionSyncRequest(BaseModel):
+    elapsed_seconds: int = 0
+    reason: str = "manual"  # manual | backgrounded | foregrounded
+
+
+class GroupCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    category_focus: str = ""
+    is_public: bool = True
+
+
+class GroupJoinRequest(BaseModel):
+    join_code: str = ""
+
+
+class GroupJoinByCodeRequest(BaseModel):
+    join_code: str
+
+
 class MindmapUpsertRequest(BaseModel):
     title: str = ""
     markdown: str = ""
@@ -500,3 +537,25 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
+
+
+# --- Pricing plans ---
+
+class SubscribeRequest(BaseModel):
+    plan: str  # "pro" | "max"
+    interval: str  # "monthly" | "annual"
+
+
+# --- Account settings ---
+
+class UpdateProfileRequest(BaseModel):
+    name: str  # email/phone are not editable — intentionally not accepted here
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str

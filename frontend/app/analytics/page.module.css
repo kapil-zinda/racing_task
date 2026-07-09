@@ -1,0 +1,80 @@
+/* Analytics page — skeleton loading + empty state. Tokens mirror globals.css. */
+
+/* ---- Loading skeletons ---- */
+.skelRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.skelGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.skelStat,
+.skelCard {
+  position: relative;
+  overflow: hidden;
+  background: #131826;
+  border: 1px solid #222a3d;
+  border-radius: 14px;
+}
+
+.skelStat { height: 78px; }
+.skelCard { height: 280px; }
+
+.skelStat::after,
+.skelCard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(139, 149, 167, 0.08), transparent);
+  animation: skelShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skelShimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skelStat::after,
+  .skelCard::after { animation: none; }
+}
+
+@media (max-width: 820px) {
+  .skelRow { grid-template-columns: 1fr 1fr; }
+}
+
+/* ---- Empty state (new user, no data yet) ---- */
+.emptyCard {
+  background: #131826;
+  border: 1px solid #222a3d;
+  border-radius: 14px;
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: #e7ecf5;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.emptyText {
+  margin: 0;
+  color: #8b95a7;
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 440px;
+}
+
+.emptyCta { margin-top: 8px; text-decoration: none; }

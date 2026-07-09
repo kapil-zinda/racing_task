@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
@@ -7,6 +8,8 @@ import PdfHighlightViewer from "../components/PdfHighlightViewer";
 import { apiFetch } from "../lib/auth";
 import { useCredits } from "../lib/credits";
 import { listGoals } from "../lib/goalApi";
+import { friendlyApiError } from "../lib/errors";
+import styles from "./search.module.css";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -28,7 +31,7 @@ function sameHit(a, b) {
 }
 
 export default function PdfSearchPage() {
-  const { requireCredits, refreshCredits } = useCredits();
+  const { credits, requireCredits, refreshCredits } = useCredits();
   const [query, setQuery] = useState("");
   const [searchCourse, setSearchCourse] = useState("");
   const [goals, setGoals] = useState([]);
@@ -77,7 +80,7 @@ export default function PdfSearchPage() {
       refreshCredits();
       if (rows.length) setSelected(rows[0]);
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
       setResults([]);
       setSearched(true);
     } finally {
@@ -87,6 +90,20 @@ export default function PdfSearchPage() {
 
   const pdfCount = useMemo(() => new Set(results.map((r) => r.doc_id)).size, [results]);
 
+  // Cost hint: free-tier allowance first, then the per-search price.
+  const costHint = useMemo(() => {
+    if (!credits) return "";
+    const free = credits.free?.vector_search;
+    if (free?.limit > 0 && free.remaining > 0) {
+      return free.used > 0
+        ? `Your first ${free.limit} searches are free — ${free.remaining} left.`
+        : `Your first ${free.limit} searches are free.`;
+    }
+    const price = Number(credits.pricing?.vector_search_usd ?? 0);
+    if (price > 0) return `Each search costs $${price.toFixed(2)} from your balance.`;
+    return "";
+  }, [credits]);
+
   const toggleFullscreen = async () => {
     try {
       const node = viewerWrapRef.current;
@@ -94,7 +111,7 @@ export default function PdfSearchPage() {
       if (!document.fullscreenElement) await node.requestFullscreen();
       else await document.exitFullscreen();
     } catch (err) {
-      setError(`Fullscreen failed: ${String(err.message || err)}`);
+      setError(`Fullscreen failed: ${friendlyApiError(err)}`);
     }
   };
 
@@ -128,12 +145,13 @@ export default function PdfSearchPage() {
               onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
             />
           </div>
-          <button className="btn-ticket kf-go" disabled={!API_BASE_URL || searching || !query.trim()} onClick={runSearch}>
+          <button className={`${styles.searchBtn} kf-go`} disabled={!API_BASE_URL || searching || !query.trim()} onClick={runSearch}>
             {searching ? "Searching…" : "Search"}
           </button>
         </div>
+        {costHint ? <p className={styles.costHint}>{costHint}</p> : null}
 
-        {error ? <p className="api-state error">{error}</p> : null}
+        {error ? <p className="api-state error" role="alert">{error}</p> : null}
         {searched ? (
           <p className="kf-count">{results.length} matches across {pdfCount} PDF{pdfCount === 1 ? "" : "s"}</p>
         ) : null}
@@ -144,9 +162,19 @@ export default function PdfSearchPage() {
             {searching ? (
               <div className="kf-empty"><div className="ae-spinner" /><span>Searching…</span></div>
             ) : !searched ? (
-              <div className="kf-empty kf-empty-hint">Type a query and hit Search to find passages in your PDFs.</div>
+              <div className="kf-empty kf-empty-hint">
+                Type a query and hit Search to find passages in your PDFs — you&rsquo;ll jump straight to the matching page.
+              </div>
             ) : results.length === 0 ? (
-              <div className="kf-empty">No matches. Try different words or another course.</div>
+              <div className="kf-empty">
+                <span>No matches for &ldquo;{query.trim()}&rdquo;.</span>
+                <span>
+                  Try broader or different words, widen the scope to all goals, or check the file is
+                  indexed in{" "}
+                  <Link href="/content" className={styles.emptyLink}>Content</Link>{" "}
+                  (file menu → Make Searchable).
+                </span>
+              </div>
             ) : (
               results.map((row, idx) => (
                 <button
