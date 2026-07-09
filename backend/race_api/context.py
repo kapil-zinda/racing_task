@@ -39,6 +39,14 @@ def session_id() -> str:
     return f"session:{uuid.uuid4().hex}"
 
 
+def live_session_id() -> str:
+    return f"live:{uuid.uuid4().hex}"
+
+
+def study_group_id() -> str:
+    return f"grp:{uuid.uuid4().hex}"
+
+
 def settings() -> Dict[str, Any]:
     return {
         "race_doc_id": os.getenv("RACE_DOC_ID", "kapil_divya_race"),
@@ -106,7 +114,17 @@ def settings() -> Dict[str, Any]:
         "resend_api_key": os.getenv("RESEND_API_KEY", ""),
         "mongodb_day_activities_collection": os.getenv("MONGODB_DAY_ACTIVITIES_COLLECTION", "day_activities"),
         "mongodb_activity_categories_collection": os.getenv("MONGODB_ACTIVITY_CATEGORIES_COLLECTION", "activity_categories"),
+        "mongodb_extra_categories_collection": os.getenv("MONGODB_EXTRA_CATEGORIES_COLLECTION", "extra_categories"),
         "mongodb_mindmaps_collection": os.getenv("MONGODB_MINDMAPS_COLLECTION", "mindmaps"),
+        # Live study timer + groups + leaderboard (YeolPumTa-inspired).
+        "mongodb_live_study_sessions_collection": os.getenv(
+            "MONGODB_LIVE_STUDY_SESSIONS_COLLECTION", "live_study_sessions"
+        ),
+        "mongodb_study_groups_collection": os.getenv("MONGODB_STUDY_GROUPS_COLLECTION", "study_groups"),
+        "mongodb_study_group_members_collection": os.getenv(
+            "MONGODB_STUDY_GROUP_MEMBERS_COLLECTION", "study_group_members"
+        ),
+        "live_session_stale_seconds": int(os.getenv("LIVE_SESSION_STALE_SECONDS", "90")),
         # Universal Goal OS — generic, metadata-driven collections (replaces journeys).
         "mongodb_goals_collection": os.getenv("MONGODB_GOALS_COLLECTION", "goals"),
         "mongodb_goal_nodes_collection": os.getenv("MONGODB_GOAL_NODES_COLLECTION", "goal_nodes"),
@@ -125,15 +143,34 @@ def settings() -> Dict[str, Any]:
         "razorpay_key_secret": os.getenv("RAZORPAY_KEY_SECRET", ""),
         # --- Billing / credits (all money is USD on the surface; Razorpay charges INR) ---
         "usd_to_inr": float(os.getenv("USD_TO_INR", "88")),
-        "price_answer_eval_usd": float(os.getenv("PRICE_ANSWER_EVAL_USD", "0.05")),
-        "price_interview_usd": float(os.getenv("PRICE_INTERVIEW_USD", "0.20")),
+        "price_answer_eval_usd": float(os.getenv("PRICE_ANSWER_EVAL_USD", "0.50")),
+        "price_interview_usd": float(os.getenv("PRICE_INTERVIEW_USD", "2.25")),
         "price_vector_search_usd": float(os.getenv("PRICE_VECTOR_SEARCH_USD", "0.01")),
-        "llm_markup": float(os.getenv("LLM_MARKUP", "1.5")),
+        # LLM_USD_PER_1K_TOKENS should track your actual model's per-token cost — verify
+        # against the OpenAI invoice periodically. The markup carries headroom for
+        # currently-unbilled retrieval/embedding cost on top of raw token cost.
+        "llm_markup": float(os.getenv("LLM_MARKUP", "2.0")),
         "llm_usd_per_1k_tokens": float(os.getenv("LLM_USD_PER_1K_TOKENS", "0.005")),
-        "free_answer_eval": int(os.getenv("FREE_ANSWER_EVAL", "5")),
-        "free_interview": int(os.getenv("FREE_INTERVIEW", "2")),
+        "free_answer_eval": int(os.getenv("FREE_ANSWER_EVAL", "2")),
+        "free_interview": int(os.getenv("FREE_INTERVIEW", "1")),
         "free_vector_search": int(os.getenv("FREE_VECTOR_SEARCH", "100")),
         "free_qna": int(os.getenv("FREE_QNA", "0")),
+        "free_goal_ai": int(os.getenv("FREE_GOAL_AI", "3")),
+        # Razorpay webhook (payment.captured) reconciliation — generate this secret in the
+        # Razorpay dashboard when registering the webhook URL.
+        "razorpay_webhook_secret": os.getenv("RAZORPAY_WEBHOOK_SECRET", ""),
+        "mongodb_rate_limits_collection": os.getenv("MONGODB_RATE_LIMITS_COLLECTION", "rate_limits"),
+        # CORS: comma-separated list of allowed frontend origins. allow_credentials=True
+        # requires an explicit list, not "*". Set this to your deployed frontend domain(s)
+        # in backend/.env before shipping to prod.
+        "cors_allowed_origins": [
+            o.strip()
+            for o in os.getenv(
+                "CORS_ALLOWED_ORIGINS",
+                "https://dias.uchhal.in,http://localhost:3000,http://localhost:3001",
+            ).split(",")
+            if o.strip()
+        ],
     }
 
 
@@ -271,6 +308,11 @@ def otps_collection():
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_otps_collection"]]
 
 
+def rate_limits_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_rate_limits_collection"]]
+
+
 def day_activities_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_day_activities_collection"]]
@@ -281,9 +323,29 @@ def activity_categories_collection():
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_activity_categories_collection"]]
 
 
+def extra_categories_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_extra_categories_collection"]]
+
+
 def mindmaps_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_mindmaps_collection"]]
+
+
+def live_study_sessions_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_live_study_sessions_collection"]]
+
+
+def study_groups_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_study_groups_collection"]]
+
+
+def study_group_members_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_study_group_members_collection"]]
 
 
 def credit_ledger_collection():
