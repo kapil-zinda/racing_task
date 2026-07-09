@@ -149,7 +149,7 @@ def incr_goal_ai_generations(user_id: str, n: int = 1) -> None:
 def storage_status_payload(user_id: str) -> Dict[str, Any]:
     doc = get_usage(user_id)
     used = max(0, int(doc.get("storage_bytes", 0) or 0))
-    limit = _limit_bytes()
+    limit = _limit_bytes(user_id)
     return {
         "used_bytes": used,
         "limit_bytes": limit,
@@ -169,7 +169,7 @@ def assert_storage_available(user_id: str, incoming_bytes: int = 0) -> None:
     """Raise ValueError (-> HTTP 400) if this upload would exceed the user's quota."""
     doc = get_usage(user_id)
     used = max(0, int(doc.get("storage_bytes", 0) or 0))
-    limit = _limit_bytes()
+    limit = _limit_bytes(user_id)
     if used + max(0, int(incoming_bytes or 0)) > limit:
         raise ValueError(
             f"Storage limit reached: using {used / (1024 ** 3):.2f} GB of "

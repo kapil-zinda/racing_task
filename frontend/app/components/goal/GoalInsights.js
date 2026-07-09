@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { forecast, weeklyReview, dailyPlan } from "../../lib/goalApi";
 import Icon from "../Icon";
+import { friendlyApiError } from "../../lib/errors";
 
 export default function GoalInsights({ goalId, onJump }) {
   const [fc, setFc] = useState(null);
@@ -16,7 +17,7 @@ export default function GoalInsights({ goalId, onJump }) {
     try {
       const [f, r, p] = await Promise.all([forecast(goalId), weeklyReview(goalId), dailyPlan(goalId, 5)]);
       setFc(f); setRv(r); setPlan(p.plan || []);
-    } catch (e) { setErr(String(e.message || e)); }
+    } catch (e) { setErr(friendlyApiError(e)); }
   }, [goalId]);
 
   useEffect(() => { load(); }, [load]);
