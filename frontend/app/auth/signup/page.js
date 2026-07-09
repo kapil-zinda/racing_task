@@ -7,18 +7,16 @@ import { apiSignup } from "../../lib/auth";
 import PhoneInput from "../../components/PhoneInput";
 import Icon from "../../components/Icon";
 import { DEFAULT_COUNTRY } from "../../lib/countries";
+import { friendlyAuthError } from "../../lib/errors";
 import styles from "../auth.module.css";
 
 // Map errors to friendly copy — never surface raw backend/fetch strings.
 const friendlyError = (err) => {
   const msg = (err && err.message) || "";
-  if (err instanceof TypeError || /fetch|network|load failed/i.test(msg)) {
-    return "Something went wrong on our side — please try again.";
-  }
   if (/already|exists|registered|taken/i.test(msg)) {
     return "An account with this email already exists — try signing in instead.";
   }
-  return "We couldn't create your account — please check your details and try again.";
+  return friendlyAuthError(err, "We couldn't create your account — please check your details and try again.");
 };
 
 export default function SignupPage() {
