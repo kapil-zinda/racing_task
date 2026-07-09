@@ -9,6 +9,7 @@ import { useCredits } from "../lib/credits";
 import MainMenu from "../components/MainMenu";
 import RazorpayCheckout from "../components/RazorpayCheckout";
 import Icon from "../components/Icon";
+import { friendlyApiError } from "../lib/errors";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -35,7 +36,7 @@ export default function UsagePage() {
       if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
       setStorage(body);
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
     } finally {
       setLoading(false);
     }
@@ -139,7 +140,7 @@ export default function UsagePage() {
                 if (typeof window !== "undefined") window.dispatchEvent(new Event("credits-changed"));
                 refreshAll();
               }}
-              onFailure={(err) => { setTopupConfirm(null); setPayStatus({ kind: "error", message: `Payment failed: ${String(err.message || err)}` }); }}
+              onFailure={(err) => { setTopupConfirm(null); setPayStatus({ kind: "error", message: `Payment failed: ${friendlyApiError(err)}` }); }}
               onDismiss={() => setPayStatus({ kind: "info", message: "Checkout cancelled" })}
             />
           </div>
