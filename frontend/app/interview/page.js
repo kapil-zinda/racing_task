@@ -8,6 +8,7 @@ import { useCredits } from "../lib/credits";
 import { confirmDialog } from "../lib/dialog";
 import DafForm from "./DafForm";
 import styles from "./page.module.css";
+import { friendlyApiError } from "../lib/errors";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -328,7 +329,7 @@ export default function InterviewPage() {
       setDafUpdatedAt(data.updated_at || null);
       setDafEditing(false);
     } catch (err) {
-      setDafError(String(err.message || err));
+      setDafError(friendlyApiError(err));
     } finally {
       setDafSaving(false);
     }
@@ -593,6 +594,10 @@ export default function InterviewPage() {
                 <Icon name="volume" size={16} />
                 <span>Find a quiet room — background noise makes your answers harder to hear.</span>
               </li>
+              <li>
+                <Icon name="scale" size={16} />
+                <span>The board stays neutral on purpose — no praise, no reaction either way. That&apos;s how the real panel behaves, not a sign of how you&apos;re doing. Your written report afterward is the real read.</span>
+              </li>
             </ul>
             <div className={styles.micTest} aria-live="polite">
               {micTest === "ok" ? (
@@ -693,6 +698,9 @@ export default function InterviewPage() {
                     That&apos;s a full board interview — {Math.max(1, Math.round(elapsed / 60))} minutes.
                   </p>
                   <p className={styles.concludedSub}>Your report is being prepared.</p>
+                  <p className={styles.concludedNote}>
+                    However neutral the room felt, that was by design — it&apos;s not a signal of how you did. The report below is the real assessment.
+                  </p>
                 </div>
                 <button className="btn-day" onClick={fetchReport} disabled={busy}>
                   <Icon name="clipboard" size={16} /> {busy ? "Evaluating…" : "View my evaluation"}

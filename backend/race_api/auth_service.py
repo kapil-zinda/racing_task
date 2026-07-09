@@ -44,18 +44,20 @@ def _generate_otp() -> str:
     return "".join(random.choices(string.digits, k=6))
 
 
-def _send_otp_email(to_email: str, otp: str, name: str) -> bool:
+def _send_otp_email(to_email: str, otp: str, name: str, purpose: str = "signup") -> bool:
     """Returns True if email was sent successfully, False otherwise."""
     cfg = settings()
     api_key = cfg.get("resend_api_key", "")
     if not api_key:
         return False
+    subject = "Reset your password" if purpose == "reset" else "Your verification code"
+    intro = "Your password reset code is" if purpose == "reset" else "Your OTP is"
     body = json.dumps(
         {
             "from": "Dias <no_reply@uchhal.in>",
             "to": [to_email],
-            "subject": "Your verification code",
-            "text": f"Hi {name},\n\nYour OTP is: {otp}\n\nIt expires in 5 minutes.",
+            "subject": subject,
+            "text": f"Hi {name},\n\n{intro}: {otp}\n\nIt expires in 5 minutes.",
         }
     ).encode()
     req = urllib.request.Request(

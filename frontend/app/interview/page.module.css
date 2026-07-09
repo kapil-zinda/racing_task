@@ -127,9 +127,11 @@
   gap: 8px;
   font: inherit;
   font-weight: 700;
+  transition: transform 0.18s ease, filter 0.18s ease;
 }
 
 .enterBtn:not(:disabled):hover {
+  transform: translateY(-2px);
   filter: brightness(1.06);
 }
 
@@ -239,6 +241,13 @@
 .concludedSub {
   color: #8b95a7;
   margin: 0;
+}
+
+.concludedNote {
+  color: #8b95a7;
+  font-size: 0.85rem;
+  margin: 10px 0 0;
+  max-width: 46ch;
 }
 
 /* ── Report overall numeral ─────────────────────────────────────────── */
