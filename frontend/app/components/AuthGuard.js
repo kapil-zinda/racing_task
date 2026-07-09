@@ -29,7 +29,7 @@ export default function AuthGuard({ children }) {
 
   // Signed-out visitors can see the public landing/explainer page (root) and the
   // auth screens; everything else sends them to the landing page first.
-  const PUBLIC = ["/", "/about", "/how-to-use", "/contact"];
+  const PUBLIC = ["/", "/about", "/how-to-use", "/contact", "/pricing"];
   const isPublic = PUBLIC.includes(pathname) || pathname.startsWith("/auth");
 
   useEffect(() => {
