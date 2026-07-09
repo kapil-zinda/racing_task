@@ -1,9 +1,13 @@
 "use client";
 import { apiFetch } from "../lib/auth";
 import { useCredits } from "../lib/credits";
+import { listGoals } from "../lib/goalApi";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
+import Icon from "../components/Icon";
+import styles from "./qna.module.css";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const NOTICE_TTL_MS = 15000;
@@ -49,6 +53,8 @@ export default function QnaPage() {
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [question, setQuestion] = useState("");
+  const [goals, setGoals] = useState([]);
+  const [askCourse, setAskCourse] = useState("");
   const [asking, setAsking] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -138,6 +144,10 @@ export default function QnaPage() {
 
   useEffect(() => { loadSessions(); }, []);
 
+  useEffect(() => {
+    listGoals().then((d) => setGoals(d.goals || [])).catch(() => {});
+  }, []);
+
   const onCreateNewChat = async () => {
     if (!API_BASE_URL) return;
     try {
@@ -182,7 +192,7 @@ export default function QnaPage() {
         body: JSON.stringify({
           session_id: selectedSessionId,
           question: q,
-          course: "",
+          course: askCourse,
           limit: 8,
         }),
       });
@@ -247,18 +257,20 @@ export default function QnaPage() {
   };
 
   return (
-    <main className="app-shell qna-shell">
+    <main className={`app-shell qna-shell ${styles.qnaShell}`}>
       <div className="bg-orb orb-1" />
       <div className="bg-orb orb-2" />
 
       <header className="hero qna-hero">
         <MainMenu active="qna" />
+        <h1>Ask your notes</h1>
+        <p className="subtext">Answers come only from your indexed content — every claim cites the exact page.</p>
       </header>
 
       <section className="pdf-search-single">
         <article className="milestone-panel qna-panel">
           {!API_BASE_URL ? <p className="api-state warn">Set NEXT_PUBLIC_API_BASE_URL first.</p> : null}
-          {error ? <p className="api-state error">{error}</p> : null}
+          {error ? <p className="api-state error" role="alert">{error}</p> : null}
           <div className="qna-layout">
             <aside className="qna-sessions">
               <div className="qna-sessions-head">
@@ -282,11 +294,17 @@ export default function QnaPage() {
 
             <div className="qna-main">
               <div className="qna-chat-shell">
-                <div className="qna-chat-list">
+                <div className="qna-chat-list" aria-live="polite">
                   {loadingMessages ? <p className="day-state">Loading messages...</p> : null}
-                  {!loadingMessages && messages.length === 0 ? (
-                    <div className="history-item">
-                      <div className="history-detail">Start by asking a question from your saved content.</div>
+                  {!loadingMessages && messages.length === 0 && !asking ? (
+                    <div className={styles.empty}>
+                      <Icon name="qna" size={26} className={styles.emptyIcon} />
+                      <p className={styles.emptyTitle}>Ask anything from your uploaded notes</p>
+                      <p className={styles.emptyText}>
+                        Answers cite the exact page. Upload PDFs in{" "}
+                        <Link href="/content" className={styles.emptyLink}>Content</Link>{" "}
+                        and mark them &ldquo;searchable&rdquo; first.
+                      </p>
                     </div>
                   ) : null}
                   {messages.map((msg) => (
@@ -322,7 +340,10 @@ export default function QnaPage() {
                   {asking ? (
                     <div className="qna-msg qna-msg-assistant">
                       <div className="qna-msg-bubble">
-                        <div className="qna-msg-text">Thinking...</div>
+                        <div className={styles.typing} aria-hidden="true">
+                          <span /><span /><span />
+                        </div>
+                        <span className={styles.srOnly}>Looking through your notes…</span>
                       </div>
                     </div>
                   ) : null}
@@ -341,9 +362,27 @@ export default function QnaPage() {
                       }
                     }}
                   />
-                  <button className="btn-day" disabled={!question.trim() || asking || !API_BASE_URL || !selectedSessionId} onClick={askQuestion}>
-                    {asking ? "Thinking..." : "Send"}
-                  </button>
+                  <div className={styles.composerRow}>
+                    <select
+                      className={`task-select ${styles.scopeSelect}`}
+                      value={askCourse}
+                      onChange={(e) => setAskCourse(e.target.value)}
+                      aria-label="Scope answers to a goal"
+                      title="Scope answers to a goal"
+                    >
+                      <option value="">All notes</option>
+                      {goals.map((g) => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      className={`btn-day ${styles.sendBtn}`}
+                      disabled={!question.trim() || asking || !API_BASE_URL || !selectedSessionId}
+                      onClick={askQuestion}
+                    >
+                      {asking ? "Thinking..." : "Send"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
