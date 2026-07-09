@@ -39,11 +39,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _limit_bytes() -> int:
+def _limit_bytes(user_id: str) -> int:
+    from . import plans_domain
+
     try:
-        gb = float(settings().get("user_storage_limit_gb") or 10)
+        gb = plans_domain.storage_limit_gb(user_id)
     except (TypeError, ValueError):
-        gb = 10.0
+        gb = 5.0
     return int(gb * 1024 * 1024 * 1024)
 
 

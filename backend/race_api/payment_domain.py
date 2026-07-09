@@ -173,17 +173,10 @@ def _mark_paid(order_id: str, payment_id: str, signature: str, *, user_id: str =
     if existing.get("status") == "paid":
         return {"verified": True, "order_id": order_id, "payment_id": existing.get("payment_id", payment_id), "status": "paid"}
 
-    # Stamp the USD value this payment credits (surface currency is USD; Razorpay took
-    # INR). Derived from the stored order amount so it can't be tampered client-side.
-    rate = float(settings().get("usd_to_inr") or 88)
-    amount_paise = int(existing.get("amount", 0) or 0)
-    credit_usd = round((amount_paise / 100.0) / rate, 4) if rate else 0.0
-
     paid_fields: Dict[str, Any] = {
         "status": "paid",
         "payment_id": payment_id,
         "signature": signature,
-        "credit_usd": credit_usd,
         "verified_at": now,
         "updated_at": now,
     }
@@ -192,6 +185,24 @@ def _mark_paid(order_id: str, payment_id: str, signature: str, *, user_id: str =
     uid = (user_id or "").strip()
     if uid:
         paid_fields["user_id"] = uid
+
+    purpose = (existing.get("notes") or {}).get("purpose", "topup")
+    if purpose == "plan":
+        # Plan purchase: activate the subscription instead of crediting the wallet
+        # (crediting it too would double-count the same payment as both a plan and
+        # top-up credits).
+        payments_collection().update_one({"order_id": order_id}, {"$set": paid_fields})
+        from . import plans_domain
+
+        plans_domain.activate_subscription_from_order({**existing, **paid_fields, "order_id": order_id})
+        return {"verified": True, "order_id": order_id, "payment_id": payment_id, "status": "paid", "purpose": "plan"}
+
+    # Stamp the USD value this payment credits (surface currency is USD; Razorpay took
+    # INR). Derived from the stored order amount so it can't be tampered client-side.
+    rate = float(settings().get("usd_to_inr") or 88)
+    amount_paise = int(existing.get("amount", 0) or 0)
+    credit_usd = round((amount_paise / 100.0) / rate, 4) if rate else 0.0
+    paid_fields["credit_usd"] = credit_usd
     payments_collection().update_one({"order_id": order_id}, {"$set": paid_fields})
 
     return {"verified": True, "order_id": order_id, "payment_id": payment_id, "status": "paid"}

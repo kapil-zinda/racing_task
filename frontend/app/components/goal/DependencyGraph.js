@@ -7,6 +7,7 @@ import ReactFlow, { Background, Controls } from "reactflow";
 import "reactflow/dist/style.css";
 import { listDependencies, createDependency, deleteDependency } from "../../lib/goalApi";
 import { confirmDialog } from "../../lib/dialog";
+import { friendlyApiError } from "../../lib/errors";
 
 export default function DependencyGraph({ goalId, nodes }) {
   const [deps, setDeps] = useState([]);
@@ -15,7 +16,7 @@ export default function DependencyGraph({ goalId, nodes }) {
 
   const load = useCallback(async () => {
     try { const d = await listDependencies(goalId); setDeps(d.dependencies || []); }
-    catch (e) { setErr(String(e.message || e)); }
+    catch (e) { setErr(friendlyApiError(e)); }
   }, [goalId]);
   useEffect(() => { load(); }, [load]);
 
@@ -48,12 +49,12 @@ export default function DependencyGraph({ goalId, nodes }) {
     try {
       await createDependency({ goal_id: goalId, source_node_id: linkFrom, target_node_id: node.id });
       setLinkFrom(null); load();
-    } catch (e) { setErr(String(e.message || e)); setLinkFrom(null); }
+    } catch (e) { setErr(friendlyApiError(e)); setLinkFrom(null); }
   };
 
   const onEdgeClick = async (_e, edge) => {
     if (await confirmDialog({ message: "Delete this dependency?", confirmLabel: "Delete", danger: true })) {
-      try { await deleteDependency(edge.id); load(); } catch (e) { setErr(String(e.message || e)); }
+      try { await deleteDependency(edge.id); load(); } catch (e) { setErr(friendlyApiError(e)); }
     }
   };
 
