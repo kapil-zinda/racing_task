@@ -15,6 +15,7 @@ export default function PublicFooter() {
       </div>
       <span className="lp-footer-note">Your all-in-one UPSC preparation workspace.</span>
       <div className="lp-footer-links">
+        <Link href="/pricing">Pricing</Link>
         <Link href="/how-to-use">How to use</Link>
         <Link href="/about">About</Link>
         <Link href="/contact">Contact</Link>
