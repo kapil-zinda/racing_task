@@ -46,9 +46,10 @@
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  transition: transform 0.18s ease, border-color 0.15s, background 0.15s, color 0.15s;
 }
 .reportBtn:hover {
+  transform: translateY(-2px);
   border-color: rgba(114, 221, 247, 0.6);
   background: rgba(114, 221, 247, 0.08);
   color: #72ddf7;
@@ -193,11 +194,62 @@ a.stepBody .stepTitle { color: #72ddf7; }
   color: #80ed99;
 }
 
+/* ── Layout: one calm focal point (Day Tracker), Extras collapsed below ──── */
+.primaryFocus {
+  margin-bottom: 24px;
+}
+
+.extrasCard {
+  margin-top: 24px;
+}
+
+.extrasToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: 44px;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+.extrasToggle:focus-visible {
+  outline: 2px solid #72ddf7;
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+.extrasToggleLead {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #8b95a7;
+}
+/* Secondary section — visually quieter than Day Tracker's dt-title (1.15rem/700). */
+.extrasToggleLead .player-name {
+  margin: 0;
+  font-size: 1.1875rem;
+  font-weight: 700;
+  color: #e7ecf5;
+}
+.extrasToggleLead svg { flex-shrink: 0; }
+
+.extrasCount {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8b95a7;
+}
+
 /* ── Extras helpers ───────────────────────────────────────────────────── */
 .extrasHeadActions {
   display: inline-flex;
   align-items: center;
   gap: 12px;
+  margin: 14px 0 12px;
 }
 
 .savedNote {

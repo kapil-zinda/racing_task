@@ -7,6 +7,7 @@ import DayReport from "../components/DayReport";
 import OnboardingChecklist from "../components/OnboardingChecklist";
 import Icon from "../components/Icon";
 import { apiFetch, useAuth } from "../lib/auth";
+import { friendlyApiError } from "../lib/errors";
 import styles from "./page.module.css";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -66,8 +67,8 @@ function extraKindClass(value) {
 export default function HomePage() {
   const { auth } = useAuth();
   const [reportOpen, setReportOpen] = useState(false);
-  const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState("");
+  const [extrasOpen, setExtrasOpen] = useState(false);
   // Mirrors the Day Log's selected date so Extras load for the same day.
   const [todayDate, setTodayDate] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
@@ -109,7 +110,7 @@ export default function HomePage() {
           setExtrasByUser((prev) => ({ ...prev, [selectedUserId]: Array.isArray(data.rows) ? data.rows : [] }));
           return;
         } catch (err) {
-          setApiError(String(err.message || err));
+          setApiError(friendlyApiError(err));
         }
       }
       if (typeof window !== "undefined") {
@@ -151,7 +152,7 @@ export default function HomePage() {
           if (!res.ok) throw new Error(`Extras save failed: ${res.status}`);
           setExtrasSaved(true);
         } catch (err) {
-          setApiError(String(err.message || err));
+          setApiError(friendlyApiError(err));
         }
         return;
       }
@@ -188,12 +189,6 @@ export default function HomePage() {
     const t = setTimeout(() => setExtrasSaved(false), 2000);
     return () => clearTimeout(t);
   }, [extrasSaved]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(""), 2400);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   useEffect(() => {
     if (!apiError) return;
@@ -295,21 +290,36 @@ export default function HomePage() {
         ) : null}
       </header>
 
+      <section className={styles.primaryFocus}>
+        <DayTracker onDateChange={setTodayDate} />
+      </section>
+
       <OnboardingChecklist />
 
-      <section className="scoreboard">
-        <DayTracker onDateChange={setTodayDate} />
-        <article className="player-card extras-card">
-          <div className="player-row">
+      <section className={`player-card extras-card ${styles.extrasCard}`}>
+        <button
+          className={styles.extrasToggle}
+          onClick={() => setExtrasOpen((v) => !v)}
+          aria-expanded={extrasOpen}
+          aria-controls="home-extras-body"
+        >
+          <span className={styles.extrasToggleLead}>
+            <Icon name={extrasOpen ? "chevron-up" : "chevron-down"} size={16} />
             <h2 className="player-name">Extras</h2>
-            <div className={styles.extrasHeadActions}>
-              {extrasSaved ? (
-                <span className={styles.savedNote} role="status">
-                  <Icon name="check" size={12} /> Saved
-                </span>
-              ) : null}
+            <span className={styles.extrasCount}>
+              {selectedExtras.length > 0 ? `${selectedExtras.length} logged` : "Optional"}
+            </span>
+          </span>
+          {extrasSaved ? (
+            <span className={styles.savedNote} role="status">
+              <Icon name="check" size={12} /> Saved
+            </span>
+          ) : null}
+        </button>
+        {extrasOpen && (
+          <div id="home-extras-body">
+          <div className={styles.extrasHeadActions}>
               <button className="btn-day secondary" onClick={openExtraModal}>+ Add Row</button>
-            </div>
           </div>
           <div className="extras-table-wrap">
             <table className="extras-table">
@@ -362,12 +372,11 @@ export default function HomePage() {
               </tbody>
             </table>
           </div>
-        </article>
+          </div>
+        )}
       </section>
 
       <DayReport open={reportOpen} onClose={() => setReportOpen(false)} />
-
-      {toast ? <div className="reward-toast">{toast}</div> : null}
 
       {extraModalOpen ? (
         <div className="task-modal-overlay" role="dialog" aria-modal="true">

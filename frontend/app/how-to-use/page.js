@@ -117,6 +117,16 @@ const USECASES = [
       "Usage shows your credit balance, what each action costs, and how much you've used.",
     ],
   },
+  {
+    icon: "keyboard",
+    title: "Keyboard shortcuts",
+    lede: "Jump anywhere without touching the menu. Shortcuts are off while you're typing in a field.",
+    steps: [
+      "Press g then a letter to jump: g h Home · g i Interview · g e Answer Eval · g q QnA · g o Goals · g a Analytics · g r Recorder · g m Mind Map · g c Content · g s Search · g u Usage.",
+      "Press / to jump straight to Search.",
+      "Press ? to open this guide from anywhere.",
+    ],
+  },
   // {
   //   icon: "wallet",
   //   title: "Credits & free usage",
