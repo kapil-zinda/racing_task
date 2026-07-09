@@ -186,6 +186,21 @@ def activate_subscription_from_order(order_doc: Dict[str, Any]) -> Dict[str, Any
     return doc
 
 
+def has_quota_remaining(user_id: str, kind: str, units: int = 1) -> bool:
+    """Read-only check for pre-flight gating (no charge). See ``consume_quota``."""
+    sub = current_subscription(user_id)
+    if not sub:
+        return False
+    quota = sub.get("quota") or {}
+    if kind not in quota:
+        return False
+    limit = quota[kind]
+    if limit is None:
+        return True
+    used = int((sub.get("usage") or {}).get(kind, 0) or 0)
+    return used + units <= int(limit)
+
+
 def consume_quota(user_id: str, kind: str, units: int = 1) -> bool:
     """Atomically consume ``units`` of ``kind`` from the active plan's quota, if any
     remains. Returns True if covered by the plan (nothing else should be charged)."""
