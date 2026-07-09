@@ -5,16 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, apiSignin } from "../../lib/auth";
 import Icon from "../../components/Icon";
+import { friendlyAuthError } from "../../lib/errors";
 import styles from "../auth.module.css";
 
 // Map errors to friendly copy — never surface raw backend/fetch strings.
-const friendlyError = (err) => {
-  const msg = (err && err.message) || "";
-  if (err instanceof TypeError || /fetch|network|load failed/i.test(msg)) {
-    return "Something went wrong on our side — please try again.";
-  }
-  return "We couldn't sign you in — check your email and password and try again.";
-};
+const friendlyError = (err) =>
+  friendlyAuthError(err, "We couldn't sign you in — check your email and password and try again.");
 
 export default function SigninPage() {
   const { signIn } = useAuth();
