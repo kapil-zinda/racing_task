@@ -104,7 +104,9 @@ def settings() -> Dict[str, Any]:
         "upstash_vector_rest_url": os.getenv("UPSTASH_VECTOR_REST_URL", ""),
         "upstash_vector_rest_token": os.getenv("UPSTASH_VECTOR_REST_TOKEN", ""),
         "answer_eval_s3_trigger": os.getenv("ANSWER_EVAL_S3_TRIGGER", "false").lower() == "true",
-        "user_storage_limit_gb": os.getenv("USER_STORAGE_LIMIT_GB", "10"),
+        # Free-tier storage limit (GB). Paid plans (see plans_domain.PLAN_CATALOG)
+        # override this per user while an active subscription exists.
+        "user_storage_limit_gb": os.getenv("USER_STORAGE_LIMIT_GB", "5"),
         "textract_enabled": os.getenv("TEXTRACT_ENABLED", "1"),
         "textract_poll_seconds": os.getenv("TEXTRACT_POLL_SECONDS", "2"),
         "textract_timeout_seconds": os.getenv("TEXTRACT_TIMEOUT_SECONDS", "900"),
@@ -137,6 +139,7 @@ def settings() -> Dict[str, Any]:
         "mongodb_goal_templates_collection": os.getenv("MONGODB_GOAL_TEMPLATES_COLLECTION", "goal_templates"),
         "mongodb_payments_collection": os.getenv("MONGODB_PAYMENTS_COLLECTION", "payments"),
         "mongodb_credit_ledger_collection": os.getenv("MONGODB_CREDIT_LEDGER_COLLECTION", "credit_ledger"),
+        "mongodb_subscriptions_collection": os.getenv("MONGODB_SUBSCRIPTIONS_COLLECTION", "subscriptions"),
         # Razorpay Standard Checkout. KEY_ID is safe to expose to the frontend;
         # KEY_SECRET must stay server-side (used for order creation + signature verify).
         "razorpay_key_id": os.getenv("RAZORPAY_KEY_ID", ""),
@@ -403,6 +406,11 @@ def goal_templates_collection():
 def payments_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_payments_collection"]]
+
+
+def subscriptions_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_subscriptions_collection"]]
 
 
 def s3_client():
