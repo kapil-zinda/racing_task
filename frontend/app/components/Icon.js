@@ -13,7 +13,7 @@ import {
   Timer, Disc, MoreHorizontal, Plus, Minus, Circle as Dot, Loader2, Layers,
   CalendarDays, ClipboardList, Paperclip, StickyNote, CreditCard,
   Eye, EyeOff, Wallet, Zap, MicOff, PhoneOff, Copy, ImageOff, Languages,
-  Keyboard, HelpCircle,
+  Keyboard, HelpCircle, Settings,
 } from "lucide-react";
 
 const MAP = {
@@ -115,6 +115,7 @@ const MAP = {
   keyboard: Keyboard,
   help: HelpCircle,
   "help-circle": HelpCircle,
+  settings: Settings,
 };
 
 export default function Icon({ name, size = "1em", className = "", strokeWidth = 2, ...rest }) {
