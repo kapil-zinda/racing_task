@@ -142,9 +142,6 @@ export default function GoalDetailPage() {
                 <>
                   <div className="goal-menu-backdrop" onClick={() => setGoalMenuOpen(false)} />
                   <div className="goal-menu-dropdown">
-                    <button className="menu-item" disabled title="Pause coming soon">
-                      <Icon name="pause" size={15} /> Pause goal
-                    </button>
                     <button className="menu-item danger" onClick={handleDeleteGoal}>
                       <Icon name="trash" size={15} /> Delete goal
                     </button>
