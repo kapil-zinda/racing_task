@@ -14,6 +14,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
 const fmtUsd = (n) => `$${Number(n || 0).toFixed(2)}`;
 const fmtNum = (n) => Number(n || 0).toLocaleString();
+const fmtInr = (n) => `₹${Math.round(Number(n || 0)).toLocaleString("en-IN")}`;
 
 export default function UsagePage() {
   const { auth } = useAuth();
@@ -24,6 +25,7 @@ export default function UsagePage() {
   const [error, setError] = useState("");
   const [addUsd, setAddUsd] = useState("5");
   const [payStatus, setPayStatus] = useState(null);
+  const [topupConfirm, setTopupConfirm] = useState(null); // { usd, inr } after a verified payment
 
   const loadStorage = useCallback(async () => {
     setLoading(true); setError("");
@@ -63,12 +65,16 @@ export default function UsagePage() {
   const validAdd = Number.isFinite(paise) && addUsdNum >= 1;
   const prefill = auth ? { name: auth.name || "", email: auth.email || "" } : {};
 
-  // Per-action rows for the plan card.
+  // Live ₹ preview of the top-up, using the server's rate — no surprises at checkout.
+  const inrPreview = validAdd ? addUsdNum * rate : 0;
+
+  // Per-action rows for the plan card. `note` replaces the price column for
+  // usage-based actions with a human explanation.
   const actions = [
     { key: "answer_eval", label: "Answer evaluation", icon: "file", price: pricing.answer_eval_usd, unit: "each" },
     { key: "interview", label: "Mock interview", icon: "interview", price: pricing.interview_usd, unit: "each" },
     { key: "vector_search", label: "Search query", icon: "search", price: pricing.vector_search_usd, unit: "per query" },
-    { key: "qna", label: "QnA question", icon: "chat", price: null, unit: "usage-based" },
+    { key: "qna", label: "QnA question", icon: "chat", price: null, note: "Billed by answer length — typically a few cents" },
   ];
 
   return (
@@ -89,7 +95,14 @@ export default function UsagePage() {
         <section className="usage-credit-card">
           <div className="usage-credit-main">
             <span className="usage-credit-label"><Icon name="wallet" size={15} /> Credit balance</span>
-            <span className="usage-credit-balance">{fmtUsd(balance)}</span>
+            {credits ? (
+              <>
+                <span className="usage-credit-balance">{fmtUsd(balance)}</span>
+                <span className="usage-balance-inr">≈ {fmtInr(balance * rate)} at today&apos;s rate</span>
+              </>
+            ) : (
+              <span className="usage-skel usage-skel-balance" aria-hidden="true" />
+            )}
             <div className="usage-credit-meta">
               <span><b>{fmtUsd(added)}</b> added</span>
               <span className="dot">·</span>
@@ -106,6 +119,11 @@ export default function UsagePage() {
                 <input type="number" min="1" step="1" value={addUsd}
                   onChange={(e) => setAddUsd(e.target.value)} placeholder="5" />
               </div>
+              <span className="usage-inr-hint">
+                {validAdd
+                  ? <>You&apos;ll pay ≈ {fmtInr(inrPreview)} · rate ₹{rate}/$</>
+                  : <>Minimum $1 · rate ₹{rate}/$</>}
+              </span>
             </label>
             <RazorpayCheckout
               amount={paise}
@@ -116,14 +134,31 @@ export default function UsagePage() {
               disabled={!validAdd}
               label="Add credits"
               onSuccess={() => {
-                setPayStatus({ kind: "success", message: "Credits added" });
+                setPayStatus(null);
+                setTopupConfirm({ usd: addUsdNum, inr: paise / 100 });
                 if (typeof window !== "undefined") window.dispatchEvent(new Event("credits-changed"));
                 refreshAll();
               }}
-              onFailure={(err) => setPayStatus({ kind: "error", message: `Payment failed: ${String(err.message || err)}` })}
+              onFailure={(err) => { setTopupConfirm(null); setPayStatus({ kind: "error", message: `Payment failed: ${String(err.message || err)}` }); }}
               onDismiss={() => setPayStatus({ kind: "info", message: "Checkout cancelled" })}
             />
           </div>
+
+          {topupConfirm && (
+            <div className="usage-topup-confirm" role="status">
+              <span className="usage-topup-confirm-icon"><Icon name="check-circle" size={22} /></span>
+              <div className="usage-topup-confirm-body">
+                <strong>Payment successful</strong>
+                <span>
+                  {fmtInr(topupConfirm.inr)} ({fmtUsd(topupConfirm.usd)}) added ·
+                  new balance <b>{fmtUsd(balance)}</b> ≈ {fmtInr(balance * rate)}
+                </span>
+              </div>
+              <button className="usage-topup-confirm-close" onClick={() => setTopupConfirm(null)} aria-label="Dismiss confirmation">
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+          )}
 
           {payStatus && (
             <div className={`usage-pay-note ${payStatus.kind}`}>{payStatus.message}</div>
@@ -136,19 +171,25 @@ export default function UsagePage() {
           <ul className="usage-plan">
             {actions.map((a) => {
               const f = free[a.key];
+              const remaining = Number(f?.remaining ?? 0);
+              const limit = Number(f?.limit ?? 0);
               return (
                 <li key={a.key} className="usage-plan-row">
                   <span className="usage-plan-icon"><Icon name={a.icon} size={18} /></span>
                   <span className="usage-plan-label">{a.label}</span>
                   {f ? (
-                    <span className={`usage-plan-free ${f.remaining > 0 ? "on" : ""}`}>
-                      {f.remaining > 0 ? `${f.remaining} of ${f.limit} free left` : `${f.limit} free used`}
+                    <span className={`usage-plan-free ${remaining > 0 ? "on" : "used"}`}>
+                      {remaining > 0 ? `${remaining} of ${limit} free left` : "Free allowance used"}
                     </span>
                   ) : <span className="usage-plan-free" />}
-                  <span className="usage-plan-price">
-                    {a.price != null ? fmtUsd(a.price) : "—"}
-                    <small>{a.unit}</small>
-                  </span>
+                  {a.note ? (
+                    <span className="usage-plan-price usage-plan-note">{a.note}</span>
+                  ) : (
+                    <span className="usage-plan-price">
+                      {a.price != null ? fmtUsd(a.price) : "—"}
+                      <small>{a.unit}</small>
+                    </span>
+                  )}
                 </li>
               );
             })}
@@ -167,7 +208,18 @@ export default function UsagePage() {
         </section>
 
         {/* Storage */}
-        {loading ? <div className="goal-empty">Loading…</div> : storage && (
+        {loading ? (
+          <>
+            <section className="usage-card" aria-busy="true" aria-label="Loading storage">
+              <div className="usage-skel usage-skel-line w35" />
+              <div className="usage-skel usage-skel-bar" />
+              <div className="usage-skel usage-skel-line w55" />
+            </section>
+            <section className="goal-stat-row" aria-hidden="true">
+              {[0, 1, 2, 3].map((i) => <div key={i} className="usage-skel usage-skel-stat" />)}
+            </section>
+          </>
+        ) : storage && (
           <>
             <section className="usage-card">
               <div className="usage-card-head">
