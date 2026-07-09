@@ -5,6 +5,7 @@
 import { useMemo, useState } from "react";
 import { bulkCreateNodes } from "../../lib/goalApi";
 import Icon from "../Icon";
+import { friendlyApiError } from "../../lib/errors";
 
 export default function BulkAddChildren({ goalId, parent, onClose, onDone }) {
   const [pattern, setPattern] = useState("Class {n}");
@@ -48,7 +49,7 @@ export default function BulkAddChildren({ goalId, parent, onClose, onDone }) {
       onDone(res);
       onClose();
     } catch (e) {
-      setErr(String(e.message || e));
+      setErr(friendlyApiError(e));
     } finally {
       setSaving(false);
     }
