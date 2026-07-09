@@ -188,14 +188,22 @@ def _record_failed(user_id: str, kind: str, meta: Optional[Dict[str, Any]], erro
 def charge_fixed(user_id: str, kind: str, meta: Optional[Dict[str, Any]] = None, units: int = 1) -> Dict[str, Any]:
     """Charge a fixed-price action (answer_eval / interview / vector_search).
 
-    ``units`` bills more than one unit in a single action — e.g. an answer PDF
-    that contains N questions counts as N answer evaluations. Units are drawn
-    from the free allowance first, then charged at the fixed price each.
-    Free while within the allowance; otherwise deducts or raises
-    InsufficientCreditsError. Returns {"free": bool, "charged_usd": float, "units": int}.
+    Precedence: active plan quota for this period, then the lifetime free
+    allowance, then the paid balance. ``units`` bills more than one unit in a
+    single action — e.g. an answer PDF that contains N questions counts as N
+    answer evaluations. Free/plan-covered while within an allowance; otherwise
+    deducts or raises InsufficientCreditsError.
+    Returns {"free": bool, "charged_usd": float, "units": int}.
     """
     uid = _uid(user_id)
     units = max(1, int(units or 1))
+
+    from . import plans_domain
+
+    if plans_domain.consume_quota(uid, kind, units):
+        _record(uid, "charge", kind, 0.0, {**(meta or {}), "units": units, "source": "plan_quota"})
+        return {"free": True, "charged_usd": 0.0, "units": units}
+
     price = float(settings().get(_FIXED_PRICE_KEYS[kind]) or 0)
     used = _free_used(uid).get(kind, 0)
     free_remaining = max(0, _free_limit(kind) - used)
@@ -206,13 +214,18 @@ def charge_fixed(user_id: str, kind: str, meta: Optional[Dict[str, Any]] = None,
     bal = balance_usd(uid)
     if bal < cost:
         raise InsufficientCreditsError(kind, cost, bal)
-    _record(uid, "charge", kind, cost, {**(meta or {}), "units": units, "paid_units": paid_units})
+    _record(uid, "charge", kind, cost, {**(meta or {}), "units": units, "paid_units": paid_units, "source": "paid"})
     return {"free": False, "charged_usd": cost, "units": units}
 
 
 def ensure_can_afford(user_id: str, kind: str) -> None:
     """Pre-flight for a fixed-price action: raise if it can't be covered. No charge."""
     uid = _uid(user_id)
+
+    from . import plans_domain
+
+    if plans_domain.has_quota_remaining(uid, kind):
+        return
     price = float(settings().get(_FIXED_PRICE_KEYS[kind]) or 0)
     if _free_used(uid).get(kind, 0) < _free_limit(kind):
         return
@@ -228,6 +241,11 @@ def ensure_can_token_charge(user_id: str, kind: str) -> bool:
     non-positive (these are charged on actual LLM cost, so we only require some credit).
     """
     uid = _uid(user_id)
+
+    from . import plans_domain
+
+    if plans_domain.has_quota_remaining(uid, kind):
+        return True
     if _free_used(uid).get(kind, 0) < _free_limit(kind):
         return True
     bal = balance_usd(uid)
@@ -237,8 +255,15 @@ def ensure_can_token_charge(user_id: str, kind: str) -> bool:
 
 
 def charge_tokens(user_id: str, kind: str, tokens: int, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Charge a token-billed action at markup × the LLM token cost. No-op when this one is free."""
+    """Charge a token-billed action at markup × the LLM token cost. No-op when this one is
+    covered by an active plan's quota (a count, not a token budget) or the free tier."""
     uid = _uid(user_id)
+
+    from . import plans_domain
+
+    if plans_domain.consume_quota(uid, kind, 1):
+        _record(uid, "charge", kind, 0.0, {**(meta or {}), "tokens": int(tokens or 0), "source": "plan_quota"})
+        return {"free": True, "charged_usd": 0.0}
     if _free_used(uid).get(kind, 0) < _free_limit(kind):
         return {"free": True, "charged_usd": 0.0}
     cfg = settings()
@@ -246,7 +271,7 @@ def charge_tokens(user_id: str, kind: str, tokens: int, meta: Optional[Dict[str,
     markup = float(cfg.get("llm_markup") or 1)
     usd = (int(tokens or 0) / 1000.0) * per_1k * markup
     if usd > 0:
-        _record(uid, "charge", kind, usd, {**(meta or {}), "tokens": int(tokens or 0)})
+        _record(uid, "charge", kind, usd, {**(meta or {}), "tokens": int(tokens or 0), "source": "paid"})
     return {"free": False, "charged_usd": round(usd, 6)}
 
 
@@ -280,6 +305,8 @@ def summary_payload(user_id: str) -> Dict[str, Any]:
         payments = int(payments_collection().count_documents({"user_id": uid, "status": "paid"}))
     except Exception:
         payments = 0
+
+    from . import plans_domain
 
     return {
         "currency": "USD",
