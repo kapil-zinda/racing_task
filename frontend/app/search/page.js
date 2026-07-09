@@ -8,6 +8,7 @@ import PdfHighlightViewer from "../components/PdfHighlightViewer";
 import { apiFetch } from "../lib/auth";
 import { useCredits } from "../lib/credits";
 import { listGoals } from "../lib/goalApi";
+import { friendlyApiError } from "../lib/errors";
 import styles from "./search.module.css";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -79,7 +80,7 @@ export default function PdfSearchPage() {
       refreshCredits();
       if (rows.length) setSelected(rows[0]);
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
       setResults([]);
       setSearched(true);
     } finally {
@@ -110,7 +111,7 @@ export default function PdfSearchPage() {
       if (!document.fullscreenElement) await node.requestFullscreen();
       else await document.exitFullscreen();
     } catch (err) {
-      setError(`Fullscreen failed: ${String(err.message || err)}`);
+      setError(`Fullscreen failed: ${friendlyApiError(err)}`);
     }
   };
 

@@ -8,6 +8,7 @@ import ExplainerCanvas from "./ExplainerCanvas";
 import { confirmDialog } from "../lib/dialog";
 import { AGENT_PENDING_RECORDER_ACTION_KEY, AGENT_RECORDER_EVENT, AGENT_RECORDER_STATUS_EVENT } from "../lib/agent/constants";
 import { apiFetch, useAuth } from "../lib/auth";
+import { friendlyApiError } from "../lib/errors";
 
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -622,7 +623,7 @@ export default function RecorderPage() {
       });
       return sessions;
     } catch (err) {
-      setSessionError(String(err.message || err));
+      setSessionError(friendlyApiError(err));
       return [];
     } finally {
       setSessionLoading(false);
@@ -674,7 +675,7 @@ export default function RecorderPage() {
       await fetchSessions();
       return normalized;
     } catch (err) {
-      setSessionError(String(err.message || err));
+      setSessionError(friendlyApiError(err));
       return null;
     }
   };
@@ -734,7 +735,7 @@ export default function RecorderPage() {
       await fetchSessions();
       setCreateModalOpen(false);
     } catch (err) {
-      setSessionError(String(err.message || err));
+      setSessionError(friendlyApiError(err));
     }
   };
 
@@ -754,7 +755,7 @@ export default function RecorderPage() {
         await videoEl.requestPictureInPicture();
       }
     } catch (err) {
-      setSessionError(`Picture-in-Picture failed: ${String(err.message || err)}`);
+      setSessionError(`Picture-in-Picture failed: ${friendlyApiError(err)}`);
     }
   };
 
@@ -848,7 +849,7 @@ export default function RecorderPage() {
       }
       await fetchSessions();
     } catch (err) {
-      setSessionError(String(err.message || err));
+      setSessionError(friendlyApiError(err));
     } finally {
       setDeletingSessionIds((prev) => {
         const next = { ...prev };
@@ -993,7 +994,7 @@ export default function RecorderPage() {
         if (msg.includes("RECORDING_BUCKET is not configured")) {
           setSessionError("Upload is disabled: backend RECORDING_BUCKET is not configured.");
         } else {
-          setSessionError(`Recording upload failed (${mode}): ${msg}`);
+          setSessionError(`Recording upload failed (${mode}) — ${friendlyApiError(err)}`);
         }
       });
     return state.queue;
@@ -1611,7 +1612,7 @@ export default function RecorderPage() {
       commitTimerState({ running: false, startedAt: 0, baseElapsed: updatedSession?.elapsed_seconds || elapsed });
       await fetchSessions();
     } catch (err) {
-      setSessionError(String(err.message || err));
+      setSessionError(friendlyApiError(err));
       throw err;
     }
   };
@@ -1662,7 +1663,7 @@ export default function RecorderPage() {
     } catch (err) {
       stopAndReleaseStreams();
       setRecorderArming(false);
-      setSessionError(`Recorder permission/device error: ${String(err.message || err)}`);
+      setSessionError(`Recorder permission/device error: ${friendlyApiError(err)}`);
       return;
     }
     // forceStart is set when the caller already confirmed taking over an active
@@ -1694,14 +1695,14 @@ export default function RecorderPage() {
           stopAndReleaseStreams();
           recorderRefs.current = {};
           setRecorderArming(false);
-          setSessionError(`Could not start recording: ${String(err2?.message || err2)}`);
+          setSessionError(`Could not start recording — ${friendlyApiError(err2)}`);
           return;
         }
       } else {
         stopAndReleaseStreams();
         recorderRefs.current = {};
         setRecorderArming(false);
-        setSessionError(`Could not start recording: ${msg}`);
+        setSessionError(`Could not start recording — ${friendlyApiError(err)}`);
         return;
       }
     }
@@ -1800,7 +1801,7 @@ export default function RecorderPage() {
         return false;
       }
     } catch (err) {
-      setSessionError(String(err.message || err));
+      setSessionError(friendlyApiError(err));
       return false;
     } finally {
       stoppingRef.current = false;
@@ -1898,7 +1899,7 @@ export default function RecorderPage() {
     const onAgentAction = (event) => {
       const payload = event?.detail || {};
       executeAgentRecorderAction(payload).catch((err) => {
-        setSessionError(`Agent action failed: ${String(err?.message || err)}`);
+        setSessionError(`Agent action failed — ${friendlyApiError(err)}`);
       });
     };
     window.addEventListener(AGENT_RECORDER_EVENT, onAgentAction);
@@ -1908,7 +1909,7 @@ export default function RecorderPage() {
         const payload = JSON.parse(raw);
         window.sessionStorage.removeItem(AGENT_PENDING_RECORDER_ACTION_KEY);
         executeAgentRecorderAction(payload).catch((err) => {
-          setSessionError(`Agent action failed: ${String(err?.message || err)}`);
+          setSessionError(`Agent action failed — ${friendlyApiError(err)}`);
         });
       }
     } catch (_) {}
@@ -1948,7 +1949,7 @@ export default function RecorderPage() {
         setSessionError(`Retry still pending for: ${uniqueFailed.join(", ")}`);
       }
     } catch (err) {
-      setSessionError(String(err.message || err));
+      setSessionError(friendlyApiError(err));
     } finally {
       setFinalizeRetrying(false);
     }
@@ -1989,7 +1990,7 @@ export default function RecorderPage() {
         await startScreenShare();
       }
     } catch (err) {
-      setSessionError(`Screen share error: ${String(err.message || err)}`);
+      setSessionError(`Screen share error: ${friendlyApiError(err)}`);
     }
   };
 
@@ -2006,7 +2007,7 @@ export default function RecorderPage() {
       const data = await res.json();
       setPlaybackUrls((prev) => ({ ...prev, [mediaType]: data.playback_url || "" }));
     } catch (err) {
-      setSessionError(`Playback failed for ${mediaType}: ${String(err.message || err)}`);
+      setSessionError(`Playback failed for ${mediaType}: ${friendlyApiError(err)}`);
     }
   };
 
@@ -2054,7 +2055,7 @@ export default function RecorderPage() {
       setPlayerModal({ open: true, sid, mediaType, url, title, loading: false, streaming });
     } catch (err) {
       setPlayerModal({ open: false, sid: "", mediaType: "", url: "", title: "", loading: false, streaming: false });
-      setSessionError(`Playback failed: ${String(err.message || err)}`);
+      setSessionError(`Playback failed: ${friendlyApiError(err)}`);
     }
   };
 
@@ -2078,7 +2079,7 @@ export default function RecorderPage() {
       a.click();
       a.remove();
     } catch (err) {
-      setSessionError(`Download failed: ${String(err.message || err)}`);
+      setSessionError(`Download failed: ${friendlyApiError(err)}`);
     }
   };
 
@@ -2102,7 +2103,7 @@ export default function RecorderPage() {
       if (!res.ok) throw new Error(await res.text());
       await fetchSessions();
     } catch (err) {
-      setSessionError(`Could not update note: ${String(err.message || err)}`);
+      setSessionError(`Could not update note: ${friendlyApiError(err)}`);
     }
   };
 
@@ -2449,7 +2450,7 @@ export default function RecorderPage() {
       setUploadFiles((prev) => ({ ...prev, explainerAttachment: null, explainerAudio: null }));
       setPlaybackUrls({ audio: "", video: "", screen: "", attachment: "" });
     } catch (err) {
-      setSessionError(String(err.message || err));
+      setSessionError(friendlyApiError(err));
     } finally {
       setExplainerDoneLoading(false);
     }
