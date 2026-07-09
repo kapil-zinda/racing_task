@@ -1,8 +1,26 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "../lib/auth";
+
+// Quiet auth splash: centered brand mark with a subtle pulse (reduced motion is
+// collapsed globally). No text unless the check drags on (>2s).
+function AuthSplash() {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 2000);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div className="auth-splash" role="status" aria-label="Signing you in">
+      <img className="auth-splash-mark" src="/dias-icon.png" alt="" />
+      {slow && <p className="auth-splash-text">Signing you in…</p>}
+    </div>
+  );
+}
 
 export default function AuthGuard({ children }) {
   const { auth, loading } = useAuth();
@@ -21,19 +39,7 @@ export default function AuthGuard({ children }) {
   }, [auth, loading, isPublic, router]);
 
   if (loading) {
-    return (
-      <div style={{
-        display: "flex",
-        height: "100vh",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#d1d5ff",
-        fontSize: 16,
-        letterSpacing: "0.04em",
-      }}>
-        Authenticating…
-      </div>
-    );
+    return <AuthSplash />;
   }
 
   return children;
