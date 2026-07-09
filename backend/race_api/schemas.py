@@ -537,3 +537,25 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
+
+
+# --- Pricing plans ---
+
+class SubscribeRequest(BaseModel):
+    plan: str  # "pro" | "max"
+    interval: str  # "monthly" | "annual"
+
+
+# --- Account settings ---
+
+class UpdateProfileRequest(BaseModel):
+    name: str  # email/phone are not editable — intentionally not accepted here
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str
