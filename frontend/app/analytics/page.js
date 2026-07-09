@@ -11,6 +11,7 @@ import ContributionHeatmap from "../components/goal/ContributionHeatmap";
 import CalendarView from "../components/goal/CalendarView";
 import Icon from "../components/Icon";
 import { listGoals, getAnalytics, getDashboard } from "../lib/goalApi";
+import { friendlyApiError } from "../lib/errors";
 import styles from "./page.module.css";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
@@ -111,7 +112,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    listGoals().then((d) => setGoals(d.goals || [])).catch((e) => setError(String(e.message || e)));
+    listGoals().then((d) => setGoals(d.goals || [])).catch((e) => setError(friendlyApiError(e)));
   }, []);
 
   const load = useCallback(async () => {
@@ -119,7 +120,7 @@ export default function AnalyticsPage() {
     try {
       if (goalId) { setPerGoal(await getAnalytics(goalId)); }
       else { setCombined(await getDashboard()); }
-    } catch (e) { setError(String(e.message || e)); }
+    } catch (e) { setError(friendlyApiError(e)); }
     finally { setLoading(false); }
   }, [goalId]);
 
