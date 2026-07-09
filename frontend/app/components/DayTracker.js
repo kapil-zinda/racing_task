@@ -6,6 +6,7 @@ import { apiFetch } from "../lib/auth";
 import TrackerSummary from "./TrackerSummary";
 import Icon from "./Icon";
 import { confirmDialog } from "../lib/dialog";
+import { friendlyApiError } from "../lib/errors";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -266,7 +267,7 @@ export default function DayTracker({ onDateChange }) {
       if (!res.ok) throw new Error(`${res.status}`);
       const data = await res.json();
       setActivities(Array.isArray(data.activities) ? data.activities : []);
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
     finally { setLoading(false); }
   }, [date]);
 
@@ -306,7 +307,7 @@ export default function DayTracker({ onDateChange }) {
       const res = await apiFetch(url, { method: modal.mode === "edit" ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(`${res.status}`);
       closeModal(); await loadActivities();
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
     finally { setSaving(false); }
   };
 
@@ -326,7 +327,7 @@ export default function DayTracker({ onDateChange }) {
       const cat = await res.json();
       setCategories((p) => [...p, cat]);
       setNewCat({ name: "", color: "#6366f1" });
-    } catch (err) { setError(String(err.message || err)); }
+    } catch (err) { setError(friendlyApiError(err)); }
     finally { setCatSaving(false); }
   };
 
