@@ -140,6 +140,10 @@ def incr_qna_questions(user_id: str, n: int = 1) -> None:
     _incr(user_id, "qna_questions", int(n or 0))
 
 
+def incr_goal_ai_generations(user_id: str, n: int = 1) -> None:
+    _incr(user_id, "goal_ai_generations", int(n or 0))
+
+
 def storage_status_payload(user_id: str) -> Dict[str, Any]:
     doc = get_usage(user_id)
     used = max(0, int(doc.get("storage_bytes", 0) or 0))
