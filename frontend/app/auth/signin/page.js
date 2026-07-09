@@ -59,7 +59,12 @@ export default function SigninPage() {
               required
               autoFocus
             />
-            <label className="auth-label" htmlFor="signin-password">Password</label>
+            <div className={styles.labelRow}>
+              <label className="auth-label" htmlFor="signin-password">Password</label>
+              <Link href="/auth/forgot-password" className="auth-link">
+                Forgot password?
+              </Link>
+            </div>
             <div className="auth-pass-wrap">
               <input
                 id="signin-password"
