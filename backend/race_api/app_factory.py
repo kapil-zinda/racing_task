@@ -182,10 +182,13 @@ from .mindmap_domain import (
     update_mindmap,
 )
 from .payment_domain import create_order_payload, verify_payment_payload, verify_webhook_payload, credit_balance_payload
+from .plans_domain import list_plans_payload, current_subscription_payload, create_plan_order_payload
 from .contact_domain import send_contact_message
 from .schemas import (
     ActivityCategoryRequest,
     ActivityUpsertRequest,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
     LiveSessionStartRequest,
     LiveSessionHeartbeatRequest,
     LiveSessionSyncRequest,
@@ -252,6 +255,8 @@ from .schemas import (
     SessionStatusRequest,
     CreateOrderRequest,
     VerifyPaymentRequest,
+    SubscribeRequest,
+    UpdateProfileRequest,
     ContactRequest,
 )
 from .session_domain import (
@@ -273,7 +278,7 @@ from .session_domain import (
 )
 
 
-_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/contact", "/razorpay/webhook"}
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/contact", "/razorpay/webhook", "/plans"}
 
 # (method, path) -> (limit, window_seconds, key_kind). "ip" keys off the client address;
 # "user" keys off the authenticated user_id (falls back to IP if somehow unauthenticated —
@@ -406,6 +411,50 @@ def create_app() -> FastAPI:
         if not user:
             raise HTTPException(status_code=401, detail="Not authenticated")
         return user
+
+    @app.put("/user/me")
+    def user_update_profile(request: Request, payload: UpdateProfileRequest):
+        try:
+            return _auth_service.update_profile(_require_auth(request), payload.name)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "PUT /user/me")
+
+    @app.post("/user/change-password")
+    def user_change_password(request: Request, payload: ChangePasswordRequest):
+        try:
+            return _auth_service.change_password(
+                _require_auth(request), payload.current_password, payload.new_password
+            )
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /user/change-password")
+
+    @app.post("/user/delete-account")
+    def user_delete_account(request: Request, payload: DeleteAccountRequest):
+        try:
+            return _auth_service.delete_account(_require_auth(request), payload.password)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /user/delete-account")
+
+    @app.get("/plans")
+    def plans_list():
+        try:
+            return list_plans_payload()
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /plans")
+
+    @app.get("/plans/me")
+    def plans_me(request: Request):
+        try:
+            return current_subscription_payload(_require_auth(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /plans/me")
+
+    @app.post("/plans/subscribe")
+    def plans_subscribe(request: Request, payload: SubscribeRequest):
+        try:
+            return create_plan_order_payload(_require_auth(request), payload.plan, payload.interval)
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "POST /plans/subscribe")
 
     @app.get("/state")
     def get_state(date: Optional[str] = Query(default=None)):
