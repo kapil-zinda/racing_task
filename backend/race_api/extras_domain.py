@@ -7,11 +7,56 @@ from typing import Any, Dict, List
 from pymongo import ASCENDING
 
 from .constants import PLAYERS
-from .context import current_date_str, extras_collection
+from .context import current_date_str, extra_categories_collection, extras_collection
 from .ledger_domain import log_activity
 from .mission_domain import get_active_mission_id
 
 _extras_indexes_ensured = False
+
+_DEFAULT_EXTRA_CATEGORIES = [
+    {"name": "Time waste", "color": "#94A3B8"},
+    {"name": "Danger", "color": "#F43F5E"},
+    {"name": "Necessary", "color": "#0EA5E9"},
+    {"name": "Coursework", "color": "#10B981"},
+    {"name": "Random", "color": "#8B5CF6"},
+    {"name": "Sleep", "color": "#4338CA"},
+]
+
+
+def get_extra_categories(user_id: str) -> List[Dict[str, Any]]:
+    uid = (user_id or "").strip()
+    if not uid:
+        raise ValueError("Invalid user_id")
+    cats = list(extra_categories_collection().find({"user_id": uid}, {"_id": 0, "user_id": 0}))
+    if not cats:
+        now = _now()
+        extra_categories_collection().insert_many(
+            [{"user_id": uid, "name": c["name"], "color": c["color"], "created_at": now} for c in _DEFAULT_EXTRA_CATEGORIES]
+        )
+        return [{"name": c["name"], "color": c["color"]} for c in _DEFAULT_EXTRA_CATEGORIES]
+    return [{"name": c["name"], "color": c.get("color", "#94A3B8")} for c in cats]
+
+
+def create_extra_category(user_id: str, name: str, color: str) -> Dict[str, Any]:
+    uid = (user_id or "").strip()
+    if not uid:
+        raise ValueError("Invalid user_id")
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Category name required")
+    color = (color or "#94A3B8").strip()
+    if extra_categories_collection().find_one({"user_id": uid, "name": name}):
+        raise ValueError(f"Category '{name}' already exists")
+    extra_categories_collection().insert_one({"user_id": uid, "name": name, "color": color, "created_at": _now()})
+    return {"name": name, "color": color}
+
+
+def delete_extra_category(user_id: str, name: str) -> Dict[str, Any]:
+    uid = (user_id or "").strip()
+    if not uid:
+        raise ValueError("Invalid user_id")
+    result = extra_categories_collection().delete_one({"user_id": uid, "name": (name or "").strip()})
+    return {"deleted": result.deleted_count > 0}
 
 
 def _now() -> str:
