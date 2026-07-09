@@ -7,19 +7,45 @@ import { useAuth } from "../lib/auth";
 import { useCredits } from "../lib/credits";
 import Icon from "./Icon";
 
-const NAV_ITEMS = [
-  { key: "home", label: "Home", href: "/home", icon: "home" },
-  { key: "recorder", label: "Recorder", href: "/recorder", icon: "recorder" },
-  { key: "interview", label: "Interview", href: "/interview", icon: "interview" },
-  { key: "answer-eval", label: "Answer Eval", href: "/answer-eval", icon: "answer-eval" },
-  { key: "goals", label: "Goals", href: "/goals", icon: "goals" },
-  { key: "analytics", label: "Analytics", href: "/analytics", icon: "analytics" },
-  { key: "qna", label: "QnA", href: "/qna", icon: "qna" },
-  { key: "mindmap", label: "Mind Map", href: "/mindmap", icon: "mindmap" },
-  { key: "search", label: "Search", href: "/search", icon: "search" },
-  { key: "content", label: "Content", href: "/content", icon: "content" },
-  { key: "usage", label: "Usage", href: "/usage", icon: "usage" },
+// Grouped to match the hierarchy the landing page itself states: "Three tools
+// carry most of the weight" (Interview, Answer Eval, QnA). Home stays
+// ungrouped since it's the daily entry point, not a peer of a category.
+const NAV_GROUPS = [
+  {
+    heading: null,
+    items: [{ key: "home", label: "Home", href: "/home", icon: "home" }],
+  },
+  {
+    heading: "Core tools",
+    items: [
+      { key: "interview", label: "Interview", href: "/interview", icon: "interview" },
+      { key: "answer-eval", label: "Answer Eval", href: "/answer-eval", icon: "answer-eval" },
+      { key: "qna", label: "QnA", href: "/qna", icon: "qna" },
+    ],
+  },
+  {
+    heading: "Plan & track",
+    items: [
+      { key: "goals", label: "Goals", href: "/goals", icon: "goals" },
+      { key: "analytics", label: "Analytics", href: "/analytics", icon: "analytics" },
+      { key: "recorder", label: "Recorder", href: "/recorder", icon: "recorder" },
+    ],
+  },
+  {
+    heading: "Library",
+    items: [
+      { key: "content", label: "Content", href: "/content", icon: "content" },
+      { key: "search", label: "Search", href: "/search", icon: "search" },
+      { key: "mindmap", label: "Mind Map", href: "/mindmap", icon: "mindmap" },
+    ],
+  },
+  {
+    heading: "Account",
+    items: [{ key: "usage", label: "Usage", href: "/usage", icon: "usage" }],
+  },
 ];
+
+const NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
 const DRAWER_ID = "main-menu-drawer";
 
@@ -101,7 +127,7 @@ export default function MainMenu({ active = "" }) {
       <aside
         id={DRAWER_ID}
         className={`side-drawer ${open ? "open" : ""}`}
-        role="dialog"
+        role={open ? "dialog" : undefined}
         aria-label="Main menu"
         aria-hidden={!open}
       >
@@ -111,22 +137,39 @@ export default function MainMenu({ active = "" }) {
           <button className="drawer-close-btn" onClick={() => setOpen(false)} aria-label="Close menu" tabIndex={drawerTab}><Icon name="close" size={18} /></button>
         </div>
         <nav className="side-nav">
-          {NAV_ITEMS.map((item, i) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              className={`side-nav-item ${active === item.key ? "active" : ""}`}
-              style={{ transitionDelay: open ? `${90 + i * 45}ms` : "0ms" }}
-              onClick={() => setOpen(false)}
-              tabIndex={drawerTab}
-            >
-              <span className="side-nav-icon" aria-hidden="true"><Icon name={item.icon} size={20} /></span>
-              <span className="side-nav-label">{item.label}</span>
-              <span className="side-nav-arrow" aria-hidden="true">›</span>
-            </Link>
+          {NAV_GROUPS.map((group, gi) => (
+            <div className="side-nav-group" key={group.heading || `g${gi}`}>
+              {group.heading && <p className="side-nav-heading">{group.heading}</p>}
+              {group.items.map((item) => {
+                const i = NAV_ITEMS.indexOf(item);
+                return (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    className={`side-nav-item ${active === item.key ? "active" : ""}`}
+                    style={{ transitionDelay: open ? `${90 + i * 45}ms` : "0ms" }}
+                    onClick={() => setOpen(false)}
+                    tabIndex={drawerTab}
+                  >
+                    <span className="side-nav-icon" aria-hidden="true"><Icon name={item.icon} size={20} /></span>
+                    <span className="side-nav-label">{item.label}</span>
+                    <span className="side-nav-arrow" aria-hidden="true">›</span>
+                  </Link>
+                );
+              })}
+            </div>
           ))}
         </nav>
         <div className="side-drawer-foot">
+          <Link
+            href="/how-to-use"
+            className="side-help-link"
+            onClick={() => setOpen(false)}
+            tabIndex={drawerTab}
+          >
+            <Icon name="help-circle" size={15} />
+            <span>Help &amp; shortcuts</span>
+          </Link>
           {showChip && (
             <Link
               href="/usage"
