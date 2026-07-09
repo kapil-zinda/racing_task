@@ -4,18 +4,16 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, apiVerifyOtp, apiResendOtp } from "../../lib/auth";
+import { friendlyAuthError } from "../../lib/errors";
 import styles from "../auth.module.css";
 
 // Map errors to friendly copy — never surface raw backend/fetch strings.
 const friendlyError = (err, fallback) => {
   const msg = (err && err.message) || "";
-  if (err instanceof TypeError || /fetch|network|load failed/i.test(msg)) {
-    return "Something went wrong on our side — please try again.";
-  }
   if (/expired/i.test(msg)) {
     return "That code has expired — request a new one below.";
   }
-  return fallback;
+  return friendlyAuthError(err, fallback);
 };
 
 function VerifyOtpInner() {
