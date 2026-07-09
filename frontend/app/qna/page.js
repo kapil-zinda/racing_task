@@ -2,6 +2,7 @@
 import { apiFetch } from "../lib/auth";
 import { useCredits } from "../lib/credits";
 import { listGoals } from "../lib/goalApi";
+import { friendlyApiError } from "../lib/errors";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -89,7 +90,7 @@ export default function QnaPage() {
       setSourcesOpenByMessage({});
       setSourcePopup({ open: false, source: null });
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
       setMessages([]);
     } finally {
       setLoadingMessages(false);
@@ -133,7 +134,7 @@ export default function QnaPage() {
       if (sid) await loadMessages(sid);
       else setMessages([]);
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
       setSessions([]);
       setSelectedSessionId("");
       setMessages([]);
@@ -160,7 +161,7 @@ export default function QnaPage() {
       setSourcesOpenByMessage({});
       setSourcePopup({ open: false, source: null });
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
     }
   };
 
@@ -227,7 +228,7 @@ export default function QnaPage() {
         await loadSessions();
       }
     } catch (err) {
-      setError(String(err.message || err));
+      setError(friendlyApiError(err));
       setMessages((prev) => [
         ...prev,
         {
