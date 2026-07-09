@@ -4,17 +4,35 @@ import { useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import DayTracker from "../components/DayTracker";
 import DayReport from "../components/DayReport";
+import OnboardingChecklist from "../components/OnboardingChecklist";
 import Icon from "../components/Icon";
 import { apiFetch, useAuth } from "../lib/auth";
+import styles from "./page.module.css";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-const QUOTE_API_URL = "https://motivational-spark-api.vercel.app/api/quotes/random";
-const FALLBACK_HERO_QUOTE = {
-  quote: "Every day is a chance to build a better you.",
-  author: "",
-};
 const NOTICE_TTL_MS = 15000;
 const HOME_EXTRAS_STORAGE_KEY = "home_extras_by_user_v1";
+
+// Local quote rotation — one serious line a day, picked by day-of-year.
+// No third-party fetch; this is secondary text under the hero, not the lead.
+const DAILY_QUOTES = [
+  { text: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Will Durant" },
+  { text: "It is not that we have a short time to live, but that we waste a lot of it.", author: "Seneca" },
+  { text: "Arise, awake, and stop not till the goal is reached.", author: "Swami Vivekananda" },
+  { text: "How we spend our days is, of course, how we spend our lives.", author: "Annie Dillard" },
+  { text: "Success is the sum of small efforts, repeated day in and day out.", author: "Robert Collier" },
+  { text: "Perseverance is not a long race; it is many short races one after the other.", author: "Walter Elliot" },
+  { text: "You have power over your mind — not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
+  { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+  { text: "In a gentle way, you can shake the world.", author: "Mahatma Gandhi" },
+  { text: "Well begun is half done.", author: "Aristotle" },
+];
+
+function dayOfYear(d) {
+  const start = new Date(d.getFullYear(), 0, 0);
+  return Math.floor((d - start) / 86400000);
+}
+
 const EXTRAS_KIND_META = {
   time_waste: { label: "Time waste", color: "#94A3B8" },
   danger: { label: "Danger", color: "#F43F5E" },
@@ -54,26 +72,24 @@ export default function HomePage() {
   const [todayDate, setTodayDate] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
   const [extrasByUser, setExtrasByUser] = useState({});
+  const [extrasSaved, setExtrasSaved] = useState(false);
   const [extraActionOpenId, setExtraActionOpenId] = useState("");
   const [extraModalOpen, setExtraModalOpen] = useState(false);
   const [extraModalMode, setExtraModalMode] = useState("create");
   const [editingExtraId, setEditingExtraId] = useState("");
   const [extraDraft, setExtraDraft] = useState({ title: "", link: "", duration: "", kind: "time_waste" });
-  const [heroQuote, setHeroQuote] = useState(FALLBACK_HERO_QUOTE);
+  // Set on the client only, so SSR/hydration never disagree across midnight/timezones.
+  const [heroDate, setHeroDate] = useState("");
+  const [dailyQuote, setDailyQuote] = useState(null);
   const effectiveExtrasDate = todayDate || new Date().toISOString().slice(0, 10);
   const extrasSaveTimerRef = useRef(null);
+  const extrasPendingSaveRef = useRef(null);
   const extrasHydratingRef = useRef({});
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetch(QUOTE_API_URL, { cache: "no-store", signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((data) => {
-        const quote = String(data?.quote || "").trim();
-        if (quote) setHeroQuote({ quote, author: String(data?.author || "").trim() || "Unknown" });
-      })
-      .catch(() => {});
-    return () => controller.abort();
+    const now = new Date();
+    setHeroDate(now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
+    setDailyQuote(DAILY_QUOTES[dayOfYear(now) % DAILY_QUOTES.length]);
   }, []);
 
   useEffect(() => {
@@ -123,8 +139,8 @@ export default function HomePage() {
       extrasHydratingRef.current[selectedUserId] = false;
       return;
     }
-    if (extrasSaveTimerRef.current) clearTimeout(extrasSaveTimerRef.current);
-    extrasSaveTimerRef.current = setTimeout(async () => {
+    const doSave = async () => {
+      extrasPendingSaveRef.current = null;
       if (API_BASE_URL) {
         try {
           const res = await apiFetch(`${API_BASE_URL}/extras`, {
@@ -133,6 +149,7 @@ export default function HomePage() {
             body: JSON.stringify({ date: effectiveExtrasDate, rows: userRows }),
           });
           if (!res.ok) throw new Error(`Extras save failed: ${res.status}`);
+          setExtrasSaved(true);
         } catch (err) {
           setApiError(String(err.message || err));
         }
@@ -148,10 +165,29 @@ export default function HomePage() {
           ...parsed,
           [selectedUserId]: { ...normalized, [effectiveExtrasDate]: userRows },
         }));
+        setExtrasSaved(true);
       }
-    }, 500);
+    };
+    // Keep the pending save in a ref so an unmount can flush the last edit.
+    extrasPendingSaveRef.current = doSave;
+    if (extrasSaveTimerRef.current) clearTimeout(extrasSaveTimerRef.current);
+    extrasSaveTimerRef.current = setTimeout(doSave, 500);
     return () => { if (extrasSaveTimerRef.current) clearTimeout(extrasSaveTimerRef.current); };
   }, [extrasByUser, selectedUserId, API_BASE_URL, effectiveExtrasDate]);
+
+  // Flush a still-debounced extras save on unmount so the last edit isn't lost.
+  useEffect(() => () => {
+    if (extrasSaveTimerRef.current) clearTimeout(extrasSaveTimerRef.current);
+    const flush = extrasPendingSaveRef.current;
+    extrasPendingSaveRef.current = null;
+    if (flush) flush();
+  }, []);
+
+  useEffect(() => {
+    if (!extrasSaved) return;
+    const t = setTimeout(() => setExtrasSaved(false), 2000);
+    return () => clearTimeout(t);
+  }, [extrasSaved]);
 
   useEffect(() => {
     if (!toast) return;
@@ -168,6 +204,21 @@ export default function HomePage() {
   const selectedExtras = extrasByUser[selectedUserId] || [];
 
   useEffect(() => { setExtraActionOpenId(""); }, [selectedUserId]);
+
+  // Close the row action menu on Escape or on a click outside it.
+  useEffect(() => {
+    if (!extraActionOpenId) return;
+    const onKeyDown = (e) => { if (e.key === "Escape") setExtraActionOpenId(""); };
+    const onPointerDown = (e) => {
+      if (!e.target?.closest?.(".extras-action-wrap")) setExtraActionOpenId("");
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [extraActionOpenId]);
 
   const openExtraModal = () => {
     setExtraModalMode("create");
@@ -222,11 +273,21 @@ export default function HomePage() {
 
       <header className="hero">
         <MainMenu active="home" />
-        <button className="home-report-btn" onClick={() => setReportOpen(true)}>
-          <Icon name="file" size={16} /> Generate report of the day
-        </button>
-        <p className="subtext">"{heroQuote.quote}"</p>
-        {heroQuote.author ? <p className="subtext subtext-author">— {heroQuote.author}</p> : null}
+        <div className={styles.heroRow}>
+          <div>
+            <h1>Today</h1>
+            {heroDate ? <p className={styles.heroDate}>{heroDate}</p> : null}
+            <p className="subtext">Log your hours, keep the extras honest, and close the day with a report.</p>
+          </div>
+          <button className={styles.reportBtn} onClick={() => setReportOpen(true)}>
+            <Icon name="file" size={16} /> Generate report of the day
+          </button>
+        </div>
+        {dailyQuote ? (
+          <p className={styles.heroQuote}>
+            “{dailyQuote.text}” <span className={styles.heroQuoteAuthor}>— {dailyQuote.author}</span>
+          </p>
+        ) : null}
         {!API_BASE_URL ? (
           <p className="api-state warn">Running in local mode (no backend URL configured).</p>
         ) : apiError ? (
@@ -234,12 +295,21 @@ export default function HomePage() {
         ) : null}
       </header>
 
+      <OnboardingChecklist />
+
       <section className="scoreboard">
         <DayTracker onDateChange={setTodayDate} />
         <article className="player-card extras-card">
           <div className="player-row">
             <h2 className="player-name">Extras</h2>
-            <button className="btn-day secondary" onClick={openExtraModal}>+ Add Row</button>
+            <div className={styles.extrasHeadActions}>
+              {extrasSaved ? (
+                <span className={styles.savedNote} role="status">
+                  <Icon name="check" size={12} /> Saved
+                </span>
+              ) : null}
+              <button className="btn-day secondary" onClick={openExtraModal}>+ Add Row</button>
+            </div>
           </div>
           <div className="extras-table-wrap">
             <table className="extras-table">
@@ -248,13 +318,17 @@ export default function HomePage() {
                   <th>Title</th>
                   <th>Link (optional)</th>
                   <th>Duration</th>
-                  <th>Selector</th>
+                  <th>Category</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {selectedExtras.length === 0 ? (
-                  <tr><td colSpan={5} className="extras-empty">No extras yet</td></tr>
+                  <tr>
+                    <td colSpan={5} className="extras-empty">
+                      Track anything extra — optional subjects, test series, essays. Add a row to start.
+                    </td>
+                  </tr>
                 ) : selectedExtras.map((row) => (
                   <tr key={row.id}>
                     <td>{row.title || "-"}</td>
@@ -273,6 +347,7 @@ export default function HomePage() {
                           className="icon-action-btn"
                           onClick={() => setExtraActionOpenId((prev) => (prev === row.id ? "" : row.id))}
                           aria-label="Open extra actions"
+                          aria-expanded={extraActionOpenId === row.id}
                         >⋯</button>
                         {extraActionOpenId === row.id ? (
                           <div className="extras-action-menu">
