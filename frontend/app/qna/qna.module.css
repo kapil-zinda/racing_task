@@ -1,17 +1,7 @@
 /* QnA page-scoped styles: typing indicator, empty state, composer scope row.
-   Tokens come from globals.css (:root) — no new colors introduced. */
-
-/* The global .qna-shell .qna-layout height assumes a hero with no heading.
-   The page heading adds ~55px, so re-derive the chat height to keep the
-   whole page fitting the viewport without a scrollbar. */
-.qnaShell :global(.qna-layout) {
-  height: calc(100vh - 205px);
-}
-@media (max-width: 900px) {
-  .qnaShell :global(.qna-layout) {
-    height: auto;
-  }
-}
+   Tokens come from globals.css (:root) — no new colors introduced. Layout
+   (.qna-layout, .qna-sessions, .qna-chat-shell, etc.) lives in globals.css
+   next to the other feature-page shells it now matches. */
 
 /* ── Typing indicator ─────────────────────────────────────────────── */
 .typing {
