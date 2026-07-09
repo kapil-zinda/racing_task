@@ -127,7 +127,7 @@ def signup(email: str, name: str, phone: str, password: str) -> dict:
     otp = _generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=_OTP_TTL_SECONDS)
     otps_col = otps_collection()
-    otps_col.delete_many({"email": email})
+    otps_col.delete_many({"email": email, "purpose": "signup"})
     otps_col.insert_one(
         {
             "email": email,
@@ -135,10 +135,11 @@ def signup(email: str, name: str, phone: str, password: str) -> dict:
             "phone": phone,
             "password_hash": _hash_password(password),
             "otp": otp,
+            "purpose": "signup",
             "expires_at": expires_at,
         }
     )
-    sent = _send_otp_email(email, otp, name)
+    sent = _send_otp_email(email, otp, name, purpose="signup")
     if not sent:
         return {"message": "Could not send verification email — please try again"}
     return {"message": "OTP sent to your email"}
@@ -147,7 +148,7 @@ def signup(email: str, name: str, phone: str, password: str) -> dict:
 def verify_otp(email: str, otp: str) -> dict:
     email = email.strip().lower()
     otps_col = otps_collection()
-    record = otps_col.find_one({"email": email})
+    record = otps_col.find_one({"email": email, "purpose": "signup"})
     if not record:
         raise LookupError("No pending OTP for this email")
     if datetime.now(timezone.utc) > record["expires_at"].replace(tzinfo=timezone.utc):
@@ -165,26 +166,27 @@ def verify_otp(email: str, otp: str) -> dict:
         "created_at": datetime.now(timezone.utc),
     }
     users_col.insert_one(user_doc)
-    otps_col.delete_many({"email": email})
+    otps_col.delete_many({"email": email, "purpose": "signup"})
     return {
         "message": "Account created",
         "user_id": str(user_doc["_id"]),
         "name": user_doc["name"],
         "email": email,
+        "phone": user_doc["phone"],
         "api_key": api_key,
     }
 
 
-def resend_otp(email: str) -> dict:
+def resend_otp(email: str, purpose: str = "signup") -> dict:
     email = email.strip().lower()
     otps_col = otps_collection()
-    record = otps_col.find_one({"email": email})
+    record = otps_col.find_one({"email": email, "purpose": purpose})
     if not record:
-        raise LookupError("No pending signup for this email")
+        raise LookupError("No pending request for this email")
     otp = _generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=_OTP_TTL_SECONDS)
-    otps_col.update_one({"email": email}, {"$set": {"otp": otp, "expires_at": expires_at}})
-    sent = _send_otp_email(email, otp, record.get("name", ""))
+    otps_col.update_one({"email": email, "purpose": purpose}, {"$set": {"otp": otp, "expires_at": expires_at}})
+    sent = _send_otp_email(email, otp, record.get("name", ""), purpose=purpose)
     if not sent:
         return {"message": "Could not send verification email — please try again"}
     return {"message": "OTP resent"}
@@ -196,10 +198,13 @@ def signin(email: str, password: str) -> dict:
     user = users_col.find_one({"email": email})
     if not user or not _verify_password(password, user["password_hash"]):
         raise ValueError("Invalid email or password")
+    if user.get("disabled"):
+        raise ValueError("This account has been deleted")
     return {
         "user_id": str(user["_id"]),
         "name": user["name"],
         "email": email,
+        "phone": user.get("phone", ""),
         "api_key": user["api_key"],
     }
 
@@ -207,9 +212,123 @@ def signin(email: str, password: str) -> dict:
 def get_user_by_api_key(api_key: str) -> dict | None:
     users_col = users_collection()
     user = users_col.find_one({"api_key": api_key})
-    if not user:
+    if not user or user.get("disabled"):
         return None
-    return {"user_id": str(user["_id"]), "name": user["name"], "email": user["email"]}
+    return {
+        "user_id": str(user["_id"]),
+        "name": user["name"],
+        "email": user["email"],
+        "phone": user.get("phone", ""),
+    }
+
+
+def forgot_password(email: str) -> dict:
+    """Always returns the same generic message, whether or not the email is
+    registered, so this can't be used to enumerate accounts."""
+    email = email.strip().lower()
+    generic = {"message": "If that email is registered, we've sent a reset code"}
+    user = users_collection().find_one({"email": email})
+    if not user or user.get("disabled"):
+        return generic
+    otp = _generate_otp()
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=_OTP_TTL_SECONDS)
+    otps_col = otps_collection()
+    otps_col.delete_many({"email": email, "purpose": "reset"})
+    otps_col.insert_one(
+        {
+            "email": email,
+            "name": user.get("name", ""),
+            "otp": otp,
+            "purpose": "reset",
+            "expires_at": expires_at,
+        }
+    )
+    _send_otp_email(email, otp, user.get("name", ""), purpose="reset")
+    return generic
+
+
+def reset_password(email: str, otp: str, new_password: str) -> dict:
+    email = email.strip().lower()
+    otps_col = otps_collection()
+    record = otps_col.find_one({"email": email, "purpose": "reset"})
+    if not record:
+        raise LookupError("No pending password reset for this email")
+    if datetime.now(timezone.utc) > record["expires_at"].replace(tzinfo=timezone.utc):
+        raise ValueError("OTP has expired")
+    if not secrets.compare_digest(record["otp"], otp):
+        raise ValueError("Invalid OTP")
+    users_col = users_collection()
+    user = users_col.find_one({"email": email})
+    if not user or user.get("disabled"):
+        raise LookupError("Account not found")
+    # Rotate the api_key too: this is a recovery flow, so any stale/leaked
+    # session for this account should stop working once the password resets.
+    api_key = secrets.token_urlsafe(32)
+    users_col.update_one(
+        {"email": email},
+        {"$set": {"password_hash": _hash_password(new_password), "api_key": api_key}},
+    )
+    otps_col.delete_many({"email": email, "purpose": "reset"})
+    return {
+        "message": "Password reset",
+        "user_id": str(user["_id"]),
+        "name": user["name"],
+        "email": email,
+        "phone": user.get("phone", ""),
+        "api_key": api_key,
+    }
+
+
+def update_profile(user_id: str, name: str) -> dict:
+    from bson import ObjectId
+
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Name is required")
+    users_col = users_collection()
+    result = users_col.update_one({"_id": ObjectId(user_id)}, {"$set": {"name": name}})
+    if result.matched_count == 0:
+        raise LookupError("User not found")
+    return {"message": "Profile updated", "name": name}
+
+
+def change_password(user_id: str, current_password: str, new_password: str) -> dict:
+    from bson import ObjectId
+
+    users_col = users_collection()
+    user = users_col.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise LookupError("User not found")
+    if not _verify_password(current_password, user["password_hash"]):
+        raise ValueError("Current password is incorrect")
+    if len(new_password or "") < 8:
+        raise ValueError("New password must be at least 8 characters")
+    users_col.update_one({"_id": ObjectId(user_id)}, {"$set": {"password_hash": _hash_password(new_password)}})
+    return {"message": "Password changed"}
+
+
+def delete_account(user_id: str, password: str) -> dict:
+    """Soft delete: disables login immediately (rotates the api_key so the
+    current session dies too) but keeps the user's data — no data is purged."""
+    from bson import ObjectId
+
+    users_col = users_collection()
+    user = users_col.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise LookupError("User not found")
+    if not _verify_password(password, user["password_hash"]):
+        raise ValueError("Password is incorrect")
+    users_col.update_one(
+        {"_id": ObjectId(user_id)},
+        {
+            "$set": {
+                "disabled": True,
+                "deleted_at": datetime.now(timezone.utc),
+                "api_key": secrets.token_urlsafe(32),
+            }
+        },
+    )
+    return {"message": "Account deleted"}
 
 
 def init_auth_service() -> None:
