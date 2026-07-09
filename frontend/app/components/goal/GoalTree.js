@@ -32,7 +32,12 @@ function TreeRow({ item, selectedId, onSelect, onToggle, onAddChild, onBulkAdd, 
 
   return (
     <div ref={dropRef} className={`tree-row ${selectedId === node.id ? "sel" : ""} ${isOver ? "drop-over" : ""} ${isDragging ? "dragging" : ""}`}
-         style={{ paddingLeft: 8 + depth * 18 }} onClick={() => onSelect(node.id)}>
+         style={{ paddingLeft: 8 + depth * 18 }} onClick={() => onSelect(node.id)}
+         role="button" tabIndex={0} aria-pressed={selectedId === node.id}
+         onKeyDown={(e) => {
+           if (e.target !== e.currentTarget) return; // let inner buttons handle their own keys
+           if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(node.id); }
+         }}>
       <span className="tree-caret" onClick={(e) => { e.stopPropagation(); if (hasChildren) onToggle(node.id); }}>
         {hasChildren ? (isCollapsed ? "▸" : "▾") : "·"}
       </span>
