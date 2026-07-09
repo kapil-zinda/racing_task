@@ -152,13 +152,16 @@ export default function LandingPage() {
             </li>
             <li className={styles.pricingItem}>
               <span className={styles.pricingCheck}><Icon name="check" size={16} /></span>
-              After that, top up credits and pay per use — no subscription, nothing recurring.
+              After that, get a Pro or Max plan for more — or just top up credits and pay per use.
             </li>
             <li className={styles.pricingItem}>
               <span className={styles.pricingCheck}><Icon name="check" size={16} /></span>
               No card required to get started.
             </li>
           </ul>
+          <a href="/pricing" className="lp-btn ghost" style={{ marginTop: 18, display: "inline-flex" }}>
+            See full pricing →
+          </a>
         </div>
       </section>
 
