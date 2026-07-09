@@ -32,3 +32,18 @@
 .helpLine a:hover {
   text-decoration: underline;
 }
+
+.labelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.labelRow :global(.auth-label) {
+  margin: 0;
+}
+
+.labelRow a {
+  font-size: 13px;
+}
