@@ -208,15 +208,17 @@ export default function AnalyticsPage() {
                   <div className="chart-card"><h4>Progress by type</h4>
                     <Plot data={[{ type: "bar", x: perCharts.types.map((t) => t.type), y: perCharts.types.map((t) => t.avg_progress), marker: { color: T.indigo } }]}
                           layout={{ ...DARK, height: 260, yaxis: { ...DARK.yaxis, range: [0, 100] } }} config={plotCfg} style={{ width: "100%" }} /></div>
+                </div>
+                <div className="chart-grid">
                   <div className="chart-card"><h4>Top-level progress</h4>
                     <Plot data={[{ type: "treemap", labels: perCharts.roots.map((r) => r.title), parents: perCharts.roots.map(() => ""),
                       values: perCharts.roots.map((r) => r.weight), text: perCharts.roots.map((r) => `${r.progress}%`), textinfo: "label+text",
                       textfont: { color: T.card },
                       marker: { colors: perCharts.roots.map((_, i) => PALETTE[i % PALETTE.length]), line: { color: T.card, width: 2 } } }]}
-                      layout={{ ...DARK, height: 260 }} config={plotCfg} style={{ width: "100%" }} /></div>
-                  <div className="chart-card wide"><h4>Activity (last 120 days)</h4>
+                      layout={{ ...DARK, height: 240 }} config={plotCfg} style={{ width: "100%" }} /></div>
+                  <div className="chart-card"><h4>Activity (last 120 days)</h4>
                     <Plot data={[{ type: "bar", x: perCharts.actDates, y: perCharts.actDates.map((d) => perCharts.act[d]), marker: { color: T.cyan } }]}
-                      layout={{ ...DARK, height: 220 }} config={plotCfg} style={{ width: "100%" }} /></div>
+                      layout={{ ...DARK, height: 240 }} config={plotCfg} style={{ width: "100%" }} /></div>
                 </div>
               </>
             )
