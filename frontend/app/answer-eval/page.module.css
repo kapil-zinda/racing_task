@@ -1,0 +1,207 @@
+/* Answer-eval page module.
+   Owns the submit form layout (the global .ae-form has conflicting duplicate
+   definitions), the primary gold submit action, score bands, the post-submit
+   polling status card, skeletons, and error/empty states. */
+
+/* ── Form ── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 620px;
+  margin-bottom: 18px;
+}
+
+.hint {
+  font-size: 12px;
+  color: #8b95a7;
+  margin: 2px 0 0;
+}
+
+.fileError {
+  font-size: 13px;
+  color: #ff6b6b;
+  margin: 2px 0 0;
+}
+
+.costHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #8b95a7;
+}
+
+/* ── Primary action: gold pill ── */
+.submitBtn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 999px;
+  background: #ffd166;
+  color: #0b0f1a;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.submitBtn:hover:not(:disabled) { filter: brightness(1.07); }
+.submitBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+.submitBtn:focus-visible { outline: 2px solid #72ddf7; outline-offset: 2px; }
+
+/* Secondary / retry: quiet pill */
+.retryBtn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border: 1px solid #222a3d;
+  border-radius: 999px;
+  background: #131826;
+  color: #e7ecf5;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.retryBtn:hover { border-color: #72ddf7; }
+.retryBtn:focus-visible { outline: 2px solid #72ddf7; outline-offset: 2px; }
+
+/* ── Live evaluation status card ── */
+.statusCard {
+  max-width: 620px;
+  margin: 16px 0;
+  padding: 18px;
+  border: 1px solid #222a3d;
+  border-radius: 14px;
+  background: #131826;
+}
+.statusTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e7ecf5;
+  font-weight: 700;
+  font-size: 15px;
+}
+.statusSub {
+  margin: 6px 0 0;
+  color: #8b95a7;
+  font-size: 13.5px;
+}
+.shimmerBar {
+  position: relative;
+  overflow: hidden;
+  height: 6px;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.shimmerBar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(114, 221, 247, 0.55), transparent);
+  animation: aeSlide 1.6s ease-in-out infinite;
+}
+@keyframes aeSlide {
+  to { transform: translateX(100%); }
+}
+
+/* ── Success / error notes ── */
+.successNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 620px;
+  margin: 14px 0;
+  padding: 12px 16px;
+  border: 1px solid rgba(128, 237, 153, 0.28);
+  border-radius: 12px;
+  background: rgba(128, 237, 153, 0.07);
+  color: #80ed99;
+  font-size: 14px;
+}
+.successLink {
+  border: none;
+  background: none;
+  padding: 0;
+  color: #72ddf7;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.successLink:focus-visible { outline: 2px solid #72ddf7; outline-offset: 2px; border-radius: 4px; }
+
+.errorCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 620px;
+  margin: 14px 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 12px;
+  background: rgba(255, 107, 107, 0.06);
+  color: #e7ecf5;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ── Score bands (doubled class beats the global fixed-green .ae-score-num) ── */
+.scoreLow.scoreLow { color: #ff6b6b; }
+.scoreMid.scoreMid { color: #ffd166; }
+.scoreHigh.scoreHigh { color: #80ed99; }
+
+.scoreTip {
+  margin: 8px 0 0;
+  flex-basis: 100%;
+  color: #8b95a7;
+  font-size: 13px;
+}
+
+/* ── List skeletons ── */
+.skeletonRow {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 10px;
+  padding: 15px 16px;
+  border: 1px solid #222a3d;
+  border-radius: 12px;
+  background: #131826;
+}
+.skelLine,
+.skelLineShort {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 25%, rgba(255, 255, 255, 0.13) 50%, rgba(255, 255, 255, 0.06) 75%);
+  background-size: 200% 100%;
+  animation: aeSkel 1.4s ease infinite;
+}
+.skelLine { width: 62%; }
+.skelLineShort { width: 34%; }
+@keyframes aeSkel {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* ── Empty state ── */
+.emptyState {
+  max-width: 620px;
+  margin: 14px 0;
+  padding: 24px 20px;
+  border: 1px dashed #222a3d;
+  border-radius: 14px;
+  color: #8b95a7;
+  font-size: 14px;
+  line-height: 1.55;
+  text-align: center;
+}
