@@ -87,6 +87,7 @@ export default function CreditGuard() {
 
   const action = ACTION_LABEL[detail.action] || "this action";
   const close = () => setDetail(null);
+  const goBuyPlan = () => { close(); router.push("/pricing"); };
   const goAddCredits = () => { close(); router.push("/usage"); };
 
   return (
@@ -103,11 +104,12 @@ export default function CreditGuard() {
         <span className="credit-modal-icon"><Icon name="wallet" size={26} /></span>
         <h3 id={TITLE_ID}>Not enough credits</h3>
         <p>
-          You&apos;ve used up your free {action} and don&apos;t have enough credits to continue.
-          Add credits to keep going.
+          You&apos;ve used up your plan quota and free {action} and don&apos;t have enough
+          credits to continue. Get a plan for a better rate, or add credits to keep going.
         </p>
         <div className="credit-modal-actions">
           <button className="credit-btn ghost" onClick={close}>Not now</button>
+          <button className="credit-btn ghost" onClick={goBuyPlan}>Buy plan</button>
           <button className="credit-btn primary" onClick={goAddCredits}>Add credits</button>
         </div>
       </div>
