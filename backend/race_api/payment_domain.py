@@ -156,50 +156,27 @@ def _expected_signature(order_id: str, payment_id: str) -> str:
     return hmac.new(key_secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
-def verify_payment_payload(
-    razorpay_order_id: str,
-    razorpay_payment_id: str,
-    razorpay_signature: str,
-    *,
-    user_id: str = "",
-) -> Dict[str, Any]:
-    """Verify the checkout signature. Marks the payment ``paid`` only on a match.
+def _mark_paid(order_id: str, payment_id: str, signature: str, *, user_id: str = "") -> Dict[str, Any]:
+    """Stamp an existing ``created`` order record as ``paid`` and credit its USD value.
 
-    Returns {"verified": True, ...} on success; raises HTTPException(400) on missing fields
-    or a signature mismatch (the record is flagged ``verification_failed`` and never ``paid``).
+    Shared by both the browser-return verify path and the webhook, so there's one source
+    of truth for "how do we credit a payment" and no drift between the two. Idempotent:
+    if the order is already ``paid``, this is a no-op (handles webhook + browser-return
+    both firing for the same payment). Requires an existing order record — never creates
+    one, so a signature valid for an order this app never created can't mint credit.
     """
-    order_id = (razorpay_order_id or "").strip()
-    payment_id = (razorpay_payment_id or "").strip()
-    signature = (razorpay_signature or "").strip()
-    if not order_id or not payment_id or not signature:
-        raise HTTPException(
-            status_code=400,
-            detail="razorpay_order_id, razorpay_payment_id and razorpay_signature are required",
-        )
-
-    expected = _expected_signature(order_id, payment_id)
-    matched = hmac.compare_digest(expected, signature)
     now = _now()
-
-    ensure_payment_indexes()
-    if not matched:
-        payments_collection().update_one(
-            {"order_id": order_id},
-            {"$set": {
-                "status": "verification_failed",
-                "payment_id": payment_id,
-                "signature": signature,
-                "updated_at": now,
-            }},
-        )
-        logger.warning("Payment signature mismatch for order %s (payment %s)", order_id, payment_id)
-        raise HTTPException(status_code=400, detail="Payment signature verification failed")
+    existing = payments_collection().find_one({"order_id": order_id})
+    if not existing:
+        logger.warning("Payment verified for unknown order %s; refusing to credit", order_id)
+        raise HTTPException(status_code=400, detail="Unknown order")
+    if existing.get("status") == "paid":
+        return {"verified": True, "order_id": order_id, "payment_id": existing.get("payment_id", payment_id), "status": "paid"}
 
     # Stamp the USD value this payment credits (surface currency is USD; Razorpay took
     # INR). Derived from the stored order amount so it can't be tampered client-side.
-    existing = payments_collection().find_one({"order_id": order_id}, {"amount": 1})
     rate = float(settings().get("usd_to_inr") or 88)
-    amount_paise = int((existing or {}).get("amount", 0) or 0)
+    amount_paise = int(existing.get("amount", 0) or 0)
     credit_usd = round((amount_paise / 100.0) / rate, 4) if rate else 0.0
 
     paid_fields: Dict[str, Any] = {
@@ -215,34 +192,90 @@ def verify_payment_payload(
     uid = (user_id or "").strip()
     if uid:
         paid_fields["user_id"] = uid
-    result = payments_collection().update_one({"order_id": order_id}, {"$set": paid_fields})
+    payments_collection().update_one({"order_id": order_id}, {"$set": paid_fields})
 
-    if result.matched_count == 0:
-        # Signature is valid but we have no record of this order — accept, but log for auditing.
-        logger.warning("Verified payment for unknown order %s; inserting record", order_id)
-        payments_collection().update_one(
-            {"order_id": order_id},
-            {
-                "$set": {
-                    "order_id": order_id,
-                    "payment_id": payment_id,
-                    "signature": signature,
-                    "status": "paid",
-                    "user_id": (user_id or "").strip(),
-                    "verified_at": now,
-                    "updated_at": now,
-                },
-                "$setOnInsert": {"created_at": now},
-            },
-            upsert=True,
+    return {"verified": True, "order_id": order_id, "payment_id": payment_id, "status": "paid"}
+
+
+def verify_payment_payload(
+    razorpay_order_id: str,
+    razorpay_payment_id: str,
+    razorpay_signature: str,
+    *,
+    user_id: str = "",
+) -> Dict[str, Any]:
+    """Verify the checkout signature. Marks the payment ``paid`` only on a match.
+
+    Returns {"verified": True, ...} on success; raises HTTPException(400) on missing fields,
+    a signature mismatch (the record is flagged ``verification_failed`` and never ``paid``),
+    or an unknown order (a valid signature for an order this app never created).
+    """
+    order_id = (razorpay_order_id or "").strip()
+    payment_id = (razorpay_payment_id or "").strip()
+    signature = (razorpay_signature or "").strip()
+    if not order_id or not payment_id or not signature:
+        raise HTTPException(
+            status_code=400,
+            detail="razorpay_order_id, razorpay_payment_id and razorpay_signature are required",
         )
 
-    return {
-        "verified": True,
-        "order_id": order_id,
-        "payment_id": payment_id,
-        "status": "paid",
-    }
+    expected = _expected_signature(order_id, payment_id)
+    matched = hmac.compare_digest(expected, signature)
+
+    ensure_payment_indexes()
+    if not matched:
+        payments_collection().update_one(
+            {"order_id": order_id},
+            {"$set": {
+                "status": "verification_failed",
+                "payment_id": payment_id,
+                "signature": signature,
+                "updated_at": _now(),
+            }},
+        )
+        logger.warning("Payment signature mismatch for order %s (payment %s)", order_id, payment_id)
+        raise HTTPException(status_code=400, detail="Payment signature verification failed")
+
+    return _mark_paid(order_id, payment_id, signature, user_id=user_id)
+
+
+def verify_webhook_payload(raw_body: bytes, signature: str) -> Dict[str, Any]:
+    """Verify + reconcile a Razorpay webhook call (``payment.captured``).
+
+    Uses the same manual-HMAC style as checkout verification, against the separate
+    webhook secret configured in the Razorpay dashboard. Idempotent via ``_mark_paid``.
+    """
+    secret = (settings().get("razorpay_webhook_secret") or "").strip()
+    if not secret:
+        logger.error("Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not configured")
+        raise HTTPException(status_code=500, detail="Webhook is not configured")
+
+    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, (signature or "").strip()):
+        logger.warning("Razorpay webhook signature mismatch")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    try:
+        event = json.loads(raw_body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as err:
+        raise HTTPException(status_code=400, detail="Invalid webhook body") from err
+
+    event_type = event.get("event", "")
+    if event_type != "payment.captured":
+        # Ack anything we don't act on so Razorpay doesn't retry it forever.
+        return {"handled": False, "event": event_type}
+
+    payment_entity = (
+        (event.get("payload") or {}).get("payment", {}).get("entity", {})
+    )
+    order_id = (payment_entity.get("order_id") or "").strip()
+    payment_id = (payment_entity.get("id") or "").strip()
+    if not order_id or not payment_id:
+        raise HTTPException(status_code=400, detail="Webhook payload missing order_id/payment_id")
+
+    ensure_payment_indexes()
+    result = _mark_paid(order_id, payment_id, signature)
+    return {"handled": True, **result}
 
 
 def credit_balance_payload(user_id: str = "") -> Dict[str, Any]:
