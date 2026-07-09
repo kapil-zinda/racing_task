@@ -333,4 +333,5 @@ def summary_payload(user_id: str) -> Dict[str, Any]:
             "qna_usd": breakdown[QNA],
             "goal_ai_usd": breakdown[GOAL_AI],
         },
+        "plan": plans_domain.current_subscription_payload(uid),
     }
