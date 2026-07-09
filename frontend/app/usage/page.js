@@ -2,12 +2,17 @@
 // Usage & credits. All money is shown in USD. Credits come from the in-memory store
 // (GET /payments/credits); storage + activity counts come from GET /storage. Top-ups
 // go through Razorpay in INR, converted from the USD amount at the server's rate.
+// Plan purchases (see the "Your plan" section) reuse the same Razorpay order/verify/
+// webhook flow, just via /plans/subscribe instead of /payments/create-order.
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch, useAuth } from "../lib/auth";
 import { useCredits } from "../lib/credits";
+import { subscribeToPlan } from "../lib/plansApi";
 import MainMenu from "../components/MainMenu";
 import RazorpayCheckout from "../components/RazorpayCheckout";
+import PlanCards from "../components/PlanCards";
 import Icon from "../components/Icon";
 import { friendlyApiError } from "../lib/errors";
 
@@ -16,10 +21,21 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const fmtUsd = (n) => `$${Number(n || 0).toFixed(2)}`;
 const fmtNum = (n) => Number(n || 0).toLocaleString();
 const fmtInr = (n) => `₹${Math.round(Number(n || 0)).toLocaleString("en-IN")}`;
+const PLAN_NAME = { free: "Free", pro: "Pro", max: "Max" };
 
-export default function UsagePage() {
+function fmtDate(iso) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  } catch (_) {
+    return "";
+  }
+}
+
+function UsagePageInner() {
   const { auth } = useAuth();
   const { credits, refreshCredits } = useCredits();
+  const searchParams = useSearchParams();
 
   const [storage, setStorage] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -27,6 +43,22 @@ export default function UsagePage() {
   const [addUsd, setAddUsd] = useState("5");
   const [payStatus, setPayStatus] = useState(null);
   const [topupConfirm, setTopupConfirm] = useState(null); // { usd, inr } after a verified payment
+
+  const [showPlans, setShowPlans] = useState(false);
+  const [pendingPlan, setPendingPlan] = useState(null); // { plan, interval } awaiting payment
+  const [planStatus, setPlanStatus] = useState(null);
+  const [planConfirm, setPlanConfirm] = useState(null); // plan name after a verified purchase
+
+  // Arriving from /pricing with ?plan=pro&interval=monthly jumps straight to the
+  // confirm-and-pay step instead of making them pick the card again.
+  useEffect(() => {
+    const plan = searchParams.get("plan");
+    const interval = searchParams.get("interval");
+    if (plan && (interval === "monthly" || interval === "annual")) {
+      setShowPlans(true);
+      setPendingPlan({ plan, interval });
+    }
+  }, [searchParams]);
 
   const loadStorage = useCallback(async () => {
     setLoading(true); setError("");
@@ -59,6 +91,18 @@ export default function UsagePage() {
   const pricing = credits?.pricing || {};
   const free = credits?.free || {};
   const spentBreak = credits?.spent_breakdown || {};
+
+  // Plan
+  const plan = credits?.plan;
+  const planKey = plan?.plan || "free";
+  const planLabel = PLAN_NAME[planKey] || planKey;
+  const planQuota = plan?.quota || {};
+
+  const handleChoosePlan = (planKeyChosen, interval) => {
+    setPlanStatus(null);
+    setPlanConfirm(null);
+    setPendingPlan({ plan: planKeyChosen, interval });
+  };
 
   // Top-up: USD → INR paise for Razorpay.
   const addUsdNum = Number(addUsd || 0);
@@ -166,6 +210,96 @@ export default function UsagePage() {
           )}
         </section>
 
+        {/* Your plan: quota consumed before credits — see plans_domain.consume_quota */}
+        <section className="usage-card">
+          <div className="usage-card-head">
+            <h3>Your plan</h3>
+            <span className="usage-of">{planLabel}</span>
+          </div>
+          {planKey !== "free" && (
+            <>
+              <p className="goal-hint">Renews {fmtDate(plan?.period_end)}.</p>
+              <ul className="usage-plan">
+                {["interview", "answer_eval", "qna"].map((key) => {
+                  const q = planQuota[key];
+                  if (!q) return null;
+                  const label = key === "interview" ? "Mock interviews" : key === "answer_eval" ? "Answer evaluations" : "QnA questions";
+                  return (
+                    <li key={key} className="usage-plan-row">
+                      <span className="usage-plan-label">{label}</span>
+                      <span className="usage-plan-free on">
+                        {q.limit == null ? "Unlimited" : `${q.remaining} of ${q.limit} left this period`}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          {planKey === "free" && <p className="goal-hint">You&apos;re on the Free plan — 5 GB storage, 1 interview and 2 answer evals, forever.</p>}
+
+          {planStatus && (
+            <p className={planStatus.kind === "error" ? "auth-error" : "auth-info"} role={planStatus.kind === "error" ? "alert" : "status"}>
+              {planStatus.message}
+            </p>
+          )}
+          {planConfirm && (
+            <div className="usage-topup-confirm" role="status">
+              <span className="usage-topup-confirm-icon"><Icon name="check-circle" size={22} /></span>
+              <div className="usage-topup-confirm-body">
+                <strong>Plan activated</strong>
+                <span>You&apos;re now on {planConfirm}.</span>
+              </div>
+              <button className="usage-topup-confirm-close" onClick={() => setPlanConfirm(null)} aria-label="Dismiss confirmation">
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+          )}
+
+          {pendingPlan && (
+            <div className="settings-delete-confirm">
+              <p className="goal-hint">
+                Confirm payment for the <strong>{PLAN_NAME[pendingPlan.plan] || pendingPlan.plan}</strong> plan
+                ({pendingPlan.interval}). This activates immediately once payment is verified.
+              </p>
+              <div className="settings-plan-actions">
+                <button className="goal-btn ghost" onClick={() => setPendingPlan(null)}>Cancel</button>
+                <RazorpayCheckout
+                  createOrderFn={() => subscribeToPlan(pendingPlan.plan, pendingPlan.interval)}
+                  description={`${PLAN_NAME[pendingPlan.plan] || pendingPlan.plan} plan (${pendingPlan.interval})`}
+                  notes={{ purpose: "plan", plan: pendingPlan.plan, interval: pendingPlan.interval }}
+                  prefill={prefill}
+                  label="Pay & activate"
+                  onSuccess={() => {
+                    setPlanStatus(null);
+                    setPlanConfirm(PLAN_NAME[pendingPlan.plan] || pendingPlan.plan);
+                    setPendingPlan(null);
+                    setShowPlans(false);
+                    if (typeof window !== "undefined") window.dispatchEvent(new Event("credits-changed"));
+                    refreshAll();
+                  }}
+                  onFailure={(err) => setPlanStatus({ kind: "error", message: `Payment failed: ${friendlyApiError(err)}` })}
+                  onDismiss={() => setPlanStatus({ kind: "info", message: "Checkout cancelled" })}
+                />
+              </div>
+            </div>
+          )}
+
+          {!pendingPlan && (
+            <div className="settings-plan-actions">
+              <button className="goal-btn ghost" onClick={() => setShowPlans((v) => !v)}>
+                {showPlans ? "Hide plans" : "Change plan"}
+              </button>
+            </div>
+          )}
+
+          {showPlans && !pendingPlan && (
+            <div style={{ marginTop: 18 }}>
+              <PlanCards currentPlan={planKey} onChoosePlan={handleChoosePlan} onChooseFree={() => setPlanStatus({ kind: "info", message: "You're already on the Free plan by default — nothing to do." })} />
+            </div>
+          )}
+        </section>
+
         {/* Plan: prices + free allowances */}
         <section className="usage-card">
           <div className="usage-card-head"><h3>Actions &amp; pricing</h3></div>
@@ -247,5 +381,13 @@ export default function UsagePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function UsagePage() {
+  return (
+    <Suspense>
+      <UsagePageInner />
+    </Suspense>
   );
 }
