@@ -192,15 +192,16 @@ def consume_quota(user_id: str, kind: str, units: int = 1) -> bool:
     sub = current_subscription(user_id)
     if not sub:
         return False
-    quota = (sub.get("quota") or {}).get(kind)
-    if quota is None and kind in (sub.get("quota") or {}):
-        # Explicit None in the quota dict means "unlimited" for this kind.
+    quota = sub.get("quota") or {}
+    if kind not in quota:
+        return False
+    limit = quota[kind]
+    if limit is None:
+        # Explicit None means unlimited for this kind on this plan (e.g. Max QnA).
         subscriptions_collection().update_one({"_id": sub["_id"]}, {"$inc": {f"usage.{kind}": units}})
         return True
-    if quota is None:
-        return False
     used = int((sub.get("usage") or {}).get(kind, 0) or 0)
-    if used + units > int(quota):
+    if used + units > int(limit):
         return False
     result = subscriptions_collection().update_one(
         {"_id": sub["_id"], f"usage.{kind}": used},
