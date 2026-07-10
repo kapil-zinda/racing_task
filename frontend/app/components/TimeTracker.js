@@ -1,5 +1,6 @@
 "use client";
 
+import "./time-tracker.css";
 import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
