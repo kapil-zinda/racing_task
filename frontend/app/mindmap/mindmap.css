@@ -1,0 +1,231 @@
+.player-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.mm-status {
+  font-size: 12.5px;
+  color: #a5b4fc;
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(129,140,248,0.2);
+  border-radius: 10px;
+  padding: 0.5rem 0.85rem;
+  margin: 0 0 1rem;
+}
+.mm-status.success { color: #6ee7b7; background: rgba(16,185,129,0.08); border-color: rgba(16,185,129,0.25); }
+.mm-status.error { color: #fda4af; background: rgba(244,63,94,0.08); border-color: rgba(244,63,94,0.25); }
+
+.mm-library-card { width: 100%; }
+
+.mm-map-list { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.mm-map-item {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(129,140,248,0.15);
+  border-radius: 12px;
+  padding: 0.75rem 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.mm-map-item.active { border-color: rgba(129,140,248,0.5); background: rgba(99,102,241,0.12); }
+
+.mm-map-info { min-width: 0; flex: 1; }
+
+.mm-map-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e0e7ff;
+  margin: 0 0 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mm-map-meta { font-size: 11px; color: #818cf8; margin: 0; }
+
+.mm-map-preview {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 0.25rem 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mm-map-actions { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+
+.mm-load-more { align-self: center; }
+
+/* Full-width library listing (was in a 2-col .scoreboard grid → only half the width). */
+.mm-library { display: block; width: 100%; }
+.mm-library .mm-library-card { width: 100%; }
+
+/* Create (outline) on top, the generated map view stacked BELOW it — so deep graphs
+   get the full page width and the editor keeps enough room. */
+.mm-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  align-items: stretch;
+}
+
+.mm-outline-card { width: 100%; }
+.mm-workspace .mm-outline-list { max-height: 34vh; }
+
+.mm-title-input { width: 100%; margin-bottom: 0.7rem; }
+
+.mm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+}
+
+.mm-outline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.mm-outline-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.mm-outline-chip {
+  font-size: 10px;
+  font-weight: 800;
+  color: #818cf8;
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(129,140,248,0.25);
+  border-radius: 6px;
+  min-width: 20px;
+  text-align: center;
+  padding: 0.12rem 0;
+  flex-shrink: 0;
+}
+
+.mm-outline-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(129,140,248,0.2);
+  border-radius: 8px;
+  color: #e0e7ff;
+  font-size: 13px;
+  padding: 0.35rem 0.55rem;
+  transition: border-color 0.15s;
+}
+.mm-outline-input:focus { outline: none; border-color: rgba(129,140,248,0.55); }
+.mm-outline-input::placeholder { color: var(--muted); }
+
+.mm-outline-foot { display: flex; gap: 0.4rem; margin-top: 0.7rem; }
+
+.mm-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 0.8rem 0 0;
+  line-height: 1.5;
+}
+.mm-hint code {
+  background: rgba(99,102,241,0.15);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  color: #a5b4fc;
+  font-size: 10.5px;
+}
+
+.mm-canvas-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(129,140,248,0.18);
+  border-radius: 16px;
+  padding: 1.1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mm-canvas-card.mm-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  border-radius: 0;
+  background: #0b0d1f;
+}
+
+.mm-canvas-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.mm-canvas-copy h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #c7d2fe;
+  margin: 0 0 0.15rem;
+}
+.mm-canvas-copy p { font-size: 11.5px; color: var(--muted); margin: 0; }
+
+.mm-toolbar-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
+.mm-viewport {
+  flex: 1;
+  min-height: 420px;
+  overflow: auto;
+  background: #101228;
+  border: 1px solid rgba(129,140,248,0.15);
+  border-radius: 12px;
+}
+.mm-fullscreen .mm-viewport { min-height: 0; height: 100%; }
+
+.mm-empty {
+  height: 100%;
+  min-height: 420px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.mm-empty strong { display: block; color: #a5b4fc; font-size: 14px; }
+
+.mm-node.clickable { cursor: pointer; }
+.mm-node.clickable:hover rect:first-of-type { filter: brightness(1.25); }
+
+.mm-hash-modal { max-width: 640px; width: 92vw; }
+.mm-modal-desc { font-size: 12px; color: var(--muted); margin: 0.2rem 0 0.7rem; }
+.mm-hash-textarea {
+  width: 100%;
+  min-height: 260px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+@media (max-width: 980px) {
+  .mm-workspace { grid-template-columns: 1fr; }
+  .mm-outline-list { max-height: none; }
+}
+
+.journey-hero-card.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.journey-hero-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(114, 221, 247, 0.18);
+}
