@@ -18,7 +18,6 @@ from .agent_v2_domain import (
     recommendations_next_actions_payload,
     refresh_daily_aggregate,
     report_period_payload,
-    report_revision_gaps_payload,
     search_suggest_payload,
     search_unified_payload,
     state_range_payload,
@@ -33,7 +32,6 @@ from .context import (
     settings,
 )
 from .race_domain import add_points_payload
-from .mission_domain import mission_selector_options
 
 _agent_v2_chat_indexes_ensured = False
 
@@ -434,14 +432,7 @@ Behavior rules:
 - Do not ask the user to confirm tone/mode unless they explicitly ask to pin a mode.
 - Never give generic study advice when tool data can answer better.
 - Always prefer using available tools before making assumptions.
-- Domain truth you must follow:
-  - Mission data = plan/intent layer (what is planned to read): courses, books, tests, random topics, target structure.
-  - Syllabus data = execution/history layer (what is already done): class/revision/test progress with dates and counts.
-  - Do not treat mission planned items as completed unless syllabus/history proves completion.
 - Logging guidance by entry type:
-  - Logging must align with mission selector options exactly like UI flow.
-  - Resolve and use canonical mission exam labels/paths (examples: `PMP Level Up`, `Book: Spectrum`, `Random: Newspaper`) instead of generic shortcuts.
-  - For class/revision/test entries, select exam -> subject -> topic/test fields from mission-backed options before final log.
   - For test revisions (example: "SFG Level 1 test 1 revised"), log as test stage `revision` using source/test number; do not ask subject/topic.
   - For test/test-revision logging, if exam is omitted, default exam to `Tests`; do not block on exam prompt.
   - For `ticket_resolved` entries, primary fields are user/player, org, and note.
@@ -451,20 +442,13 @@ Behavior rules:
   - If fields are missing, ask only those missing fields.
   - When ready and user confirms, call `log_entry` with confirm=true.
 - Recorder action guidance:
-  - For recorder start requests, first inspect user-specific options via `read_mission_options`.
-  - Confirm target category and selection from available plan buckets (class/course, book, random, test) before emitting start action.
   - Do not emit start action with placeholder defaults like General unless user explicitly asks for a generic session.
   - When user asks to open recorder page, do it and acknowledge briefly in one line.
   - When user asks to start recording, collect only missing required fields (subject/topic/exam/source as needed), then start.
   - After recording starts, stay silent unless user explicitly asks something or a critical error occurs.
   - When user asks to stop recording, execute stop action and confirm briefly that it stopped.
-- When the user asks about study progress, mission, backlog, revisions, weak areas, or what to do next, inspect the relevant tools.
+- When the user asks about study progress, backlog, weak areas, or what to do next, inspect the relevant tools.
 - When navigation or recorder control is needed, emit structured UI actions.
-- Use the platform's rules for overdue revision:
-  - not_started_topics: class_study_first_date == ""
-  - missing_first_revision: class_study_first_date != "" and first_revision_date == "" and days_since_class >= X
-  - missing_second_revision: first_revision_date != "" and second_revision_date == "" and days_since_first_revision >= Y
-  - default X=7, Y=15 unless another value is provided by tool context
 - In supportive mode, be warm and grounding.
 - In strict mode, be firm and challenge avoidance, but do not insult or humiliate.
 - In planner mode, convert intent into concrete sequence/timeline.
@@ -499,30 +483,13 @@ No markdown fences. No extra text.
 
 
 def _realtime_instructions(user_id: str, page_context: str = "") -> str:
-    options = mission_selector_options(user_id)
-    exam_options = options.get("exam_options") if isinstance(options.get("exam_options"), list) else []
-    exam_labels = [str(row.get("label") or "").strip() for row in exam_options if isinstance(row, dict) and str(row.get("label") or "").strip()]
-    catalog = options.get("catalog") if isinstance(options.get("catalog"), dict) else {}
-    plan = options.get("plan") if isinstance(options.get("plan"), dict) else {}
-    tests = plan.get("tests") if isinstance(plan.get("tests"), list) else []
-    test_sources = sorted(
-        {
-            str(row.get("source") or "").strip()
-            for row in tests
-            if isinstance(row, dict) and str(row.get("source") or "").strip()
-        }
-    )
     capability_summary = {
-        "mission_exam_options": exam_labels,
-        "test_sources": test_sources,
-        "catalog_keys": sorted([str(k) for k in catalog.keys()])[:30],
         "tools": [
             "switch_page",
             "start_recording_session",
             "pause_recording_session",
             "resume_recording_session",
             "end_recording_session",
-            "read_mission_options",
             "prepare_log_entry",
             "log_entry",
         ],
@@ -539,7 +506,6 @@ Core behavior:
   - Speak only in English, Hindi, or natural Hinglish.
   - Match the user's current language style.
   - Never use any third language.
-- For class/revision/test logging, always use mission-backed selector options (same as UI flow).
 - Never ask user for points; points are determined by platform rules.
 - If user gives enough fields, log immediately.
 - If fields are missing, ask only missing fields and then log.
@@ -556,13 +522,9 @@ Core behavior:
 - Once recording is started, stay mostly silent unless user asks something or there is a critical issue.
 - If user asks to stop recording, call stop function and confirm briefly.
 - If user is idle for a long stretch, offer a gentle check-in.
-- Before answering questions about what the user has (books/courses/tests/topics) or where to log something,
-  use `read_mission_options` and rely on returned mission data.
-- If user mentions a known mission item (example: Spectrum), treat it as mission context, not unknown.
-- Never say you do not see/find an item without checking mission options first in this turn.
 - For "what have I done in X till now" questions, call `read_agent_context` and/or `search_unified` first, then answer with facts.
 
-Known mission context snapshot:
+Agent capabilities:
 {json.dumps(capability_summary, ensure_ascii=True)}
 
 Current page context: {page}
@@ -620,14 +582,8 @@ def _realtime_tools_schema() -> List[Dict[str, Any]]:
         },
         {
             "type": "function",
-            "name": "read_mission_options",
-            "description": "Read mission-backed exam/subject/topic and test options for deterministic entry logging.",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-        {
-            "type": "function",
             "name": "prepare_log_entry",
-            "description": "Validate and normalize class/revision/test/ticket entry. Returns missing fields and canonical mission-aligned values.",
+            "description": "Validate and normalize class/revision/test/ticket entry. Returns missing fields and normalized values.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -652,7 +608,7 @@ def _realtime_tools_schema() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "name": "log_entry",
-            "description": "Write entry into race/syllabus using mission-aligned normalization. Set confirm=true when ready.",
+            "description": "Write a study log entry (class/revision/test/ticket). Set confirm=true when ready.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -678,7 +634,7 @@ def _realtime_tools_schema() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "name": "read_agent_context",
-            "description": "Get user study context snapshot including syllabus progress and recent activity.",
+            "description": "Get user study context snapshot including recent points/activity and next-action recommendations.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -693,7 +649,7 @@ def _realtime_tools_schema() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "name": "search_unified",
-            "description": "Search syllabus/mission/tests/content for a query (example: Spectrum).",
+            "description": "Search content for a query (example: Spectrum).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -789,63 +745,6 @@ def _tokenize(value: str) -> List[str]:
     return [part for part in text.split(" ") if part]
 
 
-def _text_match_score(needle: str, hay: str) -> int:
-    n = _norm_text(needle)
-    h = _norm_text(hay)
-    if not n or not h:
-        return 0
-    if n == h:
-        return 100
-    if n in h or h in n:
-        return 85
-    n_tokens = set(_tokenize(n))
-    h_tokens = set(_tokenize(h))
-    if not n_tokens or not h_tokens:
-        return 0
-    overlap = len(n_tokens & h_tokens)
-    if overlap == 0:
-        return 0
-    return int((overlap / max(len(n_tokens), len(h_tokens))) * 70)
-
-
-def _extract_topic_index(value: str) -> int:
-    text = _norm_text(value)
-    if not text:
-        return 0
-    digits = re.findall(r"\d+", text)
-    if digits:
-        try:
-            return int(digits[0])
-        except Exception:  # noqa: BLE001
-            return 0
-    words = {
-        "one": 1,
-        "two": 2,
-        "three": 3,
-        "four": 4,
-        "five": 5,
-        "six": 6,
-        "seven": 7,
-        "eight": 8,
-        "nine": 9,
-        "ten": 10,
-        "eleven": 11,
-        "twelve": 12,
-        "thirteen": 13,
-        "fourteen": 14,
-        "fifteen": 15,
-        "sixteen": 16,
-        "seventeen": 17,
-        "eighteen": 18,
-        "nineteen": 19,
-        "twenty": 20,
-    }
-    for token in _tokenize(text):
-        if token in words:
-            return words[token]
-    return 0
-
-
 def _extract_first_int(value: str) -> int:
     text = _norm_text(value)
     if not text:
@@ -883,129 +782,23 @@ def _infer_test_stage(raw_stage: str, test_name: str, note: str, is_test_revisio
     return "test_given"
 
 
-def _resolve_by_options(raw_value: str, options: List[str]) -> str:
-    value = (raw_value or "").strip()
-    if not value or not options:
-        return ""
-    scored: List[tuple[int, str]] = []
-    for opt in options:
-        score = _text_match_score(value, opt)
-        if score > 0:
-            scored.append((score, opt))
-    if not scored:
-        return ""
-    scored.sort(key=lambda row: row[0], reverse=True)
-    return scored[0][1] if scored[0][0] >= 60 else ""
-
-
 def _resolve_exam_from_mission(user_id: str, entry_type: str, exam: str, course: str, book_name: str, source: str) -> Dict[str, str]:
-    options_payload = mission_selector_options(user_id)
-    exam_options = options_payload.get("exam_options") if isinstance(options_payload.get("exam_options"), list) else []
-    if not exam_options:
-        return {"exam_key": (exam or "").strip(), "exam_label": (exam or "").strip(), "mission_options_available": "0"}
-
-    # Build searchable candidates across key + label.
-    candidates: List[Dict[str, str]] = []
-    for row in exam_options:
-        if not isinstance(row, dict):
-            continue
-        key = str(row.get("value") or "").strip()
-        label = str(row.get("label") or "").strip()
-        if not key or not label:
-            continue
-        candidates.append({"key": key, "label": label})
-    if not candidates:
-        return {"exam_key": (exam or "").strip(), "exam_label": (exam or "").strip(), "mission_options_available": "0"}
-
-    kind = _normalize_entry_type(entry_type)
-    hints: List[str] = []
-    for item in [exam, course]:
-        if (item or "").strip():
-            hints.append(str(item).strip())
-    if kind == "book" and (book_name or "").strip():
-        hints.append(f"Book: {book_name.strip()}")
-        hints.append(book_name.strip())
-    if kind == "random" and (source or "").strip():
-        hints.append(f"Random: {source.strip()}")
-        hints.append(source.strip())
-
-    best: Dict[str, str] | None = None
-    best_score = 0
-    for hint in hints:
-        for cand in candidates:
-            score = max(_text_match_score(hint, cand["label"]), _text_match_score(hint, cand["key"]))
-            if score > best_score:
-                best_score = score
-                best = cand
-
-    if best and best_score >= 60:
-        return {"exam_key": best["key"], "exam_label": best["label"], "mission_options_available": "1"}
-
-    # fallback to first mission option when hint missing
-    if not hints:
-        return {"exam_key": candidates[0]["key"], "exam_label": candidates[0]["label"], "mission_options_available": "1"}
-    return {"exam_key": "", "exam_label": "", "mission_options_available": "1"}
+    # No mission catalog to resolve against — use the raw exam text as-is.
+    return {"exam_key": (exam or "").strip(), "exam_label": (exam or "").strip(), "mission_options_available": "0"}
 
 
 def _resolve_subject_topic_from_catalog(user_id: str, exam_key: str, subject: str, topic: str) -> Dict[str, Any]:
-    payload = mission_selector_options(user_id)
-    catalog = payload.get("catalog") if isinstance(payload.get("catalog"), dict) else {}
-    entries = catalog.get(exam_key) if isinstance(catalog.get(exam_key), list) else []
-    if not entries:
-        return {
-            "subject": (subject or "").strip(),
-            "topic": (topic or "").strip(),
-            "subject_matched": False,
-            "topic_matched": False,
-        }
-
-    available_subjects = [str(row.get("subject") or "").strip() for row in entries if isinstance(row, dict)]
-    available_subjects = [s for s in available_subjects if s]
-    resolved_subject = _resolve_by_options(subject, available_subjects) if subject else ""
-    if not resolved_subject and len(available_subjects) == 1:
-        resolved_subject = available_subjects[0]
-
-    chosen_subject = resolved_subject or (subject or "").strip()
-    topic_options: List[str] = []
-    for row in entries:
-        if not isinstance(row, dict):
-            continue
-        row_subject = str(row.get("subject") or "").strip()
-        if chosen_subject and row_subject != chosen_subject:
-            continue
-        topics = row.get("topics") if isinstance(row.get("topics"), list) else []
-        topic_options.extend([str(t).strip() for t in topics if str(t).strip()])
-
-    resolved_topic = _resolve_by_options(topic, topic_options) if topic else ""
-    if not resolved_topic and topic:
-        idx = _extract_topic_index(topic)
-        if idx > 0:
-            for opt in topic_options:
-                opt_idx = _extract_topic_index(opt)
-                if opt_idx == idx:
-                    resolved_topic = opt
-                    break
-
+    # No mission catalog to resolve against — use the raw subject/topic text as-is.
     return {
-        "subject": resolved_subject or (subject or "").strip(),
-        "topic": resolved_topic or (topic or "").strip(),
-        "subject_matched": bool(resolved_subject),
-        "topic_matched": bool(resolved_topic),
+        "subject": (subject or "").strip(),
+        "topic": (topic or "").strip(),
+        "subject_matched": False,
+        "topic_matched": False,
     }
 
 
 def _resolve_test_source_from_mission(user_id: str, source: str) -> str:
-    payload = mission_selector_options(user_id)
-    plan = payload.get("plan") if isinstance(payload.get("plan"), dict) else {}
-    tests = plan.get("tests") if isinstance(plan.get("tests"), list) else []
-    options = sorted({str(row.get("source") or "").strip() for row in tests if isinstance(row, dict) and str(row.get("source") or "").strip()})
-    if not options:
-        return (source or "").strip()
-    resolved = _resolve_by_options(source, options) if source else ""
-    if resolved:
-        return resolved
-    if len(options) == 1:
-        return options[0]
+    # No mission catalog to resolve against — use the raw source text as-is.
     return (source or "").strip()
 
 
@@ -1169,16 +962,6 @@ def prepare_entry_payload(
 
     detail = " | ".join([part for part in detail_parts if part and not part.rstrip().endswith(":")])
     options: Dict[str, Any] = {}
-    if missing:
-        selector = mission_selector_options(uid)
-        plan = selector.get("plan") if isinstance(selector.get("plan"), dict) else {}
-        tests = plan.get("tests") if isinstance(plan.get("tests"), list) else []
-        test_sources = sorted({str(row.get("source") or "").strip() for row in tests if isinstance(row, dict) and str(row.get("source") or "").strip()})
-        options = {
-            "exam_options": selector.get("exam_options", []),
-            "catalog": selector.get("catalog", {}),
-            "test_sources": test_sources,
-        }
     return {
         "user_id": uid,
         "entry_type": kind,
@@ -1341,12 +1124,6 @@ def run_agent_v2_chat_payload(
         payload = report_period_payload(uid, from_date, to_date, group_by, x_days, y_days)
         return json.dumps(payload, ensure_ascii=True)
 
-    @tool("report_revision_gaps")
-    def report_revision_gaps(x_days: int = 7, y_days: int = 15, limit: int = 200, reference_date: str = "") -> str:
-        """Return not-started and missing revision gaps with overdue days."""
-        payload = report_revision_gaps_payload(uid, x_days=x_days, y_days=y_days, limit=limit, reference_date=reference_date or None)
-        return json.dumps(payload, ensure_ascii=True)
-
     @tool("recommend_next_actions")
     def recommend_next_actions(duration_min: int = 60, mode: str = "supportive", limit: int = 5, x_days: int = 7, y_days: int = 15) -> str:
         """Return ranked next study actions for the user."""
@@ -1355,7 +1132,7 @@ def run_agent_v2_chat_payload(
 
     @tool("search_unified")
     def search_unified(q: str, course: str = "", types: str = "", limit: int = 20) -> str:
-        """Run unified content, syllabus, mission and tests search."""
+        """Run unified content search."""
         payload = search_unified_payload(q=q, user_id=uid, course=course or None, types=types or None, limit=limit)
         return json.dumps(payload, ensure_ascii=True)
 
@@ -1369,12 +1146,6 @@ def run_agent_v2_chat_payload(
     def read_state_range(from_date: str, to_date: str, include_history: bool = False) -> str:
         """Return daily aggregate/state range for the user."""
         payload = state_range_payload(from_date=from_date, to_date=to_date, user_id=uid, include_history=include_history)
-        return json.dumps(payload, ensure_ascii=True)
-
-    @tool("read_mission_options")
-    def read_mission_options() -> str:
-        """Return mission selector options and current plan buckets for the active user."""
-        payload = mission_selector_options(uid)
         return json.dumps(payload, ensure_ascii=True)
 
     @tool("prepare_log_entry")
@@ -1475,12 +1246,10 @@ def run_agent_v2_chat_payload(
         [
             read_agent_context,
             report_period,
-            report_revision_gaps,
             recommend_next_actions,
             search_unified,
             search_suggest,
             read_state_range,
-            read_mission_options,
             prepare_log_entry,
             log_entry,
         ],
