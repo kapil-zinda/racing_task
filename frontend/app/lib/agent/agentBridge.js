@@ -96,16 +96,6 @@ export async function getAgentRealtimeToken({ pageContext = "", voice = "" } = {
   return res.json();
 }
 
-export async function readMissionOptions() {
-  if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
-  const res = await apiFetch(`${API_BASE_URL}/mission/options`);
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Mission options failed: ${res.status} ${txt}`);
-  }
-  return res.json();
-}
-
 export async function prepareAgentEntry(input = {}) {
   if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is missing");
   const res = await apiFetch(`${API_BASE_URL}/agent-v2/entries/prepare`, {

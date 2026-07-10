@@ -55,9 +55,9 @@ export async function executeAgentActions(actions, { router, pathname }) {
       } else if (wantsRecorder) {
         router.push("/recorder");
       } else if (wantsSyllabus) {
-        router.push("/syllabus");
+        router.push("/goals");
       } else if (wantsMission) {
-        router.push("/mission");
+        router.push("/goals");
       } else if (wantsResources) {
         const subpage = String(args?.subpage || genericPage || "").trim().toLowerCase();
         if (subpage === "content" || subpage === "search" || subpage === "qna") router.push(`/${subpage}`);
