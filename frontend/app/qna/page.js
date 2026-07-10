@@ -1,4 +1,6 @@
 "use client";
+import "./qna.css";
+
 import { apiFetch } from "../lib/auth";
 import { useCredits } from "../lib/credits";
 import { listGoals } from "../lib/goalApi";
