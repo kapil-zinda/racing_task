@@ -1,5 +1,6 @@
 "use client";
 
+import "./search.css";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
