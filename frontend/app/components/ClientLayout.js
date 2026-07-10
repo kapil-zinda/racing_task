@@ -1,5 +1,6 @@
 "use client";
 
+import "./shared.css";
 import { AuthProvider } from "../lib/auth";
 import { CreditsProvider } from "../lib/credits";
 import AuthGuard from "./AuthGuard";

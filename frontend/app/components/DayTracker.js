@@ -1,5 +1,6 @@
 "use client";
 
+import "./tracker.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";

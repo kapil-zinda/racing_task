@@ -1,5 +1,6 @@
 "use client";
 
+import "./answereval.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "./Icon";
 
