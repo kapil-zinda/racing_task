@@ -1,4 +1,6 @@
 "use client";
+import "./settings.css";
+
 // Account settings — profile (name editable; email/phone read-only), password
 // change, current plan, and the danger zone (sign out / delete account). Sign
 // out used to be a bare button in the MainMenu drawer; it now lives here
