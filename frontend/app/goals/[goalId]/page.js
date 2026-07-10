@@ -1,4 +1,6 @@
 "use client";
+import "../goals.css";
+import "../../components/goal.css";
 // Goal detail — split layout: left = drag-drop tree editor, right = node detail.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
