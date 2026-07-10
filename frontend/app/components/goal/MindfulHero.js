@@ -1,4 +1,5 @@
 "use client";
+
 // "Today's focus" — calm, data-first hero for the goals dashboard. Shows up to six open
 // tasks (name + parent goal) with an explicit check button; marking done keeps the row
 // for a 5-second "Done · Undo" window before it leaves. Metric-based tasks open a picker
