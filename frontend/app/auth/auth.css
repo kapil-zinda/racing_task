@@ -86,7 +86,7 @@
 }
 
 .auth-btn {
-  background: var(--gold);
+  background: var(--brand-gradient);
   border: none;
   border-radius: 10px;
   padding: 13px;

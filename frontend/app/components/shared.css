@@ -16,7 +16,7 @@
 
 .side-nav-item.active {
   color: var(--on-accent);
-  background: linear-gradient(145deg, var(--blue), #8ce8ff);
+  background: var(--brand-gradient);
   border-color: rgba(var(--blue-rgb), 0.9);
   box-shadow: 0 10px 24px rgba(var(--blue-rgb), 0.3);
 }
@@ -286,7 +286,7 @@
 }
 .lp-btn:hover { transform: translateY(-2px); }
 
-.lp-btn.primary { background: var(--gold); color: var(--on-accent); }
+.lp-btn.primary { background: var(--brand-gradient); color: var(--on-accent); }
 .lp-btn.primary:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(var(--gold-rgb), 0.25); }
 .lp-btn.ghost { background: rgba(var(--veil-rgb), 0.06); border-color: var(--card-border); color: var(--text); }
 .lp-btn.ghost:hover { background: rgba(var(--veil-rgb), 0.12); }

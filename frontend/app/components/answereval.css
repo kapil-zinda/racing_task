@@ -16,7 +16,7 @@
 /* Thin underline traces the quoted span without covering the text underneath. */
 .ae-mark-bar { position: absolute; height: 3px; border-radius: 2px; pointer-events: none; opacity: 0.85; transition: opacity 0.15s, height 0.15s; }
 .ae-mark-bar.ae-mark-good { background: var(--mint); }
-.ae-mark-bar.ae-mark-improve { background: var(--gold); }
+.ae-mark-bar.ae-mark-improve { background: var(--warning); }
 .ae-mark-bar.ae-mark-missing { background: var(--red); }
 .ae-mark-bar.ae-mark-section { background: var(--blue); }
 .ae-mark-bar.ae-mark-active { height: 4px; opacity: 1; box-shadow: 0 0 0 3px rgba(var(--veil-rgb), 0.15); }
@@ -29,7 +29,7 @@
   box-shadow: 0 2px 6px rgba(0,0,0,0.45); transition: transform 0.15s; z-index: 2;
 }
 .ae-mark-badge.ae-mark-good { background: var(--mint); }
-.ae-mark-badge.ae-mark-improve { background: var(--gold); }
+.ae-mark-badge.ae-mark-improve { background: var(--warning); }
 .ae-mark-badge.ae-mark-missing { background: var(--red); }
 .ae-mark-badge.ae-mark-section { background: var(--blue); }
 .ae-mark-badge.ae-mark-active { transform: scale(1.3); z-index: 3; }

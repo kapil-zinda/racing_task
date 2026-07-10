@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth, apiUpdateProfile, apiChangePassword, apiDeleteAccount } from "../lib/auth";
 import { useCredits } from "../lib/credits";
-import { useTheme } from "../lib/theme";
+import { useAppearance } from "../lib/theme";
 import { friendlyApiError } from "../lib/errors";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
@@ -27,15 +27,24 @@ function fmtDate(iso) {
   }
 }
 
-const THEMES = [
+const MODES = [
   { value: "dark", label: "Dark", icon: "moon" },
   { value: "light", label: "Light", icon: "sun" },
+];
+
+// Swatches mirror each palette's dark-mode --primary so the picker previews
+// the palette without depending on the currently active tokens.
+const PALETTE_OPTIONS = [
+  { value: "focus", label: "Focus", swatch: "#6366f1", hint: "Calm zinc + indigo" },
+  { value: "prime", label: "Prime", swatch: "#0a84ff", hint: "True black + blue" },
+  { value: "midnight", label: "Midnight", swatch: "#5b8cff", hint: "Deep navy" },
+  { value: "academic", label: "Academic", swatch: "#2563eb", hint: "Slate + blue" },
 ];
 
 export default function SettingsPage() {
   const { auth, signOut, updateAuth } = useAuth();
   const { credits } = useCredits();
-  const [theme, setTheme] = useTheme();
+  const [{ mode, palette }, { setMode, setPalette }] = useAppearance();
   const router = useRouter();
 
   const [editingName, setEditingName] = useState(false);
@@ -201,19 +210,41 @@ export default function SettingsPage() {
           <div className="usage-card-head"><h3>Appearance</h3></div>
           <div className="settings-profile-row">
             <span className="settings-profile-label">Theme</span>
-            <div className="settings-theme-toggle" role="radiogroup" aria-label="Theme">
-              {THEMES.map((t) => (
-                <label key={t.value} className={`settings-theme-option${theme === t.value ? " selected" : ""}`}>
+            <div className="settings-palette-grid" role="radiogroup" aria-label="Theme">
+              {PALETTE_OPTIONS.map((p) => (
+                <label key={p.value} className={`settings-palette-option${palette === p.value ? " selected" : ""}`}>
                   <input
                     type="radio"
-                    name="theme"
-                    value={t.value}
+                    name="palette"
+                    value={p.value}
                     className="sr-only"
-                    checked={theme === t.value}
-                    onChange={() => setTheme(t.value)}
+                    checked={palette === p.value}
+                    onChange={() => setPalette(p.value)}
                   />
-                  <Icon name={t.icon} size={15} />
-                  {t.label}
+                  <span className="settings-palette-swatch" style={{ background: p.swatch }} aria-hidden="true" />
+                  <span className="settings-palette-text">
+                    <strong>{p.label}</strong>
+                    <span>{p.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="settings-profile-row">
+            <span className="settings-profile-label">Mode</span>
+            <div className="settings-theme-toggle" role="radiogroup" aria-label="Mode">
+              {MODES.map((m) => (
+                <label key={m.value} className={`settings-theme-option${mode === m.value ? " selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="mode"
+                    value={m.value}
+                    className="sr-only"
+                    checked={mode === m.value}
+                    onChange={() => setMode(m.value)}
+                  />
+                  <Icon name={m.icon} size={15} />
+                  {m.label}
                 </label>
               ))}
             </div>

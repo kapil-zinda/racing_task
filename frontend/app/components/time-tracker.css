@@ -1,4 +1,4 @@
-.btn-revise { background: var(--blue); }
+.btn-revise { background: var(--blue); color: var(--on-accent); }
 
 .tracker-wrap {
   background: rgba(var(--veil-rgb), 0.04);

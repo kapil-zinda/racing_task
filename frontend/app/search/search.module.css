@@ -3,8 +3,8 @@
 /* Primary action: gold (brand primary), dark text — red is reserved for
    destructive actions, so the Search button must not use .btn-ticket. */
 .searchBtn {
-  background: var(--gold);
-  color: #1d1d1d;
+  background: var(--primary);
+  color: var(--on-accent);
 }
 .searchBtn:disabled {
   opacity: 0.55;

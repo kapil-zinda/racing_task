@@ -6,62 +6,77 @@
   /* --font-manrope / --font-bebas are injected by next/font in app/layout.js */
   color-scheme: dark;
 
-  /* ---- Neutrals (flip per theme) ---- */
-  --bg: #0b0f1a;
-  --bg-1: #0f1021;
-  --bg-2: #1a1238;
-  --card: #131826;
-  --card-border: #222a3d;
-  --border-strong: #2b3348;
-  --sunken: #0e1320;
-  --text: #e7ecf5;
-  --text-bright: #f6f8ff;
-  --muted: #8b95a7;
-  --faint: #6b7796;
+  /* ---- Neutrals: ~90% of the interface (flip per theme) ---- */
+  --bg: #09090b;
+  --bg-1: #111113;
+  --bg-2: #18181b;
+  --card: #141417;
+  --card-border: #26262b;
+  --border-strong: #313135;
+  --sunken: #0e0e11;
+  --text: #f4f4f5;
+  --text-bright: #ffffff;
+  --muted: #a1a1aa;
+  --faint: #71717a;
 
   /* Translucent layer channel: ghost buttons, hover washes, hairlines and
      soft text are rgba(var(--veil-rgb), α) — white over dark, ink over light. */
   --veil-rgb: 255, 255, 255;
-  --scrim: rgba(3, 6, 14, 0.6);
+  --scrim: rgba(3, 4, 8, 0.6);
 
-  /* ---- Identity accent fills (same in both themes; pair with --on-accent) ---- */
-  --gold: #ffd166;
-  --blue: #72ddf7;
-  --red: #ff6b6b;
-  --mint: #80ed99;
-  --indigo: #6366f1;
-  --indigo-2: #818cf8;
-  --emerald: #10b981;
-  --on-accent: #0e1320;
+  /* ---- Brand: ONE primary. Fills pair with --on-accent (white). ---- */
+  --primary: #6366f1;
+  --primary-hover: #7c7ff5;
+  --primary-soft: rgba(99, 102, 241, 0.15);
+  --brand-gradient: linear-gradient(135deg, #6366f1 0%, #7c3aed 45%, #3b82f6 100%);
+  --on-accent: #ffffff;
+
+  /* ---- Semantic states (the only other color in the UI) ---- */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+
+  /* ---- Legacy accent aliases → consolidated roles.
+     Former gold/cyan/mint/emerald/royal accents collapse into
+     primary / info / success so no call site needed rewriting.
+     Fill aliases use the 600-step where white text must clear 4.5:1. ---- */
+  --gold: var(--primary);
+  --blue: #2563eb;
+  --red: #dc2626;
+  --mint: var(--success);
+  --indigo: var(--primary);
+  --indigo-2: var(--primary-hover);
+  --emerald: var(--success);
+  --royal: #2563eb;
 
   /* ---- Accents as text/borders on surfaces (flip for contrast) ---- */
-  --gold-text: #ffd166;
-  --gold-soft: #ffe2a3;
-  --blue-text: #72ddf7;
-  --blue-soft: #a5ecfb;
-  --red-text: #ff6b6b;
-  --red-soft: #ffb3b3;
-  --mint-text: #80ed99;
-  --mint-soft: #aaf3bd;
-  --emerald-text: #34d399;
-  --emerald-soft: #6ee7b7;
+  --gold-text: #fbbf24;
+  --gold-soft: #fcd34d;
+  --blue-text: #60a5fa;
+  --blue-soft: #93c5fd;
+  --red-text: #f87171;
+  --red-soft: #fca5a5;
+  --mint-text: #4ade80;
+  --mint-soft: #86efac;
+  --emerald-text: #4ade80;
+  --emerald-soft: #86efac;
   --indigo-text: #a5b4fc;
   --indigo-soft: #c7d2fe;
-  --royal: #2563eb;
   --royal-text: #93c5fd;
 
   /* ---- Accent tint channels for rgba() washes/borders/glows ---- */
-  --gold-rgb: 255, 209, 102;
-  --blue-rgb: 114, 221, 247;
-  --red-rgb: 255, 107, 107;
-  --mint-rgb: 128, 237, 153;
+  --gold-rgb: 245, 158, 11;
+  --blue-rgb: 59, 130, 246;
+  --red-rgb: 239, 68, 68;
+  --mint-rgb: 34, 197, 94;
   --indigo-rgb: 99, 102, 241;
-  --emerald-rgb: 16, 185, 129;
-  --royal-rgb: 37, 99, 235;
+  --emerald-rgb: 34, 197, 94;
+  --royal-rgb: 59, 130, 246;
 
   /* ---- Elevation ---- */
-  --shadow-card: 0 8px 22px rgba(8, 12, 30, 0.25);
-  --shadow-raised: 0 12px 28px rgba(13, 17, 40, 0.32);
+  --shadow-card: 0 8px 22px rgba(0, 0, 0, 0.35);
+  --shadow-raised: 0 12px 28px rgba(0, 0, 0, 0.45);
 
   /* Semantic z-index scale: dropdown → sticky → nav → overlay → modal → popover → dialog → offline */
   --z-dropdown: 40;
@@ -74,51 +89,261 @@
   --z-offline: 150;
 }
 
-/* Light theme — "the day desk": paper-white cards on a cool, indigo-tinted
-   light field. Identity fills (gold/cyan/red/mint buttons) stay the same;
-   accents used as text/borders swap to darker cousins that clear 4.5:1. */
+/* Light theme — same restrained system on slate neutrals: white cards on a
+   cool near-white field; accent text/tints swap to darker steps that clear
+   4.5:1. Primary and semantic fills deepen one step for contrast. */
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg: #eef1f7;
-  --bg-1: #e8ebf4;
-  --bg-2: #e4e2f1;
+  --bg: #f8fafc;
+  --bg-1: #f1f5f9;
+  --bg-2: #e2e8f0;
   --card: #ffffff;
-  --card-border: #dbe1ec;
-  --border-strong: #c6cfdf;
-  --sunken: #f1f4f9;
-  --text: #1a2233;
-  --text-bright: #0d1526;
-  --muted: #55617a;
-  --faint: #8290a8;
+  --card-border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --sunken: #f1f5f9;
+  --text: #0f172a;
+  --text-bright: #020617;
+  --muted: #64748b;
+  --faint: #94a3b8;
 
-  --veil-rgb: 18, 26, 46;
-  --scrim: rgba(15, 21, 38, 0.45);
+  --veil-rgb: 15, 23, 42;
+  --scrim: rgba(15, 23, 42, 0.45);
 
-  --gold-text: #854d0e;
-  --gold-soft: #8a5b00;
-  --blue-text: #0e7490;
-  --blue-soft: #155e75;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-soft: rgba(79, 70, 229, 0.08);
+  --brand-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 45%, #2563eb 100%);
+
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #2563eb;
+
+  --blue: #2563eb;
+  --red: #dc2626;
+
+  --gold-text: #b45309;
+  --gold-soft: #92400e;
+  --blue-text: #1d4ed8;
+  --blue-soft: #1e40af;
   --red-text: #b91c1c;
   --red-soft: #991b1b;
   --mint-text: #15803d;
   --mint-soft: #166534;
-  --emerald-text: #047857;
-  --emerald-soft: #065f46;
+  --emerald-text: #15803d;
+  --emerald-soft: #166534;
   --indigo-text: #4f46e5;
   --indigo-soft: #4338ca;
   --royal-text: #1d4ed8;
-  --royal-rgb: 29, 78, 216;
+  --royal-rgb: 37, 99, 235;
 
-  --gold-rgb: 178, 110, 4;
-  --blue-rgb: 14, 116, 144;
-  --red-rgb: 185, 28, 28;
-  --mint-rgb: 21, 128, 61;
+  --gold-rgb: 217, 119, 6;
+  --blue-rgb: 37, 99, 235;
+  --red-rgb: 220, 38, 38;
+  --mint-rgb: 22, 163, 74;
   --indigo-rgb: 79, 70, 229;
-  --emerald-rgb: 4, 120, 87;
+  --emerald-rgb: 22, 163, 74;
 
-  --shadow-card: 0 8px 22px rgba(23, 32, 55, 0.08);
-  --shadow-raised: 0 12px 28px rgba(23, 32, 55, 0.12);
+  --shadow-card: 0 8px 22px rgba(15, 23, 42, 0.06);
+  --shadow-raised: 0 12px 28px rgba(15, 23, 42, 0.10);
+}
+
+/* ============================== Palettes ==============================
+   Four palettes × two modes. `data-palette` on <html> picks the palette
+   (absent = Focus, the default defined above); `data-theme="light"` picks the
+   mode. Each palette's light block re-declares every token its dark block
+   sets, so the (0,3,0) light selector always wins over the (0,2,0) dark one.
+   `.theme-dark` islands intentionally stay on Focus-dark regardless. */
+
+/* ---- Prime — Apple-inspired: true blacks, SF-blue primary ---- */
+:root[data-palette="prime"] {
+  --bg: #000000;
+  --bg-1: #111111;
+  --bg-2: #1a1a1a;
+  --card: #171717;
+  --card-border: #2a2a2a;
+  --border-strong: #3a3a3c;
+  --sunken: #0d0d0d;
+  --text: #fafafa;
+  --text-bright: #ffffff;
+  --muted: #a3a3a3;
+  --faint: #737373;
+
+  --primary: #0071e3;
+  --primary-hover: #0a84ff;
+  --primary-soft: rgba(10, 132, 255, 0.16);
+  --brand-gradient: linear-gradient(135deg, #0a84ff 0%, #5e5ce6 55%, #bf5af2 100%);
+
+  --success: #30d158;
+  --warning: #ffd60a;
+  --danger: #ff453a;
+  --info: #64d2ff;
+  --blue: #0071e3;
+  --royal: #0071e3;
+
+  --indigo-text: #66afff;
+  --indigo-soft: #a6ceff;
+  --indigo-rgb: 10, 132, 255;
+  --blue-text: #64d2ff;
+  --blue-soft: #99e5ff;
+  --blue-rgb: 10, 132, 255;
+  --royal-text: #66afff;
+  --royal-rgb: 10, 132, 255;
+}
+
+:root[data-palette="prime"][data-theme="light"] {
+  --bg: #f5f5f7;
+  --bg-1: #efeff1;
+  --bg-2: #e8e8ed;
+  --card: #ffffff;
+  --card-border: #e5e5ea;
+  --border-strong: #c7c7cc;
+  --sunken: #f2f2f4;
+  --text: #1d1d1f;
+  --text-bright: #000000;
+  --muted: #6e6e73;
+  --faint: #98989d;
+  --veil-rgb: 29, 29, 31;
+
+  --primary: #0071e3;
+  --primary-hover: #005fc2;
+  --primary-soft: rgba(0, 113, 227, 0.08);
+  --brand-gradient: linear-gradient(135deg, #0071e3 0%, #5856d6 55%, #af52de 100%);
+
+  --success: #248a3d;
+  --warning: #c87a00;
+  --danger: #d70015;
+  --info: #0071e3;
+  --blue: #0071e3;
+  --royal: #0071e3;
+
+  --indigo-text: #0066cc;
+  --indigo-soft: #004e9e;
+  --indigo-rgb: 0, 113, 227;
+  --blue-text: #0066cc;
+  --blue-soft: #004e9e;
+  --blue-rgb: 0, 113, 227;
+  --royal-text: #0066cc;
+  --royal-rgb: 0, 113, 227;
+}
+
+/* ---- Midnight Blue — deep navy field for late study ---- */
+:root[data-palette="midnight"] {
+  --bg: #07111f;
+  --bg-1: #0b1628;
+  --bg-2: #0f1d33;
+  --card: #122038;
+  --card-border: #223650;
+  --border-strong: #2c4260;
+  --sunken: #0a1424;
+  --text: #e6edf7;
+  --text-bright: #f7faff;
+  --muted: #8da2bf;
+  --faint: #64789a;
+  --scrim: rgba(2, 8, 18, 0.6);
+
+  --primary: #3d6bf3;
+  --primary-hover: #5b8cff;
+  --primary-soft: rgba(91, 140, 255, 0.16);
+  --brand-gradient: linear-gradient(135deg, #3d6bf3 0%, #5b8cff 50%, #38bdf8 100%);
+
+  --success: #38d39f;
+  --warning: #f6c445;
+  --danger: #ff6b6b;
+  --info: #60a5fa;
+
+  --indigo-text: #8fb3ff;
+  --indigo-soft: #bcd2ff;
+  --indigo-rgb: 91, 140, 255;
+}
+
+:root[data-palette="midnight"][data-theme="light"] {
+  --bg: #f6f8fc;
+  --bg-1: #edf2f9;
+  --bg-2: #e1e9f4;
+  --card: #ffffff;
+  --card-border: #dce5f0;
+  --border-strong: #c2d0e2;
+  --sunken: #eff3f9;
+  --text: #1b2a41;
+  --text-bright: #0b1626;
+  --muted: #64748b;
+  --faint: #94a3b8;
+  --veil-rgb: 27, 42, 65;
+  --scrim: rgba(15, 23, 42, 0.45);
+
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-soft: rgba(59, 130, 246, 0.08);
+  --brand-gradient: linear-gradient(135deg, #2563eb 0%, #3b82f6 50%, #0ea5e9 100%);
+
+  --success: #16a34a;
+  --warning: #ca8a04;
+  --danger: #dc2626;
+  --info: #2563eb;
+
+  --indigo-text: #1d4ed8;
+  --indigo-soft: #1e40af;
+  --indigo-rgb: 37, 99, 235;
+}
+
+/* ---- Academic — gray-blue slate, books-and-paper sobriety ---- */
+:root[data-palette="academic"] {
+  --bg: #111827;
+  --bg-1: #16202f;
+  --bg-2: #1c2536;
+  --card: #1f2937;
+  --card-border: #334155;
+  --border-strong: #475569;
+  --sunken: #0f172a;
+  --text: #f9fafb;
+  --text-bright: #ffffff;
+  --muted: #9ca3af;
+  --faint: #6b7280;
+
+  --primary: #2563eb;
+  --primary-hover: #3b82f6;
+  --primary-soft: rgba(37, 99, 235, 0.18);
+  --brand-gradient: linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%);
+
+  --success: #10b981;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #3b82f6;
+
+  --indigo-text: #93c5fd;
+  --indigo-soft: #bfdbfe;
+  --indigo-rgb: 37, 99, 235;
+}
+
+:root[data-palette="academic"][data-theme="light"] {
+  --bg: #f9fafb;
+  --bg-1: #f3f4f6;
+  --bg-2: #e5e7eb;
+  --card: #ffffff;
+  --card-border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --sunken: #f3f4f6;
+  --text: #111827;
+  --text-bright: #030712;
+  --muted: #6b7280;
+  --faint: #9ca3af;
+  --veil-rgb: 17, 24, 39;
+
+  --primary: #1d4ed8;
+  --primary-hover: #1e40af;
+  --primary-soft: rgba(29, 78, 216, 0.08);
+  --brand-gradient: linear-gradient(135deg, #1d4ed8 0%, #4338ca 50%, #6d28d9 100%);
+
+  --success: #059669;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --info: #1d4ed8;
+
+  --indigo-text: #1d4ed8;
+  --indigo-soft: #1e40af;
+  --indigo-rgb: 29, 78, 216;
 }
 
 /* Visible keyboard focus everywhere; components may layer their own rings on top. */
@@ -252,13 +477,13 @@ body {
 }
 
 .menu-item:hover {
-  border-color: rgba(var(--blue-rgb), 0.6);
-  background: rgba(var(--blue-rgb), 0.14);
+  border-color: rgba(var(--indigo-rgb), 0.55);
+  background: var(--primary-soft);
 }
 
 .menu-item.active {
-  border-color: rgba(var(--blue-rgb), 0.9);
-  background: rgba(var(--blue-rgb), 0.2);
+  border-color: rgba(var(--indigo-rgb), 0.9);
+  background: rgba(var(--indigo-rgb), 0.18);
 }
 
 .content-grid {
@@ -1065,7 +1290,7 @@ h1 {
   height: 100%;
   width: 0;
   border-radius: inherit;
-  background: linear-gradient(90deg, #f59f00, var(--gold));
+  background: var(--brand-gradient);
   transition: width 0.35s ease;
 }
 
@@ -1312,7 +1537,7 @@ button:hover {
   filter: brightness(1.05);
 }
 
-.btn-new { background: var(--gold); }
+.btn-new { background: var(--brand-gradient); color: var(--on-accent); }
 .btn-ticket { background: var(--red); color: #fff; }
 
 .milestone-panel {
@@ -3526,10 +3751,10 @@ button:hover {
   border-radius: 999px;
 }
 
-.balance-fill.coverage { background: linear-gradient(90deg, var(--blue), #9be9fb); }
-.balance-fill.retention { background: linear-gradient(90deg, var(--mint), #aaf3bd); }
-.balance-fill.performance { background: linear-gradient(90deg, var(--gold), #ffe2a3); }
-.balance-fill.readiness { background: linear-gradient(90deg, #c792ea, #f7b2e0); }
+.balance-fill.coverage { background: var(--info); }
+.balance-fill.retention { background: var(--success); }
+.balance-fill.performance { background: var(--warning); }
+.balance-fill.readiness { background: var(--primary); }
 
 .balance-axes {
   display: flex;
@@ -3613,7 +3838,7 @@ button:hover {
 .badge-chip.earned {
   opacity: 1;
   color: var(--on-accent);
-  background: linear-gradient(135deg, var(--gold), #ffe2a3);
+  background: var(--brand-gradient);
   border-color: transparent;
   font-weight: 700;
 }

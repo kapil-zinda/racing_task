@@ -391,7 +391,7 @@ const CARD = "#131826";
 const SUNK = "#0e1320";
 const styles = {
   doc: { width: 820, background: "#0b0f1a", color: INK, fontFamily: "Manrope, Segoe UI, Arial, sans-serif", padding: "0 0 28px" },
-  headerBar: { height: 8, background: "linear-gradient(90deg,#ffd166,#72ddf7,#818cf8,#80ed99)" },
+  headerBar: { height: 8, background: "linear-gradient(90deg,#6366f1,#7c3aed,#3b82f6)" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "28px 34px 22px" },
   brand: { fontFamily: "var(--font-bebas), Impact, sans-serif", letterSpacing: 2, fontSize: 20, color: MUTED },
   title: { fontFamily: "var(--font-bebas), Impact, sans-serif", fontSize: 46, lineHeight: 1, color: "#fff", marginTop: 4 },

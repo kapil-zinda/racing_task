@@ -74,14 +74,15 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: "#0b0f1a",
+  themeColor: "#09090b",
   width: "device-width",
   initialScale: 1,
 };
 
-// Applies the stored theme before first paint so a light-theme user never sees
-// a dark flash (and vice versa). Dark is the default and needs no attribute.
-const THEME_INIT = `(function(){try{if(localStorage.getItem("race_hub_theme")==="light")document.documentElement.dataset.theme="light";}catch(e){}})();`;
+// Applies the stored appearance (mode + palette) before first paint so a
+// light-theme user never sees a dark flash (and vice versa). Dark Focus is the
+// default and needs no attributes.
+const THEME_INIT = `(function(){try{var d=document.documentElement;if(localStorage.getItem("race_hub_theme")==="light")d.dataset.theme="light";var p=localStorage.getItem("race_hub_palette");if(p==="prime"||p==="midnight"||p==="academic")d.dataset.palette=p;}catch(e){}})();`;
 
 export default function RootLayout({ children }) {
   return (
