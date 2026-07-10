@@ -1,3 +1,4 @@
+import "./how-to-use.css";
 import PublicShell from "../components/PublicShell";
 import Icon from "../components/Icon";
 
