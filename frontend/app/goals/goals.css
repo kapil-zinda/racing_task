@@ -1,0 +1,24 @@
+.goal-empty { text-align: center; color: #8b95a7; padding: 60px 20px; }
+
+.goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+
+.goal-detail-title { display: flex; flex-direction: column; gap: 8px; }
+.goal-back { color: #8b95a7; text-decoration: none; font-size: 13px; }
+.goal-back:hover { color: #e7ecf5; }
+.goal-detail-name { display: flex; align-items: center; gap: 10px; }
+
+.goal-split { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(320px, 1.2fr); gap: 16px; align-items: start; }
+.goal-split-left, .goal-split-right { background: #131826; border: 1px solid #222a3d; border-radius: 16px; min-height: 400px; }
+
+.goal-view-toggle { display: flex; gap: 4px; padding: 10px 12px 0; }
+.goal-view-toggle button { background: transparent; border: 1px solid #2b3348; color: #8b95a7; padding: 5px 12px; border-radius: 9px; cursor: pointer; font-size: 12px; }
+.goal-view-toggle button.active { background: #1f2340; color: #e7ecf5; border-color: #6366f1; }
+
+.goal-menu-wrap { position: relative; display: inline-flex; }
+.goal-menu-btn { padding-left: 10px; padding-right: 10px; }
+
+.goal-menu-dropdown {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 31; min-width: 170px;
+  background: #151b2c; border: 1px solid rgba(129,140,248,0.28); border-radius: 12px;
+  padding: 6px; box-shadow: 0 16px 40px rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 2px;
+}
