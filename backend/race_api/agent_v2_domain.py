@@ -16,9 +16,8 @@ from .context import (
     logger,
     sessions_collection,
 )
-from .mission_domain import get_or_create_mission, mission_progress_payload, mission_selector_options
 from .pdf_search_domain import search_pdf
-from .race_domain import build_syllabus_payload, get_state_payload
+from .race_domain import get_state_payload
 
 _agent_v2_indexes_ensured = False
 
@@ -210,75 +209,6 @@ def _load_aggregate_docs(user_id: str, from_date: str, to_date: str) -> List[Dic
     return out
 
 
-def _revision_gaps_raw(user_id: str, x_days: int = 7, y_days: int = 15, reference_date: str | None = None) -> Dict[str, Any]:
-    uid = (user_id or "").strip()
-    if not uid:
-        raise ValueError("Invalid user_id")
-    x = max(1, int(x_days or 7))
-    y = max(1, int(y_days or 15))
-    ref = _parse_date(reference_date, fallback=current_date_str())
-    syllabus = build_syllabus_payload(uid)
-
-    not_started: List[Dict[str, Any]] = []
-    missing_first: List[Dict[str, Any]] = []
-    missing_second: List[Dict[str, Any]] = []
-
-    for exam_node in syllabus.get("exams", []):
-        exam = str(exam_node.get("exam", "") or "")
-        for subject_node in exam_node.get("subjects", []):
-            subject = str(subject_node.get("subject", "") or "")
-            for topic_node in subject_node.get("topics", []):
-                topic = str(topic_node.get("topic", "") or "")
-                class_date = str(topic_node.get("class_study_first_date", "") or "")
-                first_rev = str(topic_node.get("first_revision_date", "") or "")
-                second_rev = str(topic_node.get("second_revision_date", "") or "")
-                base = {"exam": exam, "subject": subject, "topic": topic}
-                if not class_date:
-                    not_started.append(base)
-                    continue
-                if not first_rev:
-                    overdue = _days_since(class_date, ref)
-                    if overdue >= x:
-                        missing_first.append({**base, "class_date": class_date, "days_overdue": overdue})
-                    continue
-                if not second_rev:
-                    overdue = _days_since(first_rev, ref)
-                    if overdue >= y:
-                        missing_second.append({**base, "first_revision_date": first_rev, "days_overdue": overdue})
-
-    missing_first.sort(key=lambda row: row.get("days_overdue", 0), reverse=True)
-    missing_second.sort(key=lambda row: row.get("days_overdue", 0), reverse=True)
-    return {
-        "user_id": uid,
-        "reference_date": ref,
-        "x_days": x,
-        "y_days": y,
-        "counts": {
-            "not_started": len(not_started),
-            "missing_first_revision": len(missing_first),
-            "missing_second_revision": len(missing_second),
-        },
-        "not_started": not_started,
-        "missing_first_revision": missing_first,
-        "missing_second_revision": missing_second,
-    }
-
-
-def report_revision_gaps_payload(
-    user_id: str,
-    x_days: int = 7,
-    y_days: int = 15,
-    limit: int = 200,
-    reference_date: str | None = None,
-) -> Dict[str, Any]:
-    out = _revision_gaps_raw(user_id, x_days=x_days, y_days=y_days, reference_date=reference_date)
-    lim = max(1, min(int(limit or 200), 1000))
-    out["not_started"] = out["not_started"][:lim]
-    out["missing_first_revision"] = out["missing_first_revision"][:lim]
-    out["missing_second_revision"] = out["missing_second_revision"][:lim]
-    return out
-
-
 def _group_key(date_str: str, group_by: str) -> str:
     d = datetime.strptime(date_str, "%Y-%m-%d").date()
     mode = (group_by or "day").strip().lower()
@@ -365,20 +295,6 @@ def report_period_payload(
         reverse=True,
     )[:5]
 
-    syllabus = build_syllabus_payload(uid)
-    all_subjects = {
-        str(subject_node.get("subject", "")).strip()
-        for exam_node in syllabus.get("exams", [])
-        for subject_node in exam_node.get("subjects", [])
-        if str(subject_node.get("subject", "")).strip()
-    }
-    ignored_subjects = sorted(
-        [{"subject": s, "activity_count": subject_counts.get(s, 0)} for s in all_subjects if subject_counts.get(s, 0) == 0],
-        key=lambda x: x["subject"].lower(),
-    )[:5]
-
-    gaps = _revision_gaps_raw(uid, x_days=x_days, y_days=y_days, reference_date=end)
-
     return {
         "user_id": uid,
         "from": start,
@@ -395,8 +311,6 @@ def report_period_payload(
         },
         "buckets": [grouped[k] for k in sorted(grouped.keys())],
         "most_progressed_subjects": top_progressed,
-        "ignored_subjects": ignored_subjects,
-        "revision_gaps_counts": gaps.get("counts", {}),
     }
 
 
@@ -424,42 +338,8 @@ def recommendations_next_actions_payload(
     recent_revision = sum(_safe_int(row.get("revision_count", 0)) for row in recent_rows)
     recent_study = sum(_safe_int(row.get("new_class_count", 0)) for row in recent_rows)
 
-    gaps = _revision_gaps_raw(uid, x_days=x_days, y_days=y_days, reference_date=today)
     items: List[Dict[str, Any]] = []
 
-    if gaps["missing_second_revision"]:
-        t = gaps["missing_second_revision"][0]
-        items.append(
-            {
-                "type": "revision",
-                "priority": 100,
-                "eta_min": min(45, duration),
-                "title": f"Second revision: {t['subject']} - {t['topic']}",
-                "reason": f"Overdue by {t.get('days_overdue', 0)} days",
-            }
-        )
-    if gaps["missing_first_revision"]:
-        t = gaps["missing_first_revision"][0]
-        items.append(
-            {
-                "type": "revision",
-                "priority": 90,
-                "eta_min": min(40, duration),
-                "title": f"First revision: {t['subject']} - {t['topic']}",
-                "reason": f"Overdue by {t.get('days_overdue', 0)} days",
-            }
-        )
-    if gaps["not_started"]:
-        t = gaps["not_started"][0]
-        items.append(
-            {
-                "type": "study",
-                "priority": 80,
-                "eta_min": min(50, duration),
-                "title": f"Start topic: {t['subject']} - {t['topic']}",
-                "reason": "Not started yet",
-            }
-        )
     if recent_practice < 3:
         items.append(
             {
@@ -521,9 +401,6 @@ def agent_context_payload(
     start_date = (datetime.strptime(target_date, "%Y-%m-%d").date() - timedelta(days=days - 1)).isoformat()
     rows = _load_aggregate_docs(uid, start_date, target_date)
     today_row = rows[-1] if rows else refresh_daily_aggregate(uid, target_date)
-    mission = get_or_create_mission(uid)
-    mission_progress = mission_progress_payload(uid, days)
-    revision_gaps = report_revision_gaps_payload(uid, x_days=x_days, y_days=y_days, limit=100, reference_date=target_date)
     recommendations = recommendations_next_actions_payload(uid, duration_min=60, mode="balanced", limit=5, x_days=x_days, y_days=y_days)
 
     return {
@@ -539,23 +416,20 @@ def agent_context_payload(
             "practice": sum(_safe_int(row.get("practice_count", 0)) for row in rows),
             "session_minutes": sum(_safe_int(row.get("session_minutes", 0)) for row in rows),
         },
-        "mission": mission,
-        "mission_progress": mission_progress,
-        "revision_gaps": revision_gaps.get("counts", {}),
         "next_actions": recommendations.get("actions", []),
     }
 
 
 def _parse_types(raw: str | None) -> List[str]:
     if not raw:
-        return ["content", "syllabus", "mission", "tests"]
-    allowed = {"content", "syllabus", "mission", "tests"}
+        return ["content"]
+    allowed = {"content"}
     out = []
     for token in str(raw).split(","):
         item = token.strip().lower()
         if item in allowed and item not in out:
             out.append(item)
-    return out or ["content", "syllabus", "mission", "tests"]
+    return out or ["content"]
 
 
 def search_unified_payload(
@@ -630,111 +504,6 @@ def search_unified_payload(
         except Exception as err:  # noqa: BLE001
             logger.warning("agent-v2 unified search skipped pdf vector search: %s", err)
 
-    syllabus_payload = build_syllabus_payload(uid) if requested.intersection({"syllabus", "tests"}) else {"exams": []}
-    if "syllabus" in requested:
-        for exam_node in syllabus_payload.get("exams", []):
-            exam = str(exam_node.get("exam", "") or "")
-            for subject_node in exam_node.get("subjects", []):
-                subject = str(subject_node.get("subject", "") or "")
-                for topic_node in subject_node.get("topics", []):
-                    topic = str(topic_node.get("topic", "") or "")
-                    blob = f"{exam} {subject} {topic}".lower()
-                    if not _contains(blob, ql):
-                        continue
-                    add_result(
-                        {
-                            "id": f"syllabus:{exam}:{subject}:{topic}",
-                            "type": "syllabus",
-                            "score": 88 if topic.lower().startswith(ql) else 72,
-                            "title": topic,
-                            "subtitle": f"{exam} / {subject}",
-                            "meta": {
-                                "exam": exam,
-                                "subject": subject,
-                                "topic": topic,
-                                "class_date": topic_node.get("class_study_first_date", ""),
-                                "first_revision_date": topic_node.get("first_revision_date", ""),
-                                "second_revision_date": topic_node.get("second_revision_date", ""),
-                            },
-                        }
-                    )
-
-    if "tests" in requested:
-        for exam_node in syllabus_payload.get("exams", []):
-            exam = str(exam_node.get("exam", "") or "")
-            for source_node in exam_node.get("tests", []):
-                source = str(source_node.get("source", "") or "")
-                for test_node in source_node.get("tests", []):
-                    test_name = str(test_node.get("test_name", "") or "")
-                    test_number = str(test_node.get("test_number", "") or "")
-                    blob = f"{exam} {source} {test_name} {test_number}".lower()
-                    if not _contains(blob, ql):
-                        continue
-                    add_result(
-                        {
-                            "id": f"test:{exam}:{source}:{test_number}:{test_name}",
-                            "type": "tests",
-                            "score": 84 if test_name.lower().startswith(ql) else 68,
-                            "title": test_name or f"Test {test_number}",
-                            "subtitle": f"{exam} / {source} / #{test_number}",
-                            "meta": {
-                                "exam": exam,
-                                "source": source,
-                                "test_number": test_number,
-                                "test_given_date": test_node.get("test_given_date", ""),
-                                "analysis_done_date": test_node.get("analysis_done_date", ""),
-                                "revision_date": test_node.get("revision_date", ""),
-                                "second_revision_date": test_node.get("second_revision_date", ""),
-                            },
-                        }
-                    )
-
-    if "mission" in requested:
-        mission = get_or_create_mission(uid)
-        plan = mission.get("plan", {}) if isinstance(mission.get("plan"), dict) else {}
-        for row in plan.get("courses", []) if isinstance(plan.get("courses"), list) else []:
-            course_name = str(row.get("course_name", "") or "")
-            subject_name = str(row.get("subject_name", "") or "")
-            text = f"{course_name} {subject_name}".lower()
-            if _contains(text, ql):
-                add_result(
-                    {
-                        "id": f"mission:course:{course_name}:{subject_name}",
-                        "type": "mission",
-                        "score": 70,
-                        "title": subject_name or course_name,
-                        "subtitle": f"Course plan: {course_name}",
-                        "meta": row,
-                    }
-                )
-        for row in plan.get("books", []) if isinstance(plan.get("books"), list) else []:
-            book_name = str(row.get("book_name", "") or "")
-            if _contains(book_name.lower(), ql):
-                add_result(
-                    {
-                        "id": f"mission:book:{book_name}",
-                        "type": "mission",
-                        "score": 66,
-                        "title": book_name,
-                        "subtitle": "Book plan",
-                        "meta": row,
-                    }
-                )
-        for row in plan.get("random", []) if isinstance(plan.get("random"), list) else []:
-            source = str(row.get("source", "") or "")
-            topic_name = str(row.get("topic_name", "") or "")
-            if _contains(f"{source} {topic_name}".lower(), ql):
-                add_result(
-                    {
-                        "id": f"mission:random:{source}:{topic_name}",
-                        "type": "mission",
-                        "score": 64,
-                        "title": topic_name,
-                        "subtitle": f"Random plan: {source}",
-                        "meta": row,
-                    }
-                )
-
     results.sort(key=lambda row: int(row.get("score", 0)), reverse=True)
     return {
         "q": query,
@@ -770,28 +539,6 @@ def search_suggest_payload(user_id: str, q: str | None = None, limit: int = 12) 
         add(str(row.get("topic", "") or ""), "topic", 2)
         add(str(row.get("source", "") or ""), "source", 2)
         add(str(row.get("test_name", "") or ""), "test", 2)
-
-    syllabus = build_syllabus_payload(uid)
-    for exam_node in syllabus.get("exams", []):
-        add(str(exam_node.get("exam", "") or ""), "exam", 1)
-        for subject_node in exam_node.get("subjects", []):
-            add(str(subject_node.get("subject", "") or ""), "subject", 1)
-            for topic_node in subject_node.get("topics", []):
-                add(str(topic_node.get("topic", "") or ""), "topic", 1)
-        for source_node in exam_node.get("tests", []):
-            add(str(source_node.get("source", "") or ""), "source", 1)
-            for test_node in source_node.get("tests", []):
-                add(str(test_node.get("test_name", "") or ""), "test", 1)
-
-    mission_opts = mission_selector_options(uid)
-    for opt in mission_opts.get("exam_options", []):
-        add(str(opt.get("label", "") or ""), "exam", 1)
-    for exam_name, rows in (mission_opts.get("catalog", {}) or {}).items():
-        add(str(exam_name), "exam", 1)
-        for row in rows:
-            add(str(row.get("subject", "") or ""), "subject", 1)
-            for topic in row.get("topics", []) if isinstance(row.get("topics"), list) else []:
-                add(str(topic), "topic", 1)
 
     content_suggest_filter: Dict[str, Any] = {"status": "ready"}
     if uid:
