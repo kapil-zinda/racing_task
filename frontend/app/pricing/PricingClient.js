@@ -32,7 +32,7 @@ export default function PricingClient() {
       <p className="goal-hint" style={{ marginTop: 24 }}>
         Prefer pay-as-you-go? Every plan (including Free) can also add credits and pay per
         action once its quota runs out — see the full breakdown on the{" "}
-        <a href="/usage" style={{ color: "var(--cyan, #72ddf7)" }}>Usage</a> page after signing in.
+        <a href="/usage" style={{ color: "var(--blue-text, #72ddf7)" }}>Usage</a> page after signing in.
       </p>
     </PublicShell>
   );

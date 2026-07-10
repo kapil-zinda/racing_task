@@ -12,35 +12,44 @@ import CalendarView from "../components/goal/CalendarView";
 import Icon from "../components/Icon";
 import { listGoals, getAnalytics, getDashboard } from "../lib/goalApi";
 import { friendlyApiError } from "../lib/errors";
+import { cssVar } from "../lib/theme";
 import styles from "./page.module.css";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
-// Design tokens (mirrors globals.css) — all chart colors come from here.
+// Design tokens — resolved from the CSS vars at read time so every chart
+// follows the active theme (getters re-read on each render; fallbacks = dark).
 const T = {
-  gold: "#ffd166", cyan: "#72ddf7", indigo: "#6366f1", mint: "#80ed99", red: "#ff6b6b",
-  muted: "#8b95a7", border: "#222a3d", card: "#131826", ink: "#e7ecf5",
+  get gold() { return cssVar("--gold-text", "#ffd166"); },
+  get cyan() { return cssVar("--blue-text", "#72ddf7"); },
+  get indigo() { return cssVar("--indigo-text", "#6366f1"); },
+  get mint() { return cssVar("--mint-text", "#80ed99"); },
+  get red() { return cssVar("--red-text", "#ff6b6b"); },
+  get muted() { return cssVar("--muted", "#8b95a7"); },
+  get border() { return cssVar("--card-border", "#222a3d"); },
+  get card() { return cssVar("--card", "#131826"); },
+  get ink() { return cssVar("--text", "#e7ecf5"); },
 };
 // Fixed categorical order — assign by position, never invent extra hues.
-const PALETTE = [T.cyan, T.indigo, T.gold, T.mint, T.muted];
+const palette = () => [T.cyan, T.indigo, T.gold, T.mint, T.muted];
 
 // Node statuses get semantic colors (done/blocked keep success/failure hues).
 const STATUS_META = {
-  done: { color: T.mint, label: "Done" },
-  in_progress: { color: T.cyan, label: "In progress" },
-  todo: { color: T.muted, label: "To do" },
-  blocked: { color: T.red, label: "Blocked" },
-  skipped: { color: T.indigo, label: "Skipped" },
+  done: { get color() { return T.mint; }, label: "Done" },
+  in_progress: { get color() { return T.cyan; }, label: "In progress" },
+  todo: { get color() { return T.muted; }, label: "To do" },
+  blocked: { get color() { return T.red; }, label: "Blocked" },
+  skipped: { get color() { return T.indigo; }, label: "Skipped" },
 };
 const statusLabel = (s) => STATUS_META[s]?.label || String(s).replace(/_/g, " ");
-const statusColor = (s, i) => STATUS_META[s]?.color || PALETTE[i % PALETTE.length];
+const statusColor = (s, i) => STATUS_META[s]?.color || palette()[i % 5];
 
-const DARK = {
+const darkLayout = () => ({
   paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
   font: { color: T.muted }, margin: { t: 30, r: 10, b: 40, l: 40 },
   xaxis: { gridcolor: T.border, zerolinecolor: T.border, linecolor: T.border },
   yaxis: { gridcolor: T.border, zerolinecolor: T.border, linecolor: T.border },
-};
+});
 const plotCfg = { displayModeBar: false, responsive: true };
 
 function GaugeCard({ title, value }) {
@@ -56,7 +65,7 @@ function GaugeCard({ title, value }) {
             bar: { color: T.cyan }, bgcolor: T.border, borderwidth: 0,
           },
         }]}
-        layout={{ ...DARK, height: 240 }} config={plotCfg} style={{ width: "100%" }}
+        layout={{ ...darkLayout(), height: 240 }} config={plotCfg} style={{ width: "100%" }}
       />
     </div>
   );
@@ -71,7 +80,7 @@ function StatusDonut({ counts }) {
         labels: keys.map(statusLabel), values: keys.map((k) => counts[k]),
         marker: { colors: keys.map((k, i) => statusColor(k, i)), line: { color: T.card, width: 2 } },
       }]}
-      layout={{ ...DARK, height: 240, showlegend: true, legend: { font: { size: 10 } } }}
+      layout={{ ...darkLayout(), height: 240, showlegend: true, legend: { font: { size: 10 } } }}
       config={plotCfg} style={{ width: "100%" }}
     />
   );
@@ -180,8 +189,8 @@ export default function AnalyticsPage() {
                   <div className="chart-card">
                     <h4>Progress by goal</h4>
                     <Plot data={[{ type: "bar", x: combinedCharts.gp.map((g) => g.name), y: combinedCharts.gp.map((g) => g.progress),
-                      marker: { color: combinedCharts.gp.map((_, i) => PALETTE[i % PALETTE.length]) } }]}
-                      layout={{ ...DARK, height: 240, yaxis: { ...DARK.yaxis, range: [0, 100] } }} config={plotCfg} style={{ width: "100%" }} />
+                      marker: { color: combinedCharts.gp.map((_, i) => palette()[i % 5]) } }]}
+                      layout={{ ...darkLayout(), height: 240, yaxis: { ...darkLayout().yaxis, range: [0, 100] } }} config={plotCfg} style={{ width: "100%" }} />
                   </div>
                 </div>
                 <section className="dash-block">
@@ -207,18 +216,18 @@ export default function AnalyticsPage() {
                     <StatusDonut counts={perCharts.status} /></div>
                   <div className="chart-card"><h4>Progress by type</h4>
                     <Plot data={[{ type: "bar", x: perCharts.types.map((t) => t.type), y: perCharts.types.map((t) => t.avg_progress), marker: { color: T.indigo } }]}
-                          layout={{ ...DARK, height: 260, yaxis: { ...DARK.yaxis, range: [0, 100] } }} config={plotCfg} style={{ width: "100%" }} /></div>
+                          layout={{ ...darkLayout(), height: 260, yaxis: { ...darkLayout().yaxis, range: [0, 100] } }} config={plotCfg} style={{ width: "100%" }} /></div>
                 </div>
                 <div className="chart-grid">
                   <div className="chart-card"><h4>Top-level progress</h4>
                     <Plot data={[{ type: "treemap", labels: perCharts.roots.map((r) => r.title), parents: perCharts.roots.map(() => ""),
                       values: perCharts.roots.map((r) => r.weight), text: perCharts.roots.map((r) => `${r.progress}%`), textinfo: "label+text",
                       textfont: { color: T.card },
-                      marker: { colors: perCharts.roots.map((_, i) => PALETTE[i % PALETTE.length]), line: { color: T.card, width: 2 } } }]}
-                      layout={{ ...DARK, height: 240 }} config={plotCfg} style={{ width: "100%" }} /></div>
+                      marker: { colors: perCharts.roots.map((_, i) => palette()[i % 5]), line: { color: T.card, width: 2 } } }]}
+                      layout={{ ...darkLayout(), height: 240 }} config={plotCfg} style={{ width: "100%" }} /></div>
                   <div className="chart-card"><h4>Activity (last 120 days)</h4>
                     <Plot data={[{ type: "bar", x: perCharts.actDates, y: perCharts.actDates.map((d) => perCharts.act[d]), marker: { color: T.cyan } }]}
-                      layout={{ ...DARK, height: 240 }} config={plotCfg} style={{ width: "100%" }} /></div>
+                      layout={{ ...darkLayout(), height: 240 }} config={plotCfg} style={{ width: "100%" }} /></div>
                 </div>
               </>
             )

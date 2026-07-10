@@ -7,23 +7,23 @@
   gap: 10px;
   margin: 0;
   padding: 12px 14px;
-  border: 1px solid rgba(114, 221, 247, 0.28);
-  background: rgba(114, 221, 247, 0.07);
+  border: 1px solid rgba(var(--blue-rgb), 0.28);
+  background: rgba(var(--blue-rgb), 0.07);
   border-radius: 12px;
   font-size: 13.5px;
   line-height: 1.55;
-  color: #c9d3e4;
+  color: var(--text);
 }
 .hintIcon {
   flex: 0 0 auto;
   margin-top: 2px;
-  color: #72ddf7;
+  color: var(--blue-text);
 }
 .hintText {
   margin: 0;
 }
 .hintText strong {
-  color: #e7ecf5;
+  color: var(--text);
   font-weight: 600;
 }
 .hintClose {
@@ -40,8 +40,8 @@
   line-height: 1;
 }
 .hintClose:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e7ecf5;
+  background: rgba(var(--veil-rgb), 0.08);
+  color: var(--text);
   transform: none;
   filter: none;
 }
@@ -55,19 +55,19 @@
   text-align: center;
   padding: 44px 20px;
   color: var(--muted);
-  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border: 1px dashed rgba(var(--veil-rgb), 0.15);
   border-radius: 12px;
   margin-top: 12px;
 }
 .emptyIcon {
-  color: #72ddf7;
+  color: var(--blue-text);
   opacity: 0.85;
 }
 .emptyTitle {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #e7ecf5;
+  color: var(--text);
 }
 .emptyText {
   margin: 0;

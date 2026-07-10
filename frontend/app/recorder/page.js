@@ -2555,7 +2555,7 @@ export default function RecorderPage() {
 
             {isRecordingActive || recorderArming ? (
               <div
-                className={`meet-overlay recording-${recordView}`}
+                className={`theme-dark meet-overlay recording-${recordView}`}
                 ref={recordingBoxRef}
                 style={recordView === "float" && floatPos ? { left: floatPos.x, top: floatPos.y, right: "auto", bottom: "auto" } : undefined}
               >
@@ -2707,7 +2707,7 @@ export default function RecorderPage() {
 
             {/* Explainer meet-frame */}
             {explainerFrameOpen ? (
-              <div className="meet-overlay recording-full">
+              <div className="theme-dark meet-overlay recording-full">
                 {/* Top bar */}
                 <div className="meet-topbar">
                   <div className="meet-topbar-left">
@@ -2925,7 +2925,7 @@ export default function RecorderPage() {
         </div>
       ) : null}
       {playerModal.open ? (
-        <div className="vlc-backdrop" onClick={closePlayer}>
+        <div className="theme-dark vlc-backdrop" onClick={closePlayer}>
           <div className="vlc-player" onClick={(e) => e.stopPropagation()}>
             {/* Title bar */}
             <div className="vlc-titlebar">

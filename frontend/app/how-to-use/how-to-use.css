@@ -1,7 +1,7 @@
 .lp-usecase {
   border: 1px solid var(--card-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--veil-rgb), 0.03);
   padding: 22px 24px;
   margin-top: 18px;
 }
@@ -10,7 +10,7 @@
   display: inline-flex; align-items: center; justify-content: center;
   width: 42px; height: 42px; border-radius: 11px;
   background: linear-gradient(135deg, rgba(79,91,213,0.35), rgba(124,58,237,0.35));
-  color: #dfe4ff; flex: 0 0 auto;
+  color: var(--indigo-soft); flex: 0 0 auto;
 }
 .lp-usecase-head h2 { margin: 0; font-size: 20px; }
 .lp-steps-list { counter-reset: step; list-style: none; padding-left: 0; margin: 14px 0 0; }
@@ -21,7 +21,7 @@
   counter-increment: step; content: counter(step);
   position: absolute; left: 0; top: 0;
   width: 22px; height: 22px; border-radius: 50%;
-  background: var(--cyan, #72ddf7); color: #0e1320;
+  background: var(--cyan, var(--blue)); color: var(--on-accent);
   font-size: 12px; font-weight: 800;
   display: flex; align-items: center; justify-content: center;
 }

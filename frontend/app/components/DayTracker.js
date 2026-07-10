@@ -8,6 +8,7 @@ import TrackerSummary from "./TrackerSummary";
 import Icon from "./Icon";
 import { confirmDialog } from "../lib/dialog";
 import { friendlyApiError } from "../lib/errors";
+import { cssVar } from "../lib/theme";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -184,7 +185,7 @@ function ClockPicker({ value, onChange, onClose }) {
                     dominantBaseline="central"
                     fontSize="13"
                     fontWeight={isSelected ? "700" : "400"}
-                    fill={isSelected ? "#fff" : "#a5b4fc"}
+                    fill={isSelected ? "#fff" : "var(--indigo-text)"}
                     style={{ userSelect: "none", pointerEvents: "none" }}
                   >
                     {step === "minute" ? String(num).padStart(2, "0") : num}
@@ -427,16 +428,16 @@ export default function DayTracker({ onDateChange }) {
               y: catEntries.map(([k]) => k),
               text: catEntries.map(([, v]) => fmtMins(v)),
               textposition: "outside",
-              textfont: { color: "#c7d2fe", size: 11 },
+              textfont: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
               marker: { color: catEntries.map(([k]) => catColor(k)) },
               hovertemplate: "%{y}: %{text}<extra></extra>",
             }]}
             layout={{
               plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)",
-              font: { color: "#c7d2fe", size: 11 },
+              font: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
               margin: { l: 90, r: 60, t: 8, b: 30 },
-              xaxis: { tickfont: { color: "#818cf8", size: 10 }, gridcolor: "rgba(99,102,241,0.12)", showline: false, zeroline: false, ticksuffix: "m" },
-              yaxis: { tickfont: { color: "#a5b4fc", size: 11 }, showgrid: false, automargin: true },
+              xaxis: { tickfont: { color: cssVar("--indigo-text", "#818cf8"), size: 10 }, gridcolor: "rgba(99,102,241,0.12)", showline: false, zeroline: false, ticksuffix: "m" },
+              yaxis: { tickfont: { color: cssVar("--indigo-text", "#a5b4fc"), size: 11 }, showgrid: false, automargin: true },
               showlegend: false, autosize: true, bargap: 0.35,
             }}
             config={{ responsive: true, displayModeBar: false }}

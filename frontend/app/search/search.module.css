@@ -23,10 +23,10 @@
 }
 
 .emptyLink {
-  color: #72ddf7;
+  color: var(--blue-text);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 .emptyLink:hover {
-  color: #a5e9fb;
+  color: var(--blue-soft);
 }

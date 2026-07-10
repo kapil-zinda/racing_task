@@ -1,12 +1,12 @@
-.usage-sub-row { display: flex; justify-content: space-between; font-size: 12px; color: #8b95a7; margin-top: 8px; }
+.usage-sub-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 8px; }
 
 .usage-credit-card {
   margin-top: 4px;
   border: 1px solid var(--card-border);
   border-radius: 18px;
   background:
-    radial-gradient(600px 200px at 100% 0%, rgba(255, 209, 102, 0.10), transparent 60%),
-    var(--card, #131826);
+    radial-gradient(600px 200px at 100% 0%, rgba(var(--gold-rgb), 0.10), transparent 60%),
+    var(--card, var(--card));
   padding: 24px;
   display: flex;
   flex-wrap: wrap;
@@ -28,7 +28,7 @@
   letter-spacing: 0.01em;
 }
 .usage-credit-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--muted); }
-.usage-credit-meta b { color: #e7ecf5; font-weight: 700; }
+.usage-credit-meta b { color: var(--text); font-weight: 700; }
 .usage-credit-meta .dot { opacity: 0.5; }
 
 .usage-topup { display: flex; align-items: flex-end; gap: 10px; }
@@ -36,8 +36,8 @@
 .usage-topup-field > span { font-size: 12px; font-weight: 600; color: var(--muted); }
 .usage-topup-input {
   display: flex; align-items: center;
-  background: #0e1320;
-  border: 1px solid #2b3348;
+  background: var(--sunken);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 0 12px;
   max-width: 150px;
@@ -47,12 +47,12 @@
 .usage-topup-input input {
   width: 100%;
   background: transparent; border: none; outline: none;
-  color: #e7ecf5; font-family: inherit; font-size: 15px;
+  color: var(--text); font-family: inherit; font-size: 15px;
   padding: 11px 6px;
 }
 .usage-pay-note { flex-basis: 100%; font-size: 13px; margin-top: 2px; }
-.usage-pay-note.success { color: var(--mint, #80ed99); }
-.usage-pay-note.error { color: var(--red, #ff6b6b); }
+.usage-pay-note.success { color: var(--mint, var(--mint-text)); }
+.usage-pay-note.error { color: var(--red, var(--red-text)); }
 
 .usage-sub-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 8px; }
 
@@ -67,14 +67,14 @@
 .usage-plan-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 34px; height: 34px; border-radius: 9px;
-  background: rgba(255, 255, 255, 0.05); color: #c7cdf0; flex: 0 0 auto;
+  background: rgba(var(--veil-rgb), 0.05); color: var(--text); flex: 0 0 auto;
 }
 .usage-plan-label { flex: 1; font-size: 14px; font-weight: 600; }
 .usage-plan-free { font-size: 12px; color: var(--muted); min-width: 120px; text-align: right; }
-.usage-plan-free.on { color: var(--mint, #80ed99); }
+.usage-plan-free.on { color: var(--mint, var(--mint-text)); }
 .usage-plan-price {
   min-width: 84px; text-align: right;
-  font-size: 15px; font-weight: 700; color: #e7ecf5;
+  font-size: 15px; font-weight: 700; color: var(--text);
   display: flex; flex-direction: column; align-items: flex-end;
 }
 .usage-plan-price small { font-size: 11px; font-weight: 500; color: var(--muted); }
@@ -84,9 +84,9 @@
 .usage-spend {
   display: flex; flex-direction: column; gap: 3px;
   padding: 14px; border-radius: 12px;
-  background: #0e1320; border: 1px solid var(--card-border);
+  background: var(--sunken); border: 1px solid var(--card-border);
 }
-.usage-spend span { font-size: 20px; font-weight: 800; color: #e7ecf5; }
+.usage-spend span { font-size: 20px; font-weight: 800; color: var(--text); }
 .usage-spend small { font-size: 12px; color: var(--muted); }
 
 @media (max-width: 640px) {
@@ -97,21 +97,21 @@
 
 .usage-balance-inr {
   font-size: 13px;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
   margin-top: -2px;
 }
 .usage-inr-hint {
   font-size: 12px;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
   line-height: 1.4;
 }
 
 /* --- Usage: plan row states (text, not just color) ----------------------- */
-.usage-plan-free.used { color: var(--muted, #8b95a7); font-style: italic; }
+.usage-plan-free.used { color: var(--muted, var(--muted)); font-style: italic; }
 .usage-plan-note {
   font-size: 12px;
   font-weight: 500;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
   max-width: 220px;
   text-align: right;
   line-height: 1.4;
@@ -129,8 +129,8 @@
   margin-top: 10px;
   padding: 14px 16px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 209, 102, 0.35);
-  background: linear-gradient(150deg, rgba(255, 209, 102, 0.1), rgba(255, 209, 102, 0.03));
+  border: 1px solid rgba(var(--gold-rgb), 0.35);
+  background: linear-gradient(150deg, rgba(var(--gold-rgb), 0.1), rgba(var(--gold-rgb), 0.03));
 }
 .usage-topup-confirm-icon {
   display: grid;
@@ -139,8 +139,8 @@
   height: 34px;
   flex: 0 0 auto;
   border-radius: 10px;
-  background: rgba(255, 209, 102, 0.16);
-  color: var(--gold, #ffd166);
+  background: rgba(var(--gold-rgb), 0.16);
+  color: var(--gold, var(--gold-text));
 }
 .usage-topup-confirm-body {
   display: flex;
@@ -151,13 +151,13 @@
 .usage-topup-confirm-body strong {
   font-size: 14px;
   font-weight: 700;
-  color: #e7ecf5;
+  color: var(--text);
 }
 .usage-topup-confirm-body span {
   font-size: 13px;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
 }
-.usage-topup-confirm-body b { color: #e7ecf5; font-weight: 700; }
+.usage-topup-confirm-body b { color: var(--text); font-weight: 700; }
 .usage-topup-confirm-close {
   margin-left: auto;
   flex: 0 0 auto;
@@ -168,14 +168,14 @@
   border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 .usage-topup-confirm-close:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #e7ecf5;
+  background: rgba(var(--veil-rgb), 0.08);
+  border-color: rgba(var(--veil-rgb), 0.14);
+  color: var(--text);
 }
 
 .usage-skel {
@@ -183,9 +183,9 @@
   border-radius: 8px;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.05) 25%,
-    rgba(255, 255, 255, 0.11) 50%,
-    rgba(255, 255, 255, 0.05) 75%
+    rgba(var(--veil-rgb), 0.05) 25%,
+    rgba(var(--veil-rgb), 0.11) 50%,
+    rgba(var(--veil-rgb), 0.05) 75%
   );
   background-size: 200% 100%;
   animation: wave2-shimmer 1.6s linear infinite;

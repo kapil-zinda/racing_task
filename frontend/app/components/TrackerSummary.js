@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
 import Icon from "./Icon";
 import { friendlyApiError } from "../lib/errors";
+import { cssVar } from "../lib/theme";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -358,22 +359,22 @@ export default function TrackerSummary({ categories = [] }) {
                 layout={{
                   barmode: "stack",
                   plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)",
-                  font: { color: "#c7d2fe", size: 11 },
+                  font: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
                   margin: { l: 45, r: 10, t: 10, b: 70 },
                   xaxis: {
                     type: "category",
-                    tickfont: { color: "#818cf8", size: 10 },
+                    tickfont: { color: cssVar("--indigo-text", "#818cf8"), size: 10 },
                     tickangle: -40,
                     gridcolor: "rgba(99,102,241,0.12)", showline: false, zeroline: false,
                   },
                   yaxis: {
-                    title: { text: computed.isDaily ? "minutes" : "hours", font: { color: "#6b7280", size: 10 } },
-                    tickfont: { color: "#a5b4fc", size: 10 },
+                    title: { text: computed.isDaily ? "minutes" : "hours", font: { color: cssVar("--muted", "#6b7280"), size: 10 } },
+                    tickfont: { color: cssVar("--indigo-text", "#a5b4fc"), size: 10 },
                     gridcolor: "rgba(99,102,241,0.12)", zeroline: false,
                     ...(computed.isDaily ? { range: [0, 60] } : {}),
                   },
                   showlegend: true,
-                  legend: { orientation: "h", y: -0.35, font: { color: "#a5b4fc", size: 10 } },
+                  legend: { orientation: "h", y: -0.35, font: { color: cssVar("--indigo-text", "#a5b4fc"), size: 10 } },
                   autosize: true, bargap: 0.25,
                 }}
                 config={{ responsive: true, displayModeBar: false }}

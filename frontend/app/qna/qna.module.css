@@ -60,14 +60,14 @@
   color: var(--muted);
 }
 .emptyIcon {
-  color: #72ddf7;
+  color: var(--blue-text);
   opacity: 0.85;
 }
 .emptyTitle {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #e7ecf5;
+  color: var(--text);
 }
 .emptyText {
   margin: 0;
@@ -76,12 +76,12 @@
   max-width: 46ch;
 }
 .emptyLink {
-  color: #72ddf7;
+  color: var(--blue-text);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 .emptyLink:hover {
-  color: #a5e9fb;
+  color: var(--blue-soft);
 }
 
 /* ── Composer row: scope select + send ────────────────────────────── */

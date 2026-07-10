@@ -14,8 +14,8 @@
 .board {
   width: 100%;
   max-width: 460px;
-  background: var(--card, #131826);
-  border: 1px solid var(--card-border, #222a3d);
+  background: var(--card, var(--card));
+  border: 1px solid var(--card-border, var(--card-border));
   border-radius: 18px;
   padding: 20px;
   box-shadow: 0 8px 22px rgba(8, 12, 30, 0.25);
@@ -27,12 +27,12 @@
   gap: 10px;
   font-size: 14.5px;
   font-weight: 700;
-  color: var(--text, #e7ecf5);
+  color: var(--text, var(--text));
 }
 
 .boardHeadIcon {
   display: inline-flex;
-  color: var(--blue, #72ddf7);
+  color: var(--blue, var(--blue-text));
   flex: none;
 }
 
@@ -58,29 +58,29 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #0e1320;
-  border: 1px solid #2b3348;
+  background: var(--sunken);
+  border: 1px solid var(--border-strong);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
 }
 
 .seatChair .seatAvatar {
-  border-color: rgba(114, 221, 247, 0.55);
-  color: var(--blue, #72ddf7);
+  border-color: rgba(var(--blue-rgb), 0.55);
+  color: var(--blue, var(--blue-text));
 }
 
 .seatRole {
   font-size: 11px;
   font-weight: 600;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
   white-space: nowrap;
 }
 
 .question {
-  background: #0e1320;
-  border: 1px solid var(--card-border, #222a3d);
+  background: var(--sunken);
+  border: 1px solid var(--card-border, var(--card-border));
   border-radius: 12px;
   padding: 12px 14px;
 }
@@ -89,14 +89,14 @@
   margin: 0 0 4px;
   font-size: 11.5px;
   font-weight: 700;
-  color: var(--blue, #72ddf7);
+  color: var(--blue, var(--blue-text));
 }
 
 .questionText {
   margin: 0;
   font-size: 14px;
   line-height: 1.55;
-  color: var(--text, #e7ecf5);
+  color: var(--text, var(--text));
 }
 
 .boardCaption {
@@ -105,7 +105,7 @@
   text-align: center;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
 }
 
 /* ---------- Feature story: spotlight + supporting cards ---------- */
@@ -119,27 +119,27 @@
 
 .spotlight,
 .storyCard {
-  background: var(--card, #131826);
+  background: var(--card, var(--card));
   border-radius: 16px;
   transition: transform 0.18s ease-out, border-color 0.18s ease-out;
 }
 
 .spotlight {
   grid-column: 1 / -1;
-  border: 1px solid var(--card-border-strong, #2b3348);
+  border: 1px solid var(--card-border-strong, var(--border-strong));
   border-radius: 18px;
   padding: 28px;
 }
 
 .storyCard {
-  border: 1px solid var(--card-border, #222a3d);
+  border: 1px solid var(--card-border, var(--card-border));
   padding: 22px;
 }
 
 .spotlight:hover,
 .storyCard:hover {
   transform: translateY(-2px);
-  border-color: rgba(114, 221, 247, 0.4);
+  border-color: rgba(var(--blue-rgb), 0.4);
 }
 
 .cardTitleRow {
@@ -153,8 +153,8 @@
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: rgba(114, 221, 247, 0.12);
-  color: var(--blue, #72ddf7);
+  background: rgba(var(--blue-rgb), 0.12);
+  color: var(--blue, var(--blue-text));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -163,7 +163,7 @@
 
 .inlineIcon {
   display: inline-flex;
-  color: var(--blue, #72ddf7);
+  color: var(--blue, var(--blue-text));
   flex: none;
 }
 
@@ -185,7 +185,7 @@
   margin: 0;
   font-size: 15px;
   line-height: 1.6;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
   max-width: 70ch;
 }
 
@@ -197,10 +197,10 @@
 .spotlightNote {
   margin-top: 16px;
   padding-top: 14px;
-  border-top: 1px solid var(--card-border, #222a3d);
+  border-top: 1px solid var(--card-border, var(--card-border));
   font-size: 14px;
   line-height: 1.55;
-  color: var(--text, #e7ecf5);
+  color: var(--text, var(--text));
 }
 
 .alsoRow {
@@ -208,17 +208,17 @@
   text-align: center;
   font-size: 14px;
   line-height: 1.8;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
 }
 
 .alsoRow strong {
-  color: var(--text, #e7ecf5);
+  color: var(--text, var(--text));
   font-weight: 700;
 }
 
 .alsoSep {
   margin: 0 8px;
-  color: #4a556c;
+  color: var(--faint);
 }
 
 /* ---------- Start free ---------- */
@@ -226,8 +226,8 @@
 .pricingPanel {
   max-width: 640px;
   margin: 28px auto 0;
-  background: var(--card, #131826);
-  border: 1px solid var(--card-border, #222a3d);
+  background: var(--card, var(--card));
+  border: 1px solid var(--card-border, var(--card-border));
   border-radius: 16px;
   padding: 24px;
 }
@@ -247,12 +247,12 @@
   gap: 10px;
   font-size: 15px;
   line-height: 1.55;
-  color: var(--text, #e7ecf5);
+  color: var(--text, var(--text));
 }
 
 .pricingCheck {
   display: inline-flex;
-  color: var(--mint, #80ed99);
+  color: var(--mint, var(--mint-text));
   flex: none;
   margin-top: 3px;
 }
@@ -265,7 +265,7 @@
   padding: 34px 24px 0;
   text-align: center;
   font-size: 14px;
-  color: var(--muted, #8b95a7);
+  color: var(--muted, var(--muted));
 }
 
 /* ---------- Responsive ---------- */

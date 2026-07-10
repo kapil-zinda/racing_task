@@ -12,7 +12,7 @@
 .extras-table th {
   text-align: left;
   font-size: 12px;
-  color: #d9e5ff;
+  color: var(--text);
   padding: 0 6px;
 }
 
@@ -38,7 +38,7 @@
 }
 
 .extras-link {
-  color: #e8f0ff;
+  color: var(--text);
   text-decoration: none;
   word-break: break-all;
 }
@@ -58,8 +58,8 @@
   bottom: calc(100% + 6px);
   min-width: 120px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: #0f1428;
+  border: 1px solid rgba(var(--veil-rgb), 0.24);
+  background: var(--card);
   box-shadow: 0 14px 24px rgba(0, 0, 0, 0.38);
   display: grid;
   overflow: hidden;

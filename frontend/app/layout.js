@@ -79,10 +79,15 @@ export const viewport = {
   initialScale: 1,
 };
 
+// Applies the stored theme before first paint so a light-theme user never sees
+// a dark flash (and vice versa). Dark is the default and needs no attribute.
+const THEME_INIT = `(function(){try{if(localStorage.getItem("race_hub_theme")==="light")document.documentElement.dataset.theme="light";}catch(e){}})();`;
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${bebas.variable} ${manrope.variable}`}>
+    <html lang="en" className={`${bebas.variable} ${manrope.variable}`} suppressHydrationWarning>
       <body>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>

@@ -1,6 +1,6 @@
 .btn-save {
-  background: #72ddf7;
-  color: #10212a;
+  background: var(--blue);
+  color: var(--on-accent);
 }
 
 .btn-save:disabled {
@@ -10,8 +10,8 @@
 }
 
 .dt-wrap {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(129,140,248,0.18);
+  background: rgba(var(--veil-rgb), 0.04);
+  border: 1px solid rgba(var(--indigo-rgb), 0.18);
   border-radius: 16px;
   padding: 1.4rem 1.6rem 1.2rem;
   margin-bottom: 1.4rem;
@@ -28,7 +28,7 @@
 .dt-title {
   font-size: 1.15rem;
   font-weight: 700;
-  color: #c7d2fe;
+  color: var(--indigo-soft);
   margin: 0;
   flex-shrink: 0;
 }
@@ -56,7 +56,7 @@
 .dt-date-label {
   font-size: 13px;
   font-weight: 600;
-  color: #a5b4fc;
+  color: var(--indigo-text);
   white-space: nowrap;
 }
 
@@ -64,27 +64,27 @@
   font-size: 11px;
   padding: 0.18rem 0.55rem;
   border-radius: 6px;
-  border: 1px solid rgba(129,140,248,0.3);
+  border: 1px solid rgba(var(--indigo-rgb), 0.3);
   background: transparent;
-  color: #818cf8;
+  color: var(--indigo-text);
   cursor: pointer;
   transition: background 0.15s;
 }
-.dt-today-btn:hover { background: rgba(99,102,241,0.2); }
+.dt-today-btn:hover { background: rgba(var(--indigo-rgb), 0.2); }
 
 .dt-add-btn {
   padding: 0.3rem 0.9rem;
   border-radius: 8px;
   border: none;
-  background: rgba(99,102,241,0.3);
-  color: #c7d2fe;
+  background: rgba(var(--indigo-rgb), 0.3);
+  color: var(--indigo-soft);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.15s;
   white-space: nowrap;
 }
-.dt-add-btn:hover:not(:disabled) { background: rgba(99,102,241,0.5); }
+.dt-add-btn:hover:not(:disabled) { background: rgba(var(--indigo-rgb), 0.5); }
 .dt-add-btn:disabled { opacity: 0.4; cursor: default; }
 
 .dt-summary {
@@ -103,8 +103,8 @@
 }
 
 .dt-stat {
-  background: rgba(99,102,241,0.1);
-  border: 1px solid rgba(129,140,248,0.15);
+  background: rgba(var(--indigo-rgb), 0.1);
+  border: 1px solid rgba(var(--indigo-rgb), 0.15);
   border-radius: 10px;
   padding: 0.5rem 0.8rem;
   display: flex;
@@ -116,7 +116,7 @@
 .dt-stat-val {
   font-size: 1.3rem;
   font-weight: 800;
-  color: #a5b4fc;
+  color: var(--indigo-text);
   line-height: 1;
 }
 
@@ -141,8 +141,8 @@
 }
 
 .dt-item {
-  background: rgba(99, 102, 241, 0.07);
-  border: 1px solid rgba(129, 140, 248, 0.22);
+  background: rgba(var(--indigo-rgb), 0.07);
+  border: 1px solid rgba(var(--indigo-rgb), 0.22);
   border-radius: 10px;
   padding: 0.65rem 0.9rem;
   display: flex;
@@ -162,7 +162,7 @@
 .dt-item-title {
   font-size: 13.5px;
   font-weight: 600;
-  color: #e0e7ff;
+  color: var(--indigo-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -196,15 +196,15 @@
 
 .dt-item-time {
   font-size: 11px;
-  color: #818cf8;
+  color: var(--indigo-text);
   white-space: nowrap;
 }
 
 .dt-item-dur {
   font-size: 11px;
   font-weight: 700;
-  color: #a5b4fc;
-  background: rgba(99,102,241,0.15);
+  color: var(--indigo-text);
+  background: rgba(var(--indigo-rgb), 0.15);
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
 }
@@ -212,8 +212,8 @@
 .dt-tabs {
   display: flex;
   gap: 0.25rem;
-  background: rgba(99,102,241,0.08);
-  border: 1px solid rgba(129,140,248,0.18);
+  background: rgba(var(--indigo-rgb), 0.08);
+  border: 1px solid rgba(var(--indigo-rgb), 0.18);
   border-radius: 9px;
   padding: 0.15rem;
 }
@@ -221,7 +221,7 @@
 .dt-tab {
   background: transparent;
   border: none;
-  color: #818cf8;
+  color: var(--indigo-text);
   font-size: 12px;
   font-weight: 600;
   padding: 0.25rem 0.7rem;
@@ -230,7 +230,7 @@
   transition: background 0.15s, color 0.15s;
   white-space: nowrap;
 }
-.dt-tab:hover { color: #c7d2fe; }
+.dt-tab:hover { color: var(--indigo-soft); }
 
 .ts-wrap { display: flex; flex-direction: column; gap: 0.9rem; }
 
@@ -244,8 +244,8 @@
 .ts-seg-group {
   display: flex;
   gap: 0.2rem;
-  background: rgba(99,102,241,0.08);
-  border: 1px solid rgba(129,140,248,0.18);
+  background: rgba(var(--indigo-rgb), 0.08);
+  border: 1px solid rgba(var(--indigo-rgb), 0.18);
   border-radius: 9px;
   padding: 0.15rem;
 }
@@ -253,7 +253,7 @@
 .ts-seg {
   background: transparent;
   border: none;
-  color: #818cf8;
+  color: var(--indigo-text);
   font-size: 12px;
   font-weight: 600;
   padding: 0.25rem 0.65rem;
@@ -261,16 +261,16 @@
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.ts-seg:hover { color: #c7d2fe; }
+.ts-seg:hover { color: var(--indigo-soft); }
 
 .ts-date-input {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(129,140,248,0.25);
+  background: rgba(var(--veil-rgb), 0.05);
+  border: 1px solid rgba(var(--indigo-rgb), 0.25);
   border-radius: 8px;
-  color: #c7d2fe;
+  color: var(--indigo-soft);
   font-size: 12px;
   padding: 0.25rem 0.5rem;
-  color-scheme: dark;
+
 }
 
 .ts-range-row { display: flex; align-items: center; gap: 0.4rem; }
@@ -281,9 +281,9 @@
 .ts-chip-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
 
 .ts-chip {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(129,140,248,0.25);
-  color: #a5b4fc;
+  background: rgba(var(--veil-rgb), 0.04);
+  border: 1px solid rgba(var(--indigo-rgb), 0.25);
+  color: var(--indigo-text);
   font-size: 11px;
   font-weight: 600;
   padding: 0.22rem 0.6rem;
@@ -292,7 +292,7 @@
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
-.ts-chip:hover { background: rgba(99,102,241,0.18); }
+.ts-chip:hover { background: rgba(var(--indigo-rgb), 0.18); }
 
 .ts-custom-hours {
   display: flex;
@@ -310,10 +310,10 @@
 
 .ts-hour-input {
   width: 58px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(129,140,248,0.25);
+  background: rgba(var(--veil-rgb), 0.05);
+  border: 1px solid rgba(var(--indigo-rgb), 0.25);
   border-radius: 8px;
-  color: #c7d2fe;
+  color: var(--indigo-soft);
   font-size: 12px;
   padding: 0.25rem 0.4rem;
 }
@@ -325,8 +325,8 @@
 }
 
 .ts-stat-card {
-  background: rgba(99,102,241,0.1);
-  border: 1px solid rgba(129,140,248,0.15);
+  background: rgba(var(--indigo-rgb), 0.1);
+  border: 1px solid rgba(var(--indigo-rgb), 0.15);
   border-radius: 10px;
   padding: 0.6rem 0.8rem;
   display: flex;
@@ -344,7 +344,7 @@
 .ts-stat-val {
   font-size: 1.25rem;
   font-weight: 800;
-  color: #a5b4fc;
+  color: var(--indigo-text);
   line-height: 1;
 }
 
@@ -355,10 +355,10 @@
 .dt-chart-dl {
   display: inline-flex; align-items: center; gap: 0.3rem;
   font-size: 11px; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 7px;
-  border: 1px solid rgba(129,140,248,0.3); background: rgba(99,102,241,0.12);
-  color: #a5b4fc; cursor: pointer; transition: background 0.15s;
+  border: 1px solid rgba(var(--indigo-rgb), 0.3); background: rgba(var(--indigo-rgb), 0.12);
+  color: var(--indigo-text); cursor: pointer; transition: background 0.15s;
 }
-.dt-chart-dl:hover { background: rgba(99,102,241,0.28); }
+.dt-chart-dl:hover { background: rgba(var(--indigo-rgb), 0.28); }
 .dt-chart-label {
   font-size: 11px;
   font-weight: 600;
@@ -373,7 +373,7 @@
 .dt-cat-toggle {
   background: none;
   border: none;
-  color: #818cf8;
+  color: var(--indigo-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -381,7 +381,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.dt-cat-toggle:hover { color: #a5b4fc; }
+.dt-cat-toggle:hover { color: var(--indigo-text); }
 
 .dt-cat-body {
   margin-top: 0.6rem;
@@ -412,7 +412,7 @@
 
 .dt-cat-name {
   font-size: 13px;
-  color: #c7d2fe;
+  color: var(--indigo-soft);
   flex: 1;
 }
 
@@ -426,15 +426,15 @@
 .dt-input {
   flex: 1;
   min-width: 120px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(129,140,248,0.25);
+  background: rgba(var(--veil-rgb), 0.06);
+  border: 1px solid rgba(var(--indigo-rgb), 0.25);
   border-radius: 8px;
-  color: #e0e7ff;
+  color: var(--indigo-soft);
   font-size: 13px;
   padding: 0.35rem 0.65rem;
   outline: none;
 }
-.dt-input:focus { border-color: #6366f1; }
+.dt-input:focus { border-color: var(--indigo); }
 
 .dt-color-input {
   width: 32px;
@@ -473,18 +473,18 @@
   padding: 0.1rem 0.2rem;
   margin-left: 0.1rem;
 }
-.dt-tp-clear:hover { color: #f87171; }
+.dt-tp-clear:hover { color: var(--red-text); }
 
 .dt-duration-hint {
   font-size: 11px;
-  color: #818cf8;
+  color: var(--indigo-text);
   margin: 0.25rem 0 0;
 }
 .dt-overlap-warn {
   font-size: 12px;
-  color: #f87171;
-  background: rgba(248,113,113,0.08);
-  border: 1px solid rgba(248,113,113,0.25);
+  color: var(--red-text);
+  background: rgba(var(--red-rgb), 0.08);
+  border: 1px solid rgba(var(--red-rgb), 0.25);
   border-radius: 6px;
   padding: 0.35rem 0.6rem;
   margin: 0.3rem 0 0;
@@ -501,8 +501,8 @@
 }
 
 .cp-panel {
-  background: #1e1b4b;
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(var(--indigo-rgb), 0.16);
+  border: 1px solid rgba(var(--indigo-rgb), 0.3);
   border-radius: 20px;
   padding: 1.4rem 1.6rem 1.2rem;
   width: 300px;
@@ -523,10 +523,10 @@
 }
 
 .cp-seg {
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(var(--indigo-rgb), 0.12);
+  border: 1px solid rgba(var(--indigo-rgb), 0.2);
   border-radius: 10px;
-  color: #a5b4fc;
+  color: var(--indigo-text);
   font-size: 2rem;
   font-weight: 700;
   width: 64px;
@@ -538,7 +538,7 @@
 }
 
 .cp-colon {
-  color: #818cf8;
+  color: var(--indigo-text);
   font-size: 1.8rem;
   font-weight: 700;
   padding: 0 0.1rem;
@@ -553,10 +553,10 @@
   margin-left: 0.5rem;
 }
 .cp-ampm-btn {
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.18);
+  background: rgba(var(--indigo-rgb), 0.1);
+  border: 1px solid rgba(var(--indigo-rgb), 0.18);
   border-radius: 8px;
-  color: #818cf8;
+  color: var(--indigo-text);
   font-size: 0.72rem;
   font-weight: 600;
   padding: 0.18rem 0.5rem;
@@ -590,19 +590,19 @@
 
 .cp-cancel-btn {
   background: transparent;
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(var(--indigo-rgb), 0.2);
   border-radius: 8px;
-  color: #818cf8;
+  color: var(--indigo-text);
   font-size: 0.82rem;
   font-weight: 600;
   padding: 0.4rem 1rem;
   cursor: pointer;
   transition: background 0.15s;
 }
-.cp-cancel-btn:hover { background: rgba(99, 102, 241, 0.1); }
+.cp-cancel-btn:hover { background: rgba(var(--indigo-rgb), 0.1); }
 
 .cp-ok-btn {
-  background: #6366f1;
+  background: var(--indigo);
   border: none;
   border-radius: 8px;
   color: #fff;
@@ -644,8 +644,8 @@
 }
 
 .dt-tf-btn {
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(var(--indigo-rgb), 0.08);
+  border: 1px solid rgba(var(--indigo-rgb), 0.2);
   border-radius: 10px;
   color: var(--muted);
   font-size: 0.88rem;
@@ -657,14 +657,14 @@
   white-space: nowrap;
 }
 .dt-tf-btn.has-val {
-  color: #a5b4fc;
-  border-color: rgba(99, 102, 241, 0.35);
-  background: rgba(99, 102, 241, 0.12);
+  color: var(--indigo-text);
+  border-color: rgba(var(--indigo-rgb), 0.35);
+  background: rgba(var(--indigo-rgb), 0.12);
 }
 .dt-tf-btn:hover {
-  background: rgba(99, 102, 241, 0.18);
-  border-color: rgba(99, 102, 241, 0.45);
-  color: #c7d2fe;
+  background: rgba(var(--indigo-rgb), 0.18);
+  border-color: rgba(var(--indigo-rgb), 0.45);
+  color: var(--indigo-soft);
 }
 
 .dt-tp-clear {
@@ -678,7 +678,7 @@
   transition: color 0.15s;
   line-height: 1;
 }
-.dt-tp-clear:hover { color: #ef4444; }
+.dt-tp-clear:hover { color: var(--red-text); }
 
 .dt-tp-row {
   display: flex;

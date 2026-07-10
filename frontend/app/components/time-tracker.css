@@ -1,8 +1,8 @@
 .btn-revise { background: var(--blue); }
 
 .tracker-wrap {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(129,140,248,0.18);
+  background: rgba(var(--veil-rgb), 0.04);
+  border: 1px solid rgba(var(--indigo-rgb), 0.18);
   border-radius: 16px;
   padding: 1.4rem 1.6rem 1rem;
   margin-bottom: 1.4rem;
@@ -20,7 +20,7 @@
 .tracker-title {
   font-size: 1.15rem;
   font-weight: 700;
-  color: #c7d2fe;
+  color: var(--indigo-soft);
   margin: 0;
 }
 
@@ -33,15 +33,15 @@
 .tracker-tab {
   padding: 0.28rem 0.75rem;
   border-radius: 8px;
-  border: 1px solid rgba(129,140,248,0.3);
+  border: 1px solid rgba(var(--indigo-rgb), 0.3);
   background: transparent;
-  color: #818cf8;
+  color: var(--indigo-text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.18s;
 }
-.tracker-tab:hover { background: rgba(99,102,241,0.15); }
+.tracker-tab:hover { background: rgba(var(--indigo-rgb), 0.15); }
 
 .tracker-refresh {
   font-size: 15px;
@@ -56,8 +56,8 @@
 }
 
 .tracker-stat {
-  background: rgba(99,102,241,0.1);
-  border: 1px solid rgba(129,140,248,0.2);
+  background: rgba(var(--indigo-rgb), 0.1);
+  border: 1px solid rgba(var(--indigo-rgb), 0.2);
   border-radius: 12px;
   padding: 0.75rem 0.6rem;
   text-align: center;
@@ -69,7 +69,7 @@
 .tracker-stat-val {
   font-size: 1.6rem;
   font-weight: 800;
-  color: #a5b4fc;
+  color: var(--indigo-text);
   line-height: 1;
 }
 

@@ -5,9 +5,9 @@
   min-width: 116px;
   padding: 10px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
-  color: #eef2ff;
+  border: 1px solid rgba(var(--veil-rgb), 0.28);
+  background: linear-gradient(145deg, rgba(var(--veil-rgb), 0.14), rgba(var(--veil-rgb), 0.06));
+  color: var(--text);
   text-decoration: none;
   font-weight: 700;
   font-size: 13px;
@@ -18,7 +18,7 @@
 
 .top-nav-link:hover {
   transform: translateY(-2px);
-  border-color: rgba(114, 221, 247, 0.75);
+  border-color: rgba(var(--blue-rgb), 0.75);
   box-shadow: 0 12px 28px rgba(13, 17, 40, 0.32);
 }
 
@@ -51,9 +51,9 @@
 }
 
 .crumb-btn {
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
-  color: #e8eeff;
+  border: 1px solid rgba(var(--veil-rgb), 0.22);
+  background: rgba(var(--veil-rgb), 0.08);
+  color: var(--text);
   border-radius: 999px;
   padding: 7px 12px;
   font-size: 12px;
@@ -69,7 +69,7 @@
 
 .filter-popover {
   margin-top: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(var(--veil-rgb), 0.2);
   border-radius: 12px;
   background: rgba(14, 19, 38, 0.92);
   padding: 10px;
@@ -92,7 +92,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  color: #edf1ff;
+  color: var(--text);
 }
 
 .drive-table th,
@@ -104,16 +104,16 @@
 }
 
 .drive-table th {
-  background: rgba(255, 255, 255, 0.06);
-  color: #dbe6ff;
+  background: rgba(var(--veil-rgb), 0.06);
+  color: var(--text);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(var(--veil-rgb), 0.12);
 }
 
 .drive-table tbody tr td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--veil-rgb), 0.08);
 }
 
 .drive-table tbody tr:last-child td {
@@ -142,7 +142,7 @@
 .content-preview-wrap {
   margin-top: 10px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(var(--veil-rgb), 0.2);
   background: rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }
@@ -163,7 +163,7 @@
   min-height: 72vh;
   border: 0;
   display: block;
-  background: #0b1020;
+  background: var(--bg-1);
 }
 
 .content-preview-fallback {
@@ -177,7 +177,7 @@
   margin-top: 12px;
   max-height: 42vh;
   overflow: auto;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(var(--veil-rgb), 0.16);
   border-radius: 12px;
   padding: 8px;
   background: rgba(0, 0, 0, 0.2);
@@ -187,9 +187,9 @@
 
 .picker-folder-row {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  color: #eaf2ff;
+  border: 1px solid rgba(var(--veil-rgb), 0.16);
+  background: rgba(var(--veil-rgb), 0.06);
+  color: var(--text);
   border-radius: 10px;
   padding: 8px 10px;
   display: flex;
@@ -199,8 +199,8 @@
 }
 
 .picker-folder-row:hover {
-  border-color: rgba(114, 221, 247, 0.7);
-  background: rgba(114, 221, 247, 0.18);
+  border-color: rgba(var(--blue-rgb), 0.7);
+  background: rgba(var(--blue-rgb), 0.18);
 }
 
 .picker-folder-row.disabled {
@@ -240,9 +240,9 @@
   height: 24px;
   padding: 0;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
-  color: #e8eeff;
+  border: 1px solid rgba(var(--veil-rgb), 0.2);
+  background: rgba(var(--veil-rgb), 0.06);
+  color: var(--text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -250,24 +250,24 @@
 }
 
 .tree-toggle:hover {
-  border-color: rgba(114, 221, 247, 0.7);
-  background: rgba(114, 221, 247, 0.16);
+  border-color: rgba(var(--blue-rgb), 0.7);
+  background: rgba(var(--blue-rgb), 0.16);
 }
 
 .tree-node {
   width: 100%;
   text-align: left;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #ecf2ff;
+  border: 1px solid rgba(var(--veil-rgb), 0.2);
+  background: rgba(var(--veil-rgb), 0.08);
+  color: var(--text);
   padding: 7px 10px;
   font-size: 12px;
 }
 
 .tree-node.active {
-  border-color: rgba(114, 221, 247, 0.9);
-  background: rgba(114, 221, 247, 0.2);
+  border-color: rgba(var(--blue-rgb), 0.9);
+  background: rgba(var(--blue-rgb), 0.2);
 }
 
 .tree-hint {
@@ -277,8 +277,8 @@
 }
 
 .active-chip {
-  border-color: rgba(114, 221, 247, 0.9);
-  box-shadow: 0 0 0 2px rgba(114, 221, 247, 0.2);
+  border-color: rgba(var(--blue-rgb), 0.9);
+  box-shadow: 0 0 0 2px rgba(var(--blue-rgb), 0.2);
 }
 
 .upload-task-list {
@@ -293,19 +293,19 @@
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #eaf0ff;
+  color: var(--text);
 }
 
 .upload-progress-track {
   height: 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(var(--veil-rgb), 0.14);
   overflow: hidden;
 }
 
 .upload-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #34d399, #10b981);
+  background: linear-gradient(90deg, #34d399, var(--emerald));
 }
 
 .drive-grid {
@@ -316,16 +316,16 @@
 }
 
 .drive-card {
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(var(--veil-rgb), 0.2);
   border-radius: 12px;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--veil-rgb), 0.05);
   cursor: pointer;
 }
 
 .drive-card-title {
   font-size: 11px;
-  color: #b8c8f2;
+  color: var(--text);
   text-transform: uppercase;
 }
 
@@ -333,14 +333,14 @@
   margin-top: 4px;
   font-weight: 700;
   font-size: 13px;
-  color: #f4f7ff;
+  color: var(--text);
   word-break: break-word;
 }
 
 .drive-card-meta {
   margin-top: 6px;
   font-size: 11px;
-  color: #ccdafd;
+  color: var(--text);
 }
 
 .text-preview {
@@ -350,8 +350,8 @@
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  background: #0c1424;
-  color: #eaf0ff;
+  background: var(--sunken);
+  color: var(--text);
   font-size: 12px;
 }
 
@@ -360,8 +360,8 @@
   z-index: 60;
   min-width: 150px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: #0f1428;
+  border: 1px solid rgba(var(--veil-rgb), 0.24);
+  background: var(--card);
   box-shadow: 0 20px 34px rgba(0, 0, 0, 0.4);
   display: grid;
   overflow: hidden;

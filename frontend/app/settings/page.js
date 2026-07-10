@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth, apiUpdateProfile, apiChangePassword, apiDeleteAccount } from "../lib/auth";
 import { useCredits } from "../lib/credits";
+import { useTheme } from "../lib/theme";
 import { friendlyApiError } from "../lib/errors";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
@@ -26,9 +27,15 @@ function fmtDate(iso) {
   }
 }
 
+const THEMES = [
+  { value: "dark", label: "Dark", icon: "moon" },
+  { value: "light", label: "Light", icon: "sun" },
+];
+
 export default function SettingsPage() {
   const { auth, signOut, updateAuth } = useAuth();
   const { credits } = useCredits();
+  const [theme, setTheme] = useTheme();
   const router = useRouter();
 
   const [editingName, setEditingName] = useState(false);
@@ -188,6 +195,30 @@ export default function SettingsPage() {
             <span className="settings-profile-value">{auth?.phone || "—"}</span>
           </div>
           <p className="goal-hint">Email and phone can&apos;t be changed here — contact support if this needs to change.</p>
+        </section>
+
+        <section className="usage-card">
+          <div className="usage-card-head"><h3>Appearance</h3></div>
+          <div className="settings-profile-row">
+            <span className="settings-profile-label">Theme</span>
+            <div className="settings-theme-toggle" role="radiogroup" aria-label="Theme">
+              {THEMES.map((t) => (
+                <label key={t.value} className={`settings-theme-option${theme === t.value ? " selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="theme"
+                    value={t.value}
+                    className="sr-only"
+                    checked={theme === t.value}
+                    onChange={() => setTheme(t.value)}
+                  />
+                  <Icon name={t.icon} size={15} />
+                  {t.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <p className="goal-hint">Saved on this device. Dark is kinder for late-night sessions; Light suits bright rooms.</p>
         </section>
 
         <section className="usage-card">

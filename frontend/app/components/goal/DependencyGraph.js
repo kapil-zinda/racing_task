@@ -31,8 +31,8 @@ export default function DependencyGraph({ goalId, nodes }) {
         position: { x: d * 220, y: (perDepth[d] - 1) * 70 },
         data: { label: `${n.title} (${Math.round(n.progress || 0)}%)` },
         style: {
-          background: linkFrom === n.id ? "#6366f1" : "#171d2c",
-          color: "#e7ecf5", border: "1px solid #2b3348", borderRadius: 10, fontSize: 12, width: 180,
+          background: linkFrom === n.id ? "var(--indigo)" : "var(--card)",
+          color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 10, fontSize: 12, width: 180,
         },
       };
     });
@@ -70,7 +70,7 @@ export default function DependencyGraph({ goalId, nodes }) {
       <div className="dep-graph">
         <ReactFlow nodes={flowNodes} edges={flowEdges} onNodeClick={onNodeClick} onEdgeClick={onEdgeClick}
                    fitView proOptions={{ hideAttribution: true }}>
-          <Background color="#222a3d" />
+          <Background color="var(--card-border)" />
           <Controls />
         </ReactFlow>
       </div>

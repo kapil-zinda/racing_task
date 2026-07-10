@@ -1,7 +1,7 @@
 .search-viewer-wrap {
   margin-top: 10px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(var(--veil-rgb), 0.2);
   background: rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }
@@ -18,7 +18,7 @@
   min-height: 74vh;
   border: 0;
   display: block;
-  background: #0b1020;
+  background: var(--bg-1);
 }
 
 .search-viewer-wide .search-viewer {
@@ -31,7 +31,7 @@
   margin: 0;
   border-radius: 0;
   border: 0;
-  background: #0b1020;
+  background: var(--bg-1);
 }
 
 .search-viewer-wrap:fullscreen .search-viewer {
@@ -77,21 +77,21 @@
 .qna-session-item {
   text-align: left;
   border: 1px solid var(--card-border);
-  background: #0e1320;
+  background: var(--sunken);
   border-radius: 10px;
   padding: 9px 10px;
-  color: #e7ecf5;
+  color: var(--text);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .qna-session-item:hover {
-  border-color: #2b3348;
+  border-color: var(--border-strong);
 }
 
 .qna-session-item.active {
-  border-color: rgba(114, 221, 247, 0.55);
-  background: rgba(114, 221, 247, 0.1);
+  border-color: rgba(var(--blue-rgb), 0.55);
+  background: rgba(var(--blue-rgb), 0.1);
 }
 
 .qna-session-title {
@@ -148,16 +148,16 @@
 /* Assistant is the app's own quiet voice — neutral surface, not a saturated
    color. User messages get the one interactive accent (cyan = "you acted"). */
 .qna-msg-assistant .qna-msg-bubble {
-  background: #0e1320;
+  background: var(--sunken);
 }
 
 .qna-msg-user .qna-msg-bubble {
-  background: rgba(114, 221, 247, 0.12);
-  border-color: rgba(114, 221, 247, 0.35);
+  background: rgba(var(--blue-rgb), 0.12);
+  border-color: rgba(var(--blue-rgb), 0.35);
 }
 
 .qna-msg-text {
-  color: #e7ecf5;
+  color: var(--text);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -190,7 +190,7 @@
 
 .qna-source-chip {
   border: 1px solid var(--card-border);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--veil-rgb), 0.05);
   color: var(--muted);
   border-radius: 999px;
   padding: 4px 10px;
@@ -201,8 +201,8 @@
 }
 
 .qna-source-chip:hover {
-  border-color: rgba(114, 221, 247, 0.55);
-  color: #e7ecf5;
+  border-color: rgba(var(--blue-rgb), 0.55);
+  color: var(--text);
 }
 
 .qna-chat-input {
@@ -215,10 +215,10 @@
 }
 
 .qna-textarea {
-  background: #0e1320;
-  border: 1px solid #2b3348;
+  background: var(--sunken);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
-  color: #e7ecf5;
+  color: var(--text);
   padding: 10px 12px;
   font: inherit;
   font-size: 14px;
@@ -229,14 +229,14 @@
 .qna-textarea:focus {
   outline: none;
   border-color: var(--blue);
-  box-shadow: 0 0 0 2px rgba(114, 221, 247, 0.2);
+  box-shadow: 0 0 0 2px rgba(var(--blue-rgb), 0.2);
 }
 
 .qna-scope-select {
-  background: #0e1320;
-  border: 1px solid #2b3348;
+  background: var(--sunken);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
-  color: #e7ecf5;
+  color: var(--text);
   padding: 9px 11px;
   font-size: 13px;
   font-family: inherit;

@@ -9,8 +9,8 @@
 }
 
 .briefCard {
-  background: #131826;
-  border: 1px solid #222a3d;
+  background: var(--card);
+  border: 1px solid var(--card-border);
   border-radius: 16px;
   padding: 28px;
   max-width: 540px;
@@ -18,13 +18,13 @@
 }
 
 .briefTitle {
-  color: #e7ecf5;
+  color: var(--text);
   font-size: 1.35rem;
   margin: 0 0 6px;
 }
 
 .briefSub {
-  color: #8b95a7;
+  color: var(--muted);
   margin: 0 0 20px;
   line-height: 1.5;
 }
@@ -42,24 +42,24 @@
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  color: #8b95a7;
+  color: var(--muted);
   line-height: 1.55;
 }
 
 .briefList li svg {
-  color: #72ddf7;
+  color: var(--blue-text);
   flex-shrink: 0;
   margin-top: 3px;
 }
 
 .micTest {
-  border-top: 1px solid #222a3d;
+  border-top: 1px solid var(--card-border);
   padding-top: 18px;
   margin-bottom: 20px;
 }
 
 .micOk {
-  color: #80ed99;
+  color: var(--mint-text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -67,7 +67,7 @@
 }
 
 .micFail {
-  color: #ff6b6b;
+  color: var(--red-text);
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -82,8 +82,8 @@
 
 .micTestBtn {
   background: transparent;
-  border: 1px solid #72ddf7;
-  color: #72ddf7;
+  border: 1px solid var(--blue);
+  color: var(--blue-text);
   border-radius: 10px;
   padding: 10px 16px;
   cursor: pointer;
@@ -95,7 +95,7 @@
 }
 
 .micTestBtn:hover:not(:disabled) {
-  background: rgba(114, 221, 247, 0.08);
+  background: rgba(var(--blue-rgb), 0.08);
 }
 
 .micTestBtn:disabled {
@@ -104,7 +104,7 @@
 }
 
 .micTestBtn:focus-visible {
-  outline: 2px solid #72ddf7;
+  outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
 
@@ -116,8 +116,8 @@
 }
 
 .enterBtn {
-  background: #ffd166;
-  color: #0b0f1a;
+  background: var(--gold);
+  color: var(--on-accent);
   border: none;
   border-radius: 10px;
   padding: 12px 20px;
@@ -141,12 +141,12 @@
 }
 
 .enterBtn:focus-visible {
-  outline: 2px solid #72ddf7;
+  outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
 
 .enterHint {
-  color: #8b95a7;
+  color: var(--muted);
   font-size: 0.85rem;
   margin: 12px 0 0;
 }
@@ -159,8 +159,8 @@
 }
 
 .assembleCard {
-  background: #131826;
-  border: 1px solid #222a3d;
+  background: var(--card);
+  border: 1px solid var(--card-border);
   border-radius: 16px;
   padding: 36px 32px;
   text-align: center;
@@ -189,9 +189,9 @@
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: #0b0f1a;
-  border: 1px solid #222a3d;
-  color: #72ddf7;
+  background: var(--bg);
+  border: 1px solid var(--card-border);
+  color: var(--blue-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -200,7 +200,7 @@
 }
 
 .seatRole {
-  color: #8b95a7;
+  color: var(--muted);
   font-size: 0.75rem;
 }
 
@@ -216,7 +216,7 @@
 }
 
 .assembleLine {
-  color: #8b95a7;
+  color: var(--muted);
   margin: 0;
 }
 
@@ -233,18 +233,18 @@
 }
 
 .concludedLead {
-  color: #e7ecf5;
+  color: var(--text);
   font-size: 1.05rem;
   margin: 0 0 4px;
 }
 
 .concludedSub {
-  color: #8b95a7;
+  color: var(--muted);
   margin: 0;
 }
 
 .concludedNote {
-  color: #8b95a7;
+  color: var(--muted);
   font-size: 0.85rem;
   margin: 10px 0 0;
   max-width: 46ch;
@@ -252,22 +252,22 @@
 
 /* ── Report overall numeral ─────────────────────────────────────────── */
 .overallNum {
-  color: #ffd166;
+  color: var(--gold-text);
   font-size: 4.5rem;
   line-height: 1;
 }
 
 .overallDen {
   font-size: 1.6rem;
-  color: #8b95a7;
+  color: var(--muted);
   margin-left: 4px;
 }
 
 /* ── Interrupted sessions ───────────────────────────────────────────── */
 .interruptedTag {
-  color: #8b95a7;
+  color: var(--muted);
   font-size: 0.8rem;
-  border: 1px solid #222a3d;
+  border: 1px solid var(--card-border);
   border-radius: 999px;
   padding: 3px 10px;
   white-space: nowrap;
@@ -277,11 +277,11 @@
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid #222a3d;
+  background: rgba(var(--veil-rgb), 0.02);
+  border: 1px solid var(--card-border);
   border-radius: 12px;
   padding: 14px 16px;
-  color: #8b95a7;
+  color: var(--muted);
   margin: 12px 0;
 }
 
@@ -296,5 +296,5 @@
 }
 
 .interruptedNote p:first-child {
-  color: #e7ecf5;
+  color: var(--text);
 }

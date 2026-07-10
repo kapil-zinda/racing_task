@@ -75,7 +75,7 @@
 .auth-pass-toggle:hover { color: var(--text); }
 .auth-pass-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(114, 221, 247, 0.35);
+  box-shadow: 0 0 0 2px rgba(var(--blue-rgb), 0.35);
   color: var(--blue);
 }
 
@@ -92,14 +92,14 @@
   padding: 13px;
   font-size: 15px;
   font-weight: 700;
-  color: #0b0f1a;
+  color: var(--on-accent);
   cursor: pointer;
   margin-top: 6px;
   transition: transform 0.18s ease, box-shadow 0.2s ease, opacity 0.18s;
 }
 .auth-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 10px 26px rgba(255, 209, 102, 0.22);
+  box-shadow: 0 10px 26px rgba(var(--gold-rgb), 0.22);
 }
 .auth-btn:disabled {
   opacity: 0.5;

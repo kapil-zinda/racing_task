@@ -5,27 +5,27 @@
 .hint {
   margin: -4px 0 0;
   font-size: 13px;
-  color: #8b95a7;
+  color: var(--muted);
   line-height: 1.4;
 }
 
 .fieldError {
   margin: -4px 0 0;
   font-size: 13px;
-  color: #ff6b6b;
+  color: var(--red-text);
   line-height: 1.4;
 }
 
 .helpLine {
   margin: 14px 0 0;
   font-size: 13px;
-  color: #8b95a7;
+  color: var(--muted);
   text-align: center;
   line-height: 1.5;
 }
 
 .helpLine a {
-  color: #72ddf7;
+  color: var(--blue-text);
   text-decoration: none;
 }
 

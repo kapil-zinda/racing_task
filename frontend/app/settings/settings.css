@@ -16,7 +16,7 @@
 .settings-profile-label { font-size: 13px; color: var(--muted); flex: 0 0 auto; }
 .settings-profile-value {
   display: inline-flex; align-items: center; gap: 8px;
-  font-size: 14px; color: var(--ink, #e7ecf5); text-align: right;
+  font-size: 14px; color: var(--ink, var(--text)); text-align: right;
 }
 .settings-edit-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -24,13 +24,35 @@
   background: transparent; color: var(--muted); cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-.settings-edit-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--ink, #e7ecf5); border-color: var(--card-border); }
+.settings-edit-btn:hover { background: rgba(var(--veil-rgb), 0.08); color: var(--ink, var(--text)); border-color: var(--card-border); }
 .settings-profile-edit { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; justify-content: flex-end; }
 .settings-profile-input {
-  flex: 1 1 auto; max-width: 260px; background: #0e1320; border: 1px solid #2b3348;
-  border-radius: 10px; color: #e7ecf5; padding: 7px 10px; font-size: 14px; font-family: inherit;
+  flex: 1 1 auto; max-width: 260px; background: var(--sunken); border: 1px solid var(--border-strong);
+  border-radius: 10px; color: var(--text); padding: 7px 10px; font-size: 14px; font-family: inherit;
 }
-.settings-profile-input:focus { outline: none; border-color: #6366f1; }
+.settings-profile-input:focus { outline: none; border-color: var(--indigo); }
+
+/* Theme (Appearance) segmented control */
+.settings-theme-toggle {
+  display: inline-flex; gap: 4px; padding: 4px;
+  background: var(--sunken); border: 1px solid var(--card-border); border-radius: 999px;
+}
+.settings-theme-option {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 14px; border-radius: 999px; border: 1px solid transparent;
+  font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.settings-theme-option:hover { color: var(--text); }
+.settings-theme-option.selected {
+  background: var(--card); border-color: var(--border-strong); color: var(--text);
+}
+.settings-theme-option:has(input:focus-visible) {
+  outline: 2px solid rgba(var(--blue-rgb), 0.75); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-theme-option { transition: none; }
+}
 
 /* Change-password popup */
 .settings-modal-overlay {
@@ -49,4 +71,4 @@
   width: 28px; height: 28px; border-radius: 8px; border: 1px solid transparent;
   background: transparent; color: var(--muted); cursor: pointer;
 }
-.settings-modal-close:hover { background: rgba(255, 255, 255, 0.08); color: var(--ink, #e7ecf5); }
+.settings-modal-close:hover { background: rgba(var(--veil-rgb), 0.08); color: var(--ink, var(--text)); }
