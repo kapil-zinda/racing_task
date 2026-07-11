@@ -362,7 +362,7 @@
   border-radius: 10px;
   border: 1px solid rgba(var(--veil-rgb), 0.24);
   background: var(--card);
-  box-shadow: 0 20px 34px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-pop);
   display: grid;
   overflow: hidden;
 }
