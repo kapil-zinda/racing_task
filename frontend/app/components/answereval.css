@@ -26,7 +26,7 @@
   position: absolute; width: 18px; height: 18px; border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 800; color: var(--on-accent); cursor: default;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.45); transition: transform 0.15s; z-index: 2;
+  box-shadow: var(--shadow-sm); transition: transform 0.15s; z-index: 2;
 }
 .ae-mark-badge.ae-mark-good { background: var(--mint); }
 .ae-mark-badge.ae-mark-improve { background: var(--warning); }
