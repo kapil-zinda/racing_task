@@ -80,7 +80,7 @@
 .daf-form-head h2 { margin: 8px 0 6px; color: var(--text-bright); }
 .daf-section {
   padding: 20px; border-radius: 16px; background: var(--surface, var(--card));
-  border: 1px solid rgba(var(--veil-rgb), 0.08); box-shadow: 0 8px 22px rgba(8,12,30,0.25);
+  border: 1px solid rgba(var(--veil-rgb), 0.08); box-shadow: var(--shadow-card);
 }
 .daf-section h3 {
   display: flex; align-items: center; gap: 8px; margin: 0 0 16px; color: var(--blue-text);
@@ -107,7 +107,7 @@
   display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
   border: none; border-radius: 50%; background: rgba(var(--veil-rgb), 0.1); color: var(--indigo-soft); cursor: pointer; padding: 0;
 }
-.daf-chip button:hover { background: rgba(var(--red-rgb), 0.3); color: #fff; }
+.daf-chip button:hover { background: rgba(var(--red-rgb), 0.3); color: var(--text-bright); }
 .daf-tag-add { display: flex; gap: 8px; }
 .daf-tag-add .task-input { flex: 1; }
 .daf-check { display: inline-flex; align-items: center; gap: 8px; margin: 14px 0; color: var(--text); font-size: 14px; cursor: pointer; }
@@ -176,7 +176,7 @@
 .ivx-center {
   display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px;
   padding: 32px 20px; border-radius: 18px; background: var(--surface, var(--card));
-  border: 1px solid rgba(var(--veil-rgb), 0.08); box-shadow: 0 8px 22px rgba(8,12,30,0.25); flex: 1;
+  border: 1px solid rgba(var(--veil-rgb), 0.08); box-shadow: var(--shadow-card); flex: 1;
 }
 .ivx-avatar {
   width: 128px; height: 128px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -184,7 +184,7 @@
   box-shadow: 0 12px 40px rgba(var(--royal-rgb), 0.35); position: relative;
 }
 
-.ivx-active-name { font-size: 16px; font-weight: 700; color: #fff; display: flex; flex-direction: column; gap: 2px; }
+.ivx-active-name { font-size: 16px; font-weight: 700; color: var(--text-bright); display: flex; flex-direction: column; gap: 2px; }
 .ivx-active-tag { font-size: 12px; font-weight: 600; color: var(--blue-text); text-transform: lowercase; }
 
 .ivx-question {
@@ -192,7 +192,7 @@
   background: rgba(var(--blue-rgb), 0.08); border: 1px solid rgba(var(--blue-rgb), 0.25);
 }
 .ivx-question.ended { text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; background: rgba(var(--emerald-rgb), 0.1); border-color: rgba(var(--emerald-rgb), 0.3); }
-.ivx-q-text { margin: 6px 0 0; font-size: 19px; line-height: 1.5; color: #fff; }
+.ivx-q-text { margin: 6px 0 0; font-size: 19px; line-height: 1.5; color: var(--text-bright); }
 .ivx-answer {
   width: 100%; max-width: 620px; padding: 14px 18px; border-radius: 14px; text-align: left;
   background: rgba(var(--emerald-rgb), 0.08); border: 1px solid rgba(var(--emerald-rgb), 0.28);
