@@ -4,19 +4,24 @@ import { useRef, useState } from "react";
 import Icon from "./Icon";
 import { apiFetch } from "../lib/auth";
 import { friendlyApiError } from "../lib/errors";
+import { cssVar } from "../lib/theme";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
-// Each section carries its own accent so the report reads as one colourful system.
+// Section accents come from theme tokens, resolved to literal hex at render
+// time via secColor() — several call sites append alpha suffixes ("1a"/"22")
+// to the hex string, so a raw var() won't do.
 const SECTIONS = [
-  { key: "time_spend", label: "Time spent", icon: "clock", color: "#72ddf7" },
-  { key: "goals", label: "Goals", icon: "target", color: "#818cf8" },
-  { key: "qna", label: "QnA", icon: "chat", color: "#80ed99" },
-  { key: "answer_eval", label: "Answer evaluation", icon: "answer-eval", color: "#ffd166" },
-  { key: "interview", label: "Interview", icon: "gavel", color: "#ff9bb0" },
-  { key: "mindmap", label: "Mind maps", icon: "brain", color: "#c4b5fd" },
+  { key: "time_spend", label: "Time spent", icon: "clock", token: "--blue-text", fallback: "#60a5fa" },
+  { key: "goals", label: "Goals", icon: "target", token: "--indigo-text", fallback: "#a5b4fc" },
+  { key: "qna", label: "QnA", icon: "chat", token: "--mint-text", fallback: "#4ade80" },
+  { key: "answer_eval", label: "Answer evaluation", icon: "answer-eval", token: "--gold-text", fallback: "#fbbf24" },
+  { key: "interview", label: "Interview", icon: "gavel", token: "--red-text", fallback: "#f87171" },
+  { key: "mindmap", label: "Mind maps", icon: "brain", token: "--indigo-soft", fallback: "#c7d2fe" },
 ];
 const SECTION_BY_KEY = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
+
+const secColor = (s) => cssVar(s.token, s.fallback);
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -81,7 +86,10 @@ export default function DayReport({ open, onClose }) {
     const node = reportRef.current;
     if (!node) throw new Error("Report render failed");
 
-    const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#0b0f1a", useCORS: true, logging: false });
+    // Page background follows the active theme (the report node styles are
+    // theme tokens too, resolved by html2canvas from computed styles).
+    const pageBg = cssVar("--bg", "#0b0f1a");
+    const canvas = await html2canvas(node, { scale: 2, backgroundColor: pageBg, useCORS: true, logging: false });
     const pdf = new JsPDF("p", "pt", "a4");
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
@@ -91,14 +99,14 @@ export default function DayReport({ open, onClose }) {
 
     let heightLeft = imgH;
     let position = 0;
-    pdf.setFillColor(11, 15, 26);
+    pdf.setFillColor(pageBg);
     pdf.rect(0, 0, pageW, pageH, "F");
     pdf.addImage(imgData, "JPEG", 0, position, imgW, imgH);
     heightLeft -= pageH;
     while (heightLeft > 0) {
       position -= pageH;
       pdf.addPage();
-      pdf.setFillColor(11, 15, 26);
+      pdf.setFillColor(pageBg);
       pdf.rect(0, 0, pageW, pageH, "F");
       pdf.addImage(imgData, "JPEG", 0, position, imgW, imgH);
       heightLeft -= pageH;
@@ -158,12 +166,12 @@ export default function DayReport({ open, onClose }) {
                 key={s.key}
                 type="button"
                 className={`rpt-chip ${on ? "on" : ""}`}
-                style={on ? { borderColor: s.color, boxShadow: `0 0 0 1px ${s.color}55` } : undefined}
+                style={on ? { borderColor: secColor(s), boxShadow: `0 0 0 1px ${secColor(s)}55` } : undefined}
                 onClick={() => toggle(s.key)}
               >
-                <span className="rpt-chip-ic" style={{ color: s.color }}><Icon name={s.icon} size={17} /></span>
+                <span className="rpt-chip-ic" style={{ color: secColor(s) }}><Icon name={s.icon} size={17} /></span>
                 <span className="rpt-chip-label">{s.label}</span>
-                <span className={`rpt-chip-tick ${on ? "on" : ""}`} style={on ? { background: s.color, borderColor: s.color } : undefined}>
+                <span className={`rpt-chip-tick ${on ? "on" : ""}`} style={on ? { background: secColor(s), borderColor: secColor(s) } : undefined}>
                   {on ? <Icon name="check" size={12} /> : null}
                 </span>
               </button>
@@ -212,8 +220,8 @@ function ReportBody({ report, keys }) {
       {stats.length ? (
         <div style={styles.statRow}>
           {stats.map(({ k, meta, stat }) => (
-            <div key={k} style={{ ...styles.statTile, borderTop: `3px solid ${meta.color}` }}>
-              <div style={{ ...styles.statValue, color: meta.color }}>{stat.value}</div>
+            <div key={k} style={{ ...styles.statTile, borderTop: `3px solid ${secColor(meta)}` }}>
+              <div style={{ ...styles.statValue, color: secColor(meta) }}>{stat.value}</div>
               <div style={styles.statName}>{meta.label}</div>
               <div style={styles.statSub}>{stat.label}</div>
             </div>
@@ -233,8 +241,8 @@ function ReportBody({ report, keys }) {
 function SectionShell({ meta, children }) {
   return (
     <div style={styles.section}>
-      <div style={{ ...styles.sectionHead, background: `${meta.color}1a`, borderLeft: `4px solid ${meta.color}` }}>
-        <span style={{ color: meta.color, display: "inline-flex" }}><Icon name={meta.icon} size={18} /></span>
+      <div style={{ ...styles.sectionHead, background: `${secColor(meta)}1a`, borderLeft: `4px solid ${secColor(meta)}` }}>
+        <span style={{ color: secColor(meta), display: "inline-flex" }}><Icon name={meta.icon} size={18} /></span>
         <span style={styles.sectionTitle}>{meta.label}</span>
       </div>
       <div style={styles.sectionBody}>{children}</div>
@@ -255,7 +263,7 @@ function Section({ k, data }) {
     return (
       <SectionShell meta={meta}>
         <div style={styles.pillRow}>
-          <span style={{ ...styles.pill, background: `${meta.color}22`, color: meta.color }}>Total {fmtMins(data.total_minutes)}</span>
+          <span style={{ ...styles.pill, background: `${secColor(meta)}22`, color: secColor(meta) }}>Total {fmtMins(data.total_minutes)}</span>
           {(data.by_category || []).map((c) => (
             <span key={c.category} style={styles.pillGhost}>{c.category} · {fmtMins(c.minutes)}</span>
           ))}
@@ -276,7 +284,7 @@ function Section({ k, data }) {
                   <td style={styles.td}>{e.title}</td>
                   <td style={styles.tdMuted}>{e.category}</td>
                   <td style={styles.tdR}>{e.start_time && e.end_time ? `${e.start_time}–${e.end_time}` : "—"}</td>
-                  <td style={{ ...styles.tdR, color: meta.color, fontWeight: 700 }}>{fmtMins(e.duration_minutes)}</td>
+                  <td style={{ ...styles.tdR, color: secColor(meta), fontWeight: 700 }}>{fmtMins(e.duration_minutes)}</td>
                 </tr>
               ))}
             </tbody>
@@ -292,11 +300,11 @@ function Section({ k, data }) {
       <SectionShell meta={meta}>
         {items.length ? items.map((g, i) => (
           <div key={i} style={styles.goalBlock}>
-            <div style={{ ...styles.goalName, color: meta.color }}>{g.goal}</div>
+            <div style={{ ...styles.goalName, color: secColor(meta) }}>{g.goal}</div>
             <ul style={styles.ul}>
               {(g.tasks || []).map((t, j) => (
                 <li key={j} style={styles.li}>
-                  <span style={styles.liDot(meta.color)} />
+                  <span style={styles.liDot(secColor(meta))} />
                   <span>{t.title}{t.new_value ? <span style={styles.liMuted}> → {t.new_value}</span> : null}</span>
                 </li>
               ))}
@@ -311,8 +319,8 @@ function Section({ k, data }) {
     return (
       <SectionShell meta={meta}>
         <div style={styles.bigStatRow}>
-          <div style={styles.bigStat}><div style={{ ...styles.bigNum, color: meta.color }}>{data.questions_asked || 0}</div><div style={styles.bigLabel}>questions asked</div></div>
-          <div style={styles.bigStat}><div style={{ ...styles.bigNum, color: meta.color }}>{data.sessions || 0}</div><div style={styles.bigLabel}>study sessions</div></div>
+          <div style={styles.bigStat}><div style={{ ...styles.bigNum, color: secColor(meta) }}>{data.questions_asked || 0}</div><div style={styles.bigLabel}>questions asked</div></div>
+          <div style={styles.bigStat}><div style={{ ...styles.bigNum, color: secColor(meta) }}>{data.sessions || 0}</div><div style={styles.bigLabel}>study sessions</div></div>
         </div>
       </SectionShell>
     );
@@ -323,14 +331,14 @@ function Section({ k, data }) {
     return (
       <SectionShell meta={meta}>
         <div style={styles.pillRow}>
-          <span style={{ ...styles.pill, background: `${meta.color}22`, color: meta.color }}>{data.count} evaluated</span>
+          <span style={{ ...styles.pill, background: `${secColor(meta)}22`, color: secColor(meta) }}>{data.count} evaluated</span>
           {data.total_max ? <span style={styles.pillGhost}>{data.total_awarded}/{data.total_max} total marks</span> : null}
         </div>
         {items.length ? items.map((it, i) => (
           <div key={i} style={styles.evalCard}>
             <div style={styles.evalHead}>
               <span style={styles.evalName}>{it.subject || it.filename}</span>
-              {it.total_max ? <span style={{ ...styles.evalScore, color: meta.color }}>{it.total_awarded}/{it.total_max}</span> : <span style={styles.evalPending}>{it.status}</span>}
+              {it.total_max ? <span style={{ ...styles.evalScore, color: secColor(meta) }}>{it.total_awarded}/{it.total_max}</span> : <span style={styles.evalPending}>{it.status}</span>}
             </div>
             {(it.questions || []).map((q, j) => (
               <div key={j} style={styles.evalQ}>
@@ -349,13 +357,13 @@ function Section({ k, data }) {
     return (
       <SectionShell meta={meta}>
         <div style={styles.pillRow}>
-          <span style={{ ...styles.pill, background: `${meta.color}22`, color: meta.color }}>{data.count} interview{data.count === 1 ? "" : "s"}</span>
+          <span style={{ ...styles.pill, background: `${secColor(meta)}22`, color: secColor(meta) }}>{data.count} interview{data.count === 1 ? "" : "s"}</span>
         </div>
         {items.length ? items.map((it, i) => (
           <div key={i} style={styles.evalCard}>
             <div style={styles.evalHead}>
               <span style={styles.evalName}>{it.question_count} questions · {it.status}</span>
-              {it.overall_score != null ? <span style={{ ...styles.evalScore, color: meta.color }}>{it.overall_score}/10</span> : <span style={styles.evalPending}>no rating</span>}
+              {it.overall_score != null ? <span style={{ ...styles.evalScore, color: secColor(meta) }}>{it.overall_score}/10</span> : <span style={styles.evalPending}>no rating</span>}
             </div>
             {it.verdict ? <div style={styles.verdict}>{it.verdict}</div> : null}
           </div>
@@ -371,8 +379,8 @@ function Section({ k, data }) {
         {items.length ? (
           <div style={styles.tagWrap}>
             {items.map((m, i) => (
-              <span key={i} style={{ ...styles.mmTag, borderColor: `${meta.color}55` }}>
-                {m.title}{m.created ? <span style={{ color: meta.color }}> · new</span> : null}
+              <span key={i} style={{ ...styles.mmTag, borderColor: `${secColor(meta)}55` }}>
+                {m.title}{m.created ? <span style={{ color: secColor(meta) }}> · new</span> : null}
               </span>
             ))}
           </div>
@@ -384,41 +392,43 @@ function Section({ k, data }) {
   return null;
 }
 
-// Inline styles keep the rasteriser (html2canvas) happy — no CSS vars, no modern color fns.
-const INK = "#e7ecf5";
-const MUTED = "#8b95a7";
-const CARD = "#131826";
-const SUNK = "#0e1320";
+// Inline styles for the rasterised node. Theme tokens via var() are fine:
+// html2canvas reads *computed* styles, where vars are already resolved —
+// so the PDF follows whatever palette/mode/font is active.
+const INK = "var(--text)";
+const MUTED = "var(--muted)";
+const CARD = "var(--card)";
+const SUNK = "var(--sunken)";
 const styles = {
-  doc: { width: 820, background: "#0b0f1a", color: INK, fontFamily: "Manrope, Segoe UI, Arial, sans-serif", padding: "0 0 28px" },
-  headerBar: { height: 8, background: "linear-gradient(90deg,#6366f1,#7c3aed,#3b82f6)" },
+  doc: { width: 820, background: "var(--bg)", color: INK, fontFamily: "var(--app-font, var(--font-manrope)), Manrope, Segoe UI, Arial, sans-serif", padding: "0 0 28px" },
+  headerBar: { height: 8, background: "var(--brand-gradient)" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "28px 34px 22px" },
   brand: { fontFamily: "var(--font-bebas), Impact, sans-serif", letterSpacing: 2, fontSize: 20, color: MUTED },
-  title: { fontFamily: "var(--font-bebas), Impact, sans-serif", fontSize: 46, lineHeight: 1, color: "#fff", marginTop: 4 },
-  dateBox: { fontSize: 13, color: INK, background: SUNK, border: "1px solid #222a3d", borderRadius: 999, padding: "8px 16px" },
+  title: { fontFamily: "var(--font-bebas), Impact, sans-serif", fontSize: 46, lineHeight: 1, color: "var(--text-bright)", marginTop: 4 },
+  dateBox: { fontSize: 13, color: INK, background: SUNK, border: "1px solid var(--card-border)", borderRadius: 999, padding: "8px 16px" },
   statRow: { display: "flex", flexWrap: "wrap", gap: 12, padding: "0 34px 8px" },
-  statTile: { flex: "1 1 150px", minWidth: 150, background: CARD, border: "1px solid #222a3d", borderRadius: 14, padding: "16px 16px 14px" },
+  statTile: { flex: "1 1 150px", minWidth: 150, background: CARD, border: "1px solid var(--card-border)", borderRadius: 14, padding: "16px 16px 14px" },
   statValue: { fontFamily: "var(--font-bebas), Impact, sans-serif", fontSize: 40, lineHeight: 1 },
-  statName: { fontSize: 13, fontWeight: 700, color: "#fff", marginTop: 6 },
+  statName: { fontSize: 13, fontWeight: 700, color: "var(--text-bright)", marginTop: 6 },
   statSub: { fontSize: 12, color: MUTED, marginTop: 2 },
 
-  section: { margin: "18px 34px 0", background: CARD, border: "1px solid #222a3d", borderRadius: 16, overflow: "hidden" },
+  section: { margin: "18px 34px 0", background: CARD, border: "1px solid var(--card-border)", borderRadius: 16, overflow: "hidden" },
   sectionHead: { display: "flex", alignItems: "center", gap: 10, padding: "12px 18px" },
-  sectionTitle: { fontSize: 16, fontWeight: 800, color: "#fff" },
+  sectionTitle: { fontSize: 16, fontWeight: 800, color: "var(--text-bright)" },
   sectionBody: { padding: "16px 18px" },
   empty: { fontSize: 13, color: MUTED, fontStyle: "italic" },
 
   pillRow: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   pill: { fontSize: 12, fontWeight: 800, padding: "5px 12px", borderRadius: 999 },
-  pillGhost: { fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 999, background: SUNK, color: INK, border: "1px solid #222a3d" },
+  pillGhost: { fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 999, background: SUNK, color: INK, border: "1px solid var(--card-border)" },
 
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th: { textAlign: "left", color: MUTED, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, padding: "6px 8px", borderBottom: "1px solid #222a3d" },
-  thR: { textAlign: "right", color: MUTED, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, padding: "6px 8px", borderBottom: "1px solid #222a3d" },
-  td: { padding: "8px", color: INK, borderBottom: "1px solid #1a2233" },
-  tdMuted: { padding: "8px", color: MUTED, borderBottom: "1px solid #1a2233" },
-  tdR: { padding: "8px", textAlign: "right", color: INK, borderBottom: "1px solid #1a2233" },
-  trAlt: { background: "#10152250" },
+  th: { textAlign: "left", color: MUTED, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, padding: "6px 8px", borderBottom: "1px solid var(--card-border)" },
+  thR: { textAlign: "right", color: MUTED, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, padding: "6px 8px", borderBottom: "1px solid var(--card-border)" },
+  td: { padding: "8px", color: INK, borderBottom: "1px solid rgba(var(--veil-rgb), 0.08)" },
+  tdMuted: { padding: "8px", color: MUTED, borderBottom: "1px solid rgba(var(--veil-rgb), 0.08)" },
+  tdR: { padding: "8px", textAlign: "right", color: INK, borderBottom: "1px solid rgba(var(--veil-rgb), 0.08)" },
+  trAlt: { background: "rgba(var(--veil-rgb), 0.03)" },
 
   goalBlock: { marginBottom: 12 },
   goalName: { fontSize: 14, fontWeight: 800, marginBottom: 6 },
@@ -432,18 +442,18 @@ const styles = {
   bigNum: { fontFamily: "var(--font-bebas), Impact, sans-serif", fontSize: 52, lineHeight: 1 },
   bigLabel: { fontSize: 12, color: MUTED, marginTop: 2 },
 
-  evalCard: { background: SUNK, border: "1px solid #222a3d", borderRadius: 12, padding: "12px 14px", marginBottom: 10 },
+  evalCard: { background: SUNK, border: "1px solid var(--card-border)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 },
   evalHead: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
-  evalName: { fontSize: 14, fontWeight: 700, color: "#fff" },
+  evalName: { fontSize: 14, fontWeight: 700, color: "var(--text-bright)" },
   evalScore: { fontFamily: "var(--font-bebas), Impact, sans-serif", fontSize: 26 },
   evalPending: { fontSize: 12, color: MUTED, textTransform: "capitalize" },
-  evalQ: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5, color: INK, padding: "3px 0", borderTop: "1px solid #1a2233" },
+  evalQ: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5, color: INK, padding: "3px 0", borderTop: "1px solid rgba(var(--veil-rgb), 0.08)" },
   evalQText: { flex: 1 },
-  evalQMark: { fontWeight: 800, color: "#fff", whiteSpace: "nowrap" },
+  evalQMark: { fontWeight: 800, color: "var(--text-bright)", whiteSpace: "nowrap" },
   verdict: { fontSize: 12.5, color: MUTED, lineHeight: 1.5 },
 
   tagWrap: { display: "flex", flexWrap: "wrap", gap: 8 },
-  mmTag: { fontSize: 13, color: INK, background: SUNK, border: "1px solid #222a3d", borderRadius: 999, padding: "6px 14px" },
+  mmTag: { fontSize: 13, color: INK, background: SUNK, border: "1px solid var(--card-border)", borderRadius: 999, padding: "6px 14px" },
 
   footer: { textAlign: "center", fontSize: 11, color: MUTED, marginTop: 22 },
 };
