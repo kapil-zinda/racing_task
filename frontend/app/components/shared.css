@@ -174,10 +174,10 @@
 .pdfhl-scroll { flex: 1; overflow: auto; padding: 16px; display: flex; justify-content: center; background: var(--card); min-height: 55vh; }
 
 .pdfhl-stage { position: relative; }
-.pdfhl-canvas { display: block; border-radius: 4px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+.pdfhl-canvas { display: block; border-radius: 4px; box-shadow: var(--shadow-raised); }
 .pdfhl-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
 .pdfhl-mark { position: absolute; background: rgba(255,214,0,0.42); border-radius: 2px; mix-blend-mode: multiply; }
-.pdfhl-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(26,26,36,0.4); }
+.pdfhl-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--scrim); }
 .pdfhl-msg { color: var(--red-soft); padding: 20px; }
 
 .goal-icon-btn.danger:hover { color: var(--red-text); }
@@ -214,7 +214,7 @@
   width: 100%; max-width: 380px; background: var(--card);
   border: 1px solid rgba(var(--indigo-rgb), 0.28); border-radius: 16px;
   padding: 22px 22px 18px; text-align: center;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-modal);
   animation: dialogPop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -389,7 +389,7 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(6, 8, 18, 0.66);
+  background: var(--scrim);
   backdrop-filter: blur(3px);
 }
 .credit-modal {
@@ -400,7 +400,7 @@
   border-radius: 18px;
   padding: 28px 24px;
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-modal);
 }
 .credit-modal-icon {
   display: inline-flex;
@@ -505,7 +505,7 @@
 
 .rpt-modal {
   width: min(560px, 94vw); background: var(--card, var(--card)); border: 1px solid var(--card-border, var(--card-border));
-  border-radius: 18px; padding: 22px; box-shadow: 0 24px 60px rgba(0,0,0,0.5); position: relative; z-index: 2;
+  border-radius: 18px; padding: 22px; box-shadow: var(--shadow-modal); position: relative; z-index: 2;
 }
 .rpt-modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
 .rpt-modal-head h3 { margin: 0 0 4px; color: var(--text-bright); font-size: 20px; }
