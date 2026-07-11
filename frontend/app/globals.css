@@ -74,9 +74,12 @@
   --emerald-rgb: 34, 197, 94;
   --royal-rgb: 59, 130, 246;
 
-  /* ---- Elevation ---- */
+  /* ---- Elevation (pop = dropdowns/menus, modal = dialogs/sheets) ---- */
   --shadow-card: 0 8px 22px rgba(0, 0, 0, 0.35);
   --shadow-raised: 0 12px 28px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
 
   /* Semantic z-index scale: dropdown → sticky → nav → overlay → modal → popover → dialog → offline */
   --z-dropdown: 40;
@@ -89,26 +92,27 @@
   --z-offline: 150;
 }
 
-/* Light theme — same restrained system on slate neutrals: white cards on a
-   cool near-white field; accent text/tints swap to darker steps that clear
-   4.5:1. Primary and semantic fills deepen one step for contrast. */
+/* Light theme — warm paper, not clinical slate: white cards float on a warm
+   off-white field with warm-gray ink (the Notion/Claude register — cold
+   blue-white glares over long sessions; paper tones don't). Accent text/tints
+   swap to darker steps that clear 4.5:1; fills deepen one step. */
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg: #f8fafc;
-  --bg-1: #f1f5f9;
-  --bg-2: #e2e8f0;
+  --bg: #f9f7f3;
+  --bg-1: #f2efe9;
+  --bg-2: #e9e5dc;
   --card: #ffffff;
-  --card-border: #e2e8f0;
-  --border-strong: #cbd5e1;
-  --sunken: #f1f5f9;
-  --text: #0f172a;
-  --text-bright: #020617;
-  --muted: #64748b;
-  --faint: #94a3b8;
+  --card-border: #e8e4db;
+  --border-strong: #d8d2c5;
+  --sunken: #f2efe9;
+  --text: #37352f;
+  --text-bright: #1d1b16;
+  --muted: #6e6a61;
+  --faint: #a49e93;
 
-  --veil-rgb: 15, 23, 42;
-  --scrim: rgba(15, 23, 42, 0.45);
+  --veil-rgb: 55, 53, 47;
+  --scrim: rgba(41, 38, 32, 0.42);
 
   --primary: #4f46e5;
   --primary-hover: #4338ca;
@@ -145,8 +149,11 @@
   --indigo-rgb: 79, 70, 229;
   --emerald-rgb: 22, 163, 74;
 
-  --shadow-card: 0 8px 22px rgba(15, 23, 42, 0.06);
-  --shadow-raised: 0 12px 28px rgba(15, 23, 42, 0.10);
+  --shadow-card: 0 8px 22px rgba(58, 52, 42, 0.06);
+  --shadow-raised: 0 12px 28px rgba(58, 52, 42, 0.10);
+  --shadow-pop: 0 12px 32px rgba(58, 52, 42, 0.14);
+  --shadow-modal: 0 24px 60px rgba(58, 52, 42, 0.20);
+  --shadow-sm: 0 2px 6px rgba(58, 52, 42, 0.14);
 }
 
 /* ============================== Palettes ==============================
@@ -318,18 +325,19 @@
 }
 
 :root[data-palette="academic"][data-theme="light"] {
-  --bg: #f9fafb;
-  --bg-1: #f3f4f6;
-  --bg-2: #e5e7eb;
+  /* Books-and-paper in light = actual paper: stone neutrals, not cold gray. */
+  --bg: #fafaf8;
+  --bg-1: #f5f4f1;
+  --bg-2: #e9e7e2;
   --card: #ffffff;
-  --card-border: #e5e7eb;
-  --border-strong: #d1d5db;
-  --sunken: #f3f4f6;
-  --text: #111827;
-  --text-bright: #030712;
-  --muted: #6b7280;
-  --faint: #9ca3af;
-  --veil-rgb: 17, 24, 39;
+  --card-border: #e8e6e1;
+  --border-strong: #d6d3cc;
+  --sunken: #f5f4f1;
+  --text: #292524;
+  --text-bright: #1c1917;
+  --muted: #6f6a63;
+  --faint: #a8a29e;
+  --veil-rgb: 41, 37, 36;
 
   --primary: #1d4ed8;
   --primary-hover: #1e40af;
@@ -345,6 +353,25 @@
   --indigo-soft: #1e40af;
   --indigo-rgb: 29, 78, 216;
 }
+
+/* ============================== App font ==============================
+   User-selectable in Settings via `data-font` on <html> (absent = Manrope).
+   The --font-* variables are injected by next/font in app/layout.js; the
+   Bebas display face (--font-bebas: timers, big numerals) is unaffected. */
+:root {
+  --app-font: var(--font-manrope);
+}
+:root[data-font="inter"] { --app-font: var(--font-inter); }
+:root[data-font="lexend"] { --app-font: var(--font-lexend); }
+:root[data-font="atkinson"] { --app-font: var(--font-atkinson); }
+:root[data-font="source-sans"] { --app-font: var(--font-source-sans); }
+:root[data-font="jakarta"] { --app-font: var(--font-jakarta); }
+:root[data-font="dm-sans"] { --app-font: var(--font-dm-sans); }
+:root[data-font="figtree"] { --app-font: var(--font-figtree); }
+:root[data-font="nunito"] { --app-font: var(--font-nunito); }
+:root[data-font="work-sans"] { --app-font: var(--font-work-sans); }
+:root[data-font="plex"] { --app-font: var(--font-plex); }
+:root[data-font="lora"] { --app-font: var(--font-lora); }
 
 /* Visible keyboard focus everywhere; components may layer their own rings on top. */
 :focus-visible {
@@ -373,7 +400,7 @@ body {
   margin: 0;
   min-height: 100%;
   color: var(--text);
-  font-family: var(--font-manrope), sans-serif;
+  font-family: var(--app-font, var(--font-manrope)), sans-serif;
   /* Unified site theme — matches the Goals / Analytics / Usage pages. */
   background: var(--bg);
 }
@@ -598,7 +625,7 @@ body {
 /* Headline voice: Manrope 800. The Bebas display face is reserved for scoreboard
    numbers/short headings via explicit classes (Scoreboard Rule) — never a bare h1. */
 h1 {
-  font-family: var(--font-manrope), sans-serif;
+  font-family: var(--app-font, var(--font-manrope)), sans-serif;
   font-weight: 800;
   font-size: clamp(24px, 3vw, 36px);
   line-height: 1.1;
@@ -1363,40 +1390,42 @@ h1 {
   min-width: 78px;
 }
 
+/* Extras category chips — tinted with the semantic token families so they
+   read in both modes (accent-text colors flip to dark steps in light). */
 .extras-kind-time_waste {
-  color: var(--text);
-  background: rgba(148, 163, 184, 0.22);
-  border-color: rgba(148, 163, 184, 0.6);
+  color: var(--muted);
+  background: rgba(var(--veil-rgb), 0.08);
+  border-color: rgba(var(--veil-rgb), 0.25);
 }
 
 .extras-kind-danger {
-  color: #ffe4ea;
-  background: rgba(244, 63, 94, 0.24);
-  border-color: rgba(244, 63, 94, 0.62);
+  color: var(--red-text);
+  background: rgba(var(--red-rgb), 0.14);
+  border-color: rgba(var(--red-rgb), 0.4);
 }
 
 .extras-kind-necessary {
-  color: var(--blue-soft);
-  background: rgba(14, 165, 233, 0.24);
-  border-color: rgba(14, 165, 233, 0.62);
+  color: var(--blue-text);
+  background: rgba(var(--blue-rgb), 0.14);
+  border-color: rgba(var(--blue-rgb), 0.4);
 }
 
 .extras-kind-coursework {
-  color: var(--mint-soft);
-  background: rgba(var(--emerald-rgb), 0.24);
-  border-color: rgba(var(--emerald-rgb), 0.62);
+  color: var(--mint-text);
+  background: rgba(var(--mint-rgb), 0.14);
+  border-color: rgba(var(--mint-rgb), 0.4);
 }
 
 .extras-kind-random {
-  color: #f1e8ff;
-  background: rgba(139, 92, 246, 0.24);
-  border-color: rgba(139, 92, 246, 0.62);
+  color: var(--gold-text);
+  background: rgba(var(--gold-rgb), 0.14);
+  border-color: rgba(var(--gold-rgb), 0.4);
 }
 
 .extras-kind-sleep {
-  color: var(--indigo-soft);
-  background: rgba(67, 56, 202, 0.24);
-  border-color: rgba(67, 56, 202, 0.62);
+  color: var(--indigo-text);
+  background: rgba(var(--indigo-rgb), 0.14);
+  border-color: rgba(var(--indigo-rgb), 0.4);
 }
 
 .history-list {
@@ -1604,9 +1633,12 @@ button:hover {
   width: min(560px, 100%);
   border-radius: 16px;
   border: 1px solid rgba(var(--veil-rgb), 0.2);
-  background: linear-gradient(160deg, rgba(var(--indigo-rgb), 0.16), var(--bg-1));
+  /* Opaque base under the indigo tint — a bare rgba gradient lets the page
+     text show through the popup. */
+  background-color: var(--bg-1);
+  background-image: linear-gradient(160deg, rgba(var(--indigo-rgb), 0.16), rgba(var(--indigo-rgb), 0));
   padding: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-modal);
   max-height: calc(100vh - 24px);
   overflow-y: auto;
 }
@@ -1643,10 +1675,23 @@ button:hover {
   width: 100%;
   border-radius: 10px;
   border: 1px solid rgba(var(--veil-rgb), 0.24);
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--sunken);
   color: var(--text);
   padding: 10px 12px;
   outline: none;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+/* As a <select>, drop the native control chrome (which ignores the theme)
+   and draw our own chevron — one neutral gray works on light and dark. */
+select.task-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%23898f9c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
 }
 
 .task-select:focus {
@@ -1654,16 +1699,42 @@ button:hover {
   box-shadow: 0 0 0 2px rgba(var(--blue-rgb), 0.2);
 }
 
+/* Native dropdown list follows the theme. Browsers that ignore option
+   styling (e.g. macOS Safari) fall back to the system popup, which the
+   per-theme `color-scheme` keeps legible. */
 .task-select option {
-  color: #0f1730;
-  background: #f3f7ff;
+  color: var(--text);
+  background: var(--bg-1);
+}
+
+/* The site-wide text input (pairs with .task-select — DAF form, interview
+   text fallback, answer-eval form). */
+.task-input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--veil-rgb), 0.24);
+  background: var(--sunken);
+  color: var(--text);
+  padding: 10px 12px;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.task-input:focus {
+  border-color: rgba(var(--blue-rgb), 0.8);
+  box-shadow: 0 0 0 2px rgba(var(--blue-rgb), 0.2);
+}
+
+.task-input::placeholder {
+  color: var(--faint);
 }
 
 .task-select:disabled,
 .task-textarea:disabled {
   border-style: dashed;
-  border-color: rgba(160, 176, 214, 0.45);
-  background: rgba(120, 138, 176, 0.16);
+  border-color: rgba(var(--veil-rgb), 0.3);
+  background: rgba(var(--veil-rgb), 0.08);
   color: var(--text);
   cursor: not-allowed;
   box-shadow: none;
@@ -4084,7 +4155,7 @@ button.danger .lucide,
   border: 1px solid var(--card-border);
   border-radius: 16px;
   background: rgba(19, 24, 38, 0.9);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-modal);
   overflow: hidden;
   transform: rotate(1.2deg);
 }
