@@ -69,7 +69,9 @@
   display: flex;
   flex-direction: column;
   padding: 18px 16px;
-  background: linear-gradient(165deg, rgba(var(--indigo-rgb), 0.16), var(--bg-1) 58%, var(--bg));
+  /* Opaque base under the indigo tint so page content never bleeds through. */
+  background-color: var(--bg);
+  background-image: linear-gradient(165deg, rgba(var(--indigo-rgb), 0.16), var(--bg-1) 58%, var(--bg));
   border-right: 1px solid rgba(var(--veil-rgb), 0.12);
   box-shadow: 24px 0 60px rgba(0, 0, 0, 0.5);
   transform: translateX(-104%);
@@ -281,4 +283,9 @@
 :root[data-theme="light"] .nav-hamburger {
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 12px 28px rgba(23, 32, 55, 0.18);
+}
+
+/* Light theme: soften the drawer's directional edge shadow. */
+:root[data-theme="light"] .side-drawer {
+  box-shadow: 24px 0 60px rgba(58, 52, 42, 0.16);
 }
