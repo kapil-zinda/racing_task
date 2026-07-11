@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth, apiUpdateProfile, apiChangePassword, apiDeleteAccount } from "../lib/auth";
 import { useCredits } from "../lib/credits";
-import { useAppearance } from "../lib/theme";
+import { useAppearance, FONTS } from "../lib/theme";
 import { friendlyApiError } from "../lib/errors";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
@@ -44,7 +44,7 @@ const PALETTE_OPTIONS = [
 export default function SettingsPage() {
   const { auth, signOut, updateAuth } = useAuth();
   const { credits } = useCredits();
-  const [{ mode, palette }, { setMode, setPalette }] = useAppearance();
+  const [{ mode, palette, font }, { setMode, setPalette, setFont }] = useAppearance();
   const router = useRouter();
 
   const [editingName, setEditingName] = useState(false);
@@ -245,6 +245,30 @@ export default function SettingsPage() {
                   />
                   <Icon name={m.icon} size={15} />
                   {m.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="settings-profile-row">
+            <span className="settings-profile-label">Font</span>
+            <div className="settings-font-grid" role="radiogroup" aria-label="Font">
+              {FONTS.map((f) => (
+                <label key={f.id} className={`settings-font-option${font === f.id ? " selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="font"
+                    value={f.id}
+                    className="sr-only"
+                    checked={font === f.id}
+                    onChange={() => setFont(f.id)}
+                  />
+                  <span className="settings-font-sample" style={{ fontFamily: `var(${f.varName})` }} aria-hidden="true">
+                    Ag
+                  </span>
+                  <span className="settings-palette-text">
+                    <strong style={{ fontFamily: `var(${f.varName})` }}>{f.label}</strong>
+                    <span>{f.hint}</span>
+                  </span>
                 </label>
               ))}
             </div>
