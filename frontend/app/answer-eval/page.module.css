@@ -14,13 +14,13 @@
 
 .hint {
   font-size: 12px;
-  color: #8b95a7;
+  color: var(--muted);
   margin: 2px 0 0;
 }
 
 .fileError {
   font-size: 13px;
-  color: #ff6b6b;
+  color: var(--red-text);
   margin: 2px 0 0;
 }
 
@@ -29,7 +29,7 @@
   align-items: center;
   gap: 6px;
   font-size: 12.5px;
-  color: #8b95a7;
+  color: var(--muted);
 }
 
 /* ── Primary action: gold pill ── */
@@ -41,8 +41,8 @@
   padding: 10px 24px;
   border: none;
   border-radius: 999px;
-  background: #ffd166;
-  color: #0b0f1a;
+  background: var(--gold);
+  color: var(--on-accent);
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
@@ -50,7 +50,7 @@
 }
 .submitBtn:hover:not(:disabled) { filter: brightness(1.07); }
 .submitBtn:disabled { opacity: 0.55; cursor: not-allowed; }
-.submitBtn:focus-visible { outline: 2px solid #72ddf7; outline-offset: 2px; }
+.submitBtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* Secondary / retry: quiet pill */
 .retryBtn {
@@ -59,38 +59,38 @@
   align-items: center;
   gap: 8px;
   padding: 8px 20px;
-  border: 1px solid #222a3d;
+  border: 1px solid var(--card-border);
   border-radius: 999px;
-  background: #131826;
-  color: #e7ecf5;
+  background: var(--card);
+  color: var(--text);
   font-weight: 600;
   font-size: 13.5px;
   cursor: pointer;
   transition: border-color 0.15s ease;
 }
-.retryBtn:hover { border-color: #72ddf7; }
-.retryBtn:focus-visible { outline: 2px solid #72ddf7; outline-offset: 2px; }
+.retryBtn:hover { border-color: var(--blue); }
+.retryBtn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ── Live evaluation status card ── */
 .statusCard {
   max-width: 620px;
   margin: 16px 0;
   padding: 18px;
-  border: 1px solid #222a3d;
+  border: 1px solid var(--card-border);
   border-radius: 14px;
-  background: #131826;
+  background: var(--card);
 }
 .statusTitle {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #e7ecf5;
+  color: var(--text);
   font-weight: 700;
   font-size: 15px;
 }
 .statusSub {
   margin: 6px 0 0;
-  color: #8b95a7;
+  color: var(--muted);
   font-size: 13.5px;
 }
 .shimmerBar {
@@ -99,14 +99,14 @@
   height: 6px;
   margin-top: 14px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--veil-rgb), 0.07);
 }
 .shimmerBar::after {
   content: "";
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(114, 221, 247, 0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--blue-rgb), 0.55), transparent);
   animation: aeSlide 1.6s ease-in-out infinite;
 }
 @keyframes aeSlide {
@@ -121,23 +121,23 @@
   max-width: 620px;
   margin: 14px 0;
   padding: 12px 16px;
-  border: 1px solid rgba(128, 237, 153, 0.28);
+  border: 1px solid rgba(var(--mint-rgb), 0.28);
   border-radius: 12px;
-  background: rgba(128, 237, 153, 0.07);
-  color: #80ed99;
+  background: rgba(var(--mint-rgb), 0.07);
+  color: var(--mint-text);
   font-size: 14px;
 }
 .successLink {
   border: none;
   background: none;
   padding: 0;
-  color: #72ddf7;
+  color: var(--blue-text);
   font-size: 14px;
   font-weight: 600;
   text-decoration: underline;
   cursor: pointer;
 }
-.successLink:focus-visible { outline: 2px solid #72ddf7; outline-offset: 2px; border-radius: 4px; }
+.successLink:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
 
 .errorCard {
   display: flex;
@@ -146,23 +146,23 @@
   max-width: 620px;
   margin: 14px 0;
   padding: 14px 16px;
-  border: 1px solid rgba(255, 107, 107, 0.3);
+  border: 1px solid rgba(var(--red-rgb), 0.3);
   border-radius: 12px;
-  background: rgba(255, 107, 107, 0.06);
-  color: #e7ecf5;
+  background: rgba(var(--red-rgb), 0.06);
+  color: var(--text);
   font-size: 14px;
   line-height: 1.5;
 }
 
 /* ── Score bands (doubled class beats the global fixed-green .ae-score-num) ── */
-.scoreLow.scoreLow { color: #ff6b6b; }
-.scoreMid.scoreMid { color: #ffd166; }
-.scoreHigh.scoreHigh { color: #80ed99; }
+.scoreLow.scoreLow { color: var(--red-text); }
+.scoreMid.scoreMid { color: var(--gold-text); }
+.scoreHigh.scoreHigh { color: var(--mint-text); }
 
 .scoreTip {
   margin: 8px 0 0;
   flex-basis: 100%;
-  color: #8b95a7;
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -173,16 +173,16 @@
   gap: 9px;
   margin-bottom: 10px;
   padding: 15px 16px;
-  border: 1px solid #222a3d;
+  border: 1px solid var(--card-border);
   border-radius: 12px;
-  background: #131826;
+  background: var(--card);
 }
 .skelLine,
 .skelLineShort {
   display: block;
   height: 12px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 25%, rgba(255, 255, 255, 0.13) 50%, rgba(255, 255, 255, 0.06) 75%);
+  background: linear-gradient(90deg, rgba(var(--veil-rgb), 0.06) 25%, rgba(var(--veil-rgb), 0.13) 50%, rgba(var(--veil-rgb), 0.06) 75%);
   background-size: 200% 100%;
   animation: aeSkel 1.4s ease infinite;
 }
@@ -198,9 +198,9 @@
   max-width: 620px;
   margin: 14px 0;
   padding: 24px 20px;
-  border: 1px dashed #222a3d;
+  border: 1px dashed var(--card-border);
   border-radius: 14px;
-  color: #8b95a7;
+  color: var(--muted);
   font-size: 14px;
   line-height: 1.55;
   text-align: center;

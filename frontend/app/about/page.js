@@ -52,7 +52,7 @@ export default function AboutPage() {
       <h2>Questions?</h2>
       <p>
         We&apos;d love to hear how you prepare and what would help. Reach us any time from the{" "}
-        <a href="/contact" style={{ color: "var(--cyan, #72ddf7)" }}>Contact</a> page.
+        <a href="/contact" style={{ color: "var(--blue-text, #72ddf7)" }}>Contact</a> page.
       </p>
     </PublicShell>
   );

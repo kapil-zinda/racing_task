@@ -1,6 +1,6 @@
 "use client";
 
-export default function RadialRing({ value, size = 96, stroke = 10, color = "#72ddf7", label, sublabel }) {
+export default function RadialRing({ value, size = 96, stroke = 10, color = "var(--info)", label, sublabel }) {
   const pct = Math.max(0, Math.min(100, Number(value) || 0));
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;

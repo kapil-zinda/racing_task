@@ -1,5 +1,6 @@
 "use client";
 
+import "./interview.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";

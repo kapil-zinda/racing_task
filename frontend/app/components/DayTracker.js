@@ -1,5 +1,6 @@
 "use client";
 
+import "./tracker.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
@@ -7,6 +8,7 @@ import TrackerSummary from "./TrackerSummary";
 import Icon from "./Icon";
 import { confirmDialog } from "../lib/dialog";
 import { friendlyApiError } from "../lib/errors";
+import { cssVar } from "../lib/theme";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -155,16 +157,16 @@ function ClockPicker({ value, onChange, onClose }) {
         <div className="cp-clock-outer">
           <svg width={CLOCK_SIZE} height={CLOCK_SIZE} viewBox={`0 0 ${CLOCK_SIZE} ${CLOCK_SIZE}`}>
             {/* Dial */}
-            <circle cx={CX} cy={CY} r={CX - 6} fill="rgba(99,102,241,0.07)" stroke="rgba(129,140,248,0.18)" strokeWidth="1.5" />
+            <circle cx={CX} cy={CY} r={CX - 6} fill="rgba(var(--indigo-rgb), 0.07)" stroke="rgba(var(--indigo-rgb), 0.22)" strokeWidth="1.5" />
 
             {/* Hand + highlight circle */}
             <g style={{ transform: `rotate(${dispAngle}deg)`, transformOrigin: `${CX}px ${CY}px`, transition: "transform 0.22s cubic-bezier(0.22, 1, 0.36, 1)" }}>
-              <line x1={CX} y1={CY} x2={CX} y2={CY - R_HAND} stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />
-              <circle cx={CX} cy={CY - R_HAND} r="18" fill="#6366f1" />
+              <line x1={CX} y1={CY} x2={CX} y2={CY - R_HAND} stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round" />
+              <circle cx={CX} cy={CY - R_HAND} r="18" fill="var(--primary)" />
             </g>
 
             {/* Center dot */}
-            <circle cx={CX} cy={CY} r="5" fill="#6366f1" />
+            <circle cx={CX} cy={CY} r="5" fill="var(--primary)" />
 
             {/* Numbers */}
             {items.map((num, i) => {
@@ -183,7 +185,7 @@ function ClockPicker({ value, onChange, onClose }) {
                     dominantBaseline="central"
                     fontSize="13"
                     fontWeight={isSelected ? "700" : "400"}
-                    fill={isSelected ? "#fff" : "#a5b4fc"}
+                    fill={isSelected ? "var(--on-accent)" : "var(--indigo-text)"}
                     style={{ userSelect: "none", pointerEvents: "none" }}
                   >
                     {step === "minute" ? String(num).padStart(2, "0") : num}
@@ -426,16 +428,16 @@ export default function DayTracker({ onDateChange }) {
               y: catEntries.map(([k]) => k),
               text: catEntries.map(([, v]) => fmtMins(v)),
               textposition: "outside",
-              textfont: { color: "#c7d2fe", size: 11 },
+              textfont: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
               marker: { color: catEntries.map(([k]) => catColor(k)) },
               hovertemplate: "%{y}: %{text}<extra></extra>",
             }]}
             layout={{
               plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)",
-              font: { color: "#c7d2fe", size: 11 },
+              font: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
               margin: { l: 90, r: 60, t: 8, b: 30 },
-              xaxis: { tickfont: { color: "#818cf8", size: 10 }, gridcolor: "rgba(99,102,241,0.12)", showline: false, zeroline: false, ticksuffix: "m" },
-              yaxis: { tickfont: { color: "#a5b4fc", size: 11 }, showgrid: false, automargin: true },
+              xaxis: { tickfont: { color: cssVar("--indigo-text", "#818cf8"), size: 10 }, gridcolor: "rgba(99,102,241,0.12)", showline: false, zeroline: false, ticksuffix: "m" },
+              yaxis: { tickfont: { color: cssVar("--indigo-text", "#a5b4fc"), size: 11 }, showgrid: false, automargin: true },
               showlegend: false, autosize: true, bargap: 0.35,
             }}
             config={{ responsive: true, displayModeBar: false }}

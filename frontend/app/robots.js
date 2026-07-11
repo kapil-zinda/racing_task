@@ -10,7 +10,7 @@ export default function robots() {
         disallow: [
           "/home", "/recorder", "/interview", "/answer-eval", "/goals",
           "/analytics", "/qna", "/mindmap", "/search", "/content", "/usage",
-          "/mission", "/syllabus", "/auth",
+          "/auth",
         ],
       },
     ],

@@ -1,4 +1,6 @@
 "use client";
+import "./phone-input.css";
+
 // Phone field with a country-code selector: a flag + dial-code button that opens
 // a searchable country dropdown, followed by the local-number input.
 

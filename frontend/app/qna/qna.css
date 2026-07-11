@@ -1,0 +1,254 @@
+.search-viewer-wrap {
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--veil-rgb), 0.2);
+  background: rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.search-viewer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.search-viewer {
+  width: 100%;
+  min-height: 74vh;
+  border: 0;
+  display: block;
+  background: var(--bg-1);
+}
+
+.search-viewer-wide .search-viewer {
+  min-height: 78vh;
+}
+
+.search-viewer-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  background: var(--bg-1);
+}
+
+.search-viewer-wrap:fullscreen .search-viewer {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+}
+
+.qna-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  gap: 16px;
+  height: min(70vh, 680px);
+  min-height: 420px;
+}
+
+.qna-sessions {
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--card);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.qna-sessions-heading {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.qna-sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qna-session-item {
+  text-align: left;
+  border: 1px solid var(--card-border);
+  background: var(--sunken);
+  border-radius: 10px;
+  padding: 9px 10px;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.qna-session-item:hover {
+  border-color: var(--border-strong);
+}
+
+.qna-session-item.active {
+  border-color: rgba(var(--blue-rgb), 0.55);
+  background: rgba(var(--blue-rgb), 0.1);
+}
+
+.qna-session-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qna-session-sub {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qna-chat-shell {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.qna-chat-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qna-msg {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.qna-msg-assistant {
+  justify-content: flex-start;
+}
+
+.qna-msg-bubble {
+  max-width: min(86%, 720px);
+  border-radius: 14px;
+  border: 1px solid var(--card-border);
+  padding: 10px 14px;
+}
+
+/* Assistant is the app's own quiet voice — neutral surface, not a saturated
+   color. User messages get the one interactive accent (cyan = "you acted"). */
+.qna-msg-assistant .qna-msg-bubble {
+  background: var(--sunken);
+}
+
+.qna-msg-user .qna-msg-bubble {
+  background: rgba(var(--blue-rgb), 0.12);
+  border-color: rgba(var(--blue-rgb), 0.35);
+}
+
+.qna-msg-text {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.qna-inline-cite {
+  display: inline;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  padding: 0;
+  margin: 0 2px;
+  border-radius: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 700;
+}
+
+.qna-inline-cite:hover {
+  filter: none;
+  transform: none;
+  text-decoration-thickness: 2px;
+}
+
+.qna-source-chip-wrap {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qna-source-chip {
+  border: 1px solid var(--card-border);
+  background: rgba(var(--veil-rgb), 0.05);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.qna-source-chip:hover {
+  border-color: rgba(var(--blue-rgb), 0.55);
+  color: var(--text);
+}
+
+.qna-chat-input {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--card-border);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  background: var(--card);
+}
+
+.qna-textarea {
+  background: var(--sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  resize: none;
+  min-height: 56px;
+}
+
+.qna-textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(var(--blue-rgb), 0.2);
+}
+
+.qna-scope-select {
+  background: var(--sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 9px 11px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.qna-scope-select:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+
+@media (max-width: 900px) {
+  .qna-layout { height: auto; min-height: 0; }
+  .qna-sessions { max-height: 220px; }
+  .qna-chat-shell { height: 70vh; }
+}

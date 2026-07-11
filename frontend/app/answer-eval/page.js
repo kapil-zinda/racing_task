@@ -1,5 +1,6 @@
 "use client";
 
+import "./answer-eval.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";

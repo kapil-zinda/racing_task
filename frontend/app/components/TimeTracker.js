@@ -1,9 +1,11 @@
 "use client";
 
+import "./time-tracker.css";
 import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
 import { friendlyApiError } from "../lib/errors";
+import { cssVar } from "../lib/theme";
 
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
@@ -135,17 +137,17 @@ export default function TimeTracker({ onLogActivity }) {
   const layoutBase = {
     plot_bgcolor: "rgba(0,0,0,0)",
     paper_bgcolor: "rgba(0,0,0,0)",
-    font: { color: "#c7d2fe", size: 11 },
+    font: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
     margin: { l: 40, r: 20, t: 10, b: 60 },
     xaxis: {
-      tickfont: { color: "#818cf8", size: 10 },
+      tickfont: { color: cssVar("--indigo-text", "#818cf8"), size: 10 },
       gridcolor: "rgba(99,102,241,0.1)",
       showgrid: false,
       showline: false,
       automargin: true,
     },
     yaxis: {
-      tickfont: { color: "#818cf8", size: 10 },
+      tickfont: { color: cssVar("--indigo-text", "#818cf8"), size: 10 },
       gridcolor: "rgba(99,102,241,0.15)",
       gridwidth: 1,
       showline: false,
@@ -154,7 +156,7 @@ export default function TimeTracker({ onLogActivity }) {
     },
     showlegend: true,
     legend: {
-      font: { color: "#c7d2fe", size: 10 },
+      font: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 10 },
       bgcolor: "rgba(0,0,0,0)",
       orientation: "h",
       x: 0.5,

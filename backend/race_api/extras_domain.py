@@ -9,7 +9,6 @@ from pymongo import ASCENDING
 from .constants import PLAYERS
 from .context import current_date_str, extra_categories_collection, extras_collection
 from .ledger_domain import log_activity
-from .mission_domain import get_active_mission_id
 
 _extras_indexes_ensured = False
 
@@ -179,13 +178,11 @@ def save_extras_payload(user_id: str, rows: List[Dict[str, Any]], date_value: st
         upsert=True,
     )
     if day == current_date_str():
-        mission_id = get_active_mission_id(uid)
         log_activity(
             uid,
             "extras_update",
             count=len(normalized_rows),
             duration_minutes=total_minutes,
-            mission_id=mission_id,
             meta={"kind_counts": kind_counts},
         )
     return {"message": "Extras saved", "user_id": uid, "date": day, "rows": normalized_rows}

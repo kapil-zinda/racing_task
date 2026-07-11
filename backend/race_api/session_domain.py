@@ -74,6 +74,7 @@ def create_session_payload(payload) -> Dict[str, Any]:
         raise ValueError("subject is required")
     if not topic:
         raise ValueError("topic is required")
+    goal_id = (getattr(payload, "goal_id", "") or "global").strip() or "global"
     recorder_type, modes = _normalize_modes(payload.recorder_type, payload.modes)
     test_source = (getattr(payload, "test_source", "") or "").strip()
     test_name = (getattr(payload, "test_name", "") or "").strip()
@@ -86,6 +87,7 @@ def create_session_payload(payload) -> Dict[str, Any]:
         "date": date_str,
         "user_id": payload.user_id,
         "subject": subject,
+        "goal_id": goal_id,
         "start_time": None,
         "total_time_minutes": 0,
         "topic": topic,

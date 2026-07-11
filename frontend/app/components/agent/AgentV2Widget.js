@@ -1,5 +1,6 @@
 "use client";
 
+import "../agent.css";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -7,7 +8,6 @@ import {
   logAgentEntry,
   prepareAgentEntry,
   readAgentContext,
-  readMissionOptions,
   searchUnified,
 } from "../../lib/agent/agentBridge";
 import { AGENT_RECORDER_STATUS_EVENT } from "../../lib/agent/constants";
@@ -162,9 +162,7 @@ export default function AgentV2Widget() {
     let output = { ok: true };
     const functionName = String(name || "").trim();
     try {
-      if (functionName === "read_mission_options") {
-        output = await readMissionOptions();
-      } else if (functionName === "read_agent_context") {
+      if (functionName === "read_agent_context") {
         output = await readAgentContext(parsedArgs);
       } else if (functionName === "search_unified") {
         output = await searchUnified(parsedArgs);

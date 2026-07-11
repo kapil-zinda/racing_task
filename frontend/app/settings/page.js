@@ -1,4 +1,6 @@
 "use client";
+import "./settings.css";
+
 // Account settings — profile (name editable; email/phone read-only), password
 // change, current plan, and the danger zone (sign out / delete account). Sign
 // out used to be a bare button in the MainMenu drawer; it now lives here
@@ -9,6 +11,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth, apiUpdateProfile, apiChangePassword, apiDeleteAccount } from "../lib/auth";
 import { useCredits } from "../lib/credits";
+import { useAppearance, FONTS } from "../lib/theme";
 import { friendlyApiError } from "../lib/errors";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
@@ -24,9 +27,24 @@ function fmtDate(iso) {
   }
 }
 
+const MODES = [
+  { value: "dark", label: "Dark", icon: "moon" },
+  { value: "light", label: "Light", icon: "sun" },
+];
+
+// Swatches mirror each palette's dark-mode --primary so the picker previews
+// the palette without depending on the currently active tokens.
+const PALETTE_OPTIONS = [
+  { value: "focus", label: "Focus", swatch: "#6366f1", hint: "Calm zinc + indigo" },
+  { value: "prime", label: "Prime", swatch: "#0a84ff", hint: "True black + blue" },
+  { value: "midnight", label: "Midnight", swatch: "#5b8cff", hint: "Deep navy" },
+  { value: "academic", label: "Academic", swatch: "#2563eb", hint: "Slate + blue" },
+];
+
 export default function SettingsPage() {
   const { auth, signOut, updateAuth } = useAuth();
   const { credits } = useCredits();
+  const [{ mode, palette, font }, { setMode, setPalette, setFont }] = useAppearance();
   const router = useRouter();
 
   const [editingName, setEditingName] = useState(false);
@@ -186,6 +204,76 @@ export default function SettingsPage() {
             <span className="settings-profile-value">{auth?.phone || "—"}</span>
           </div>
           <p className="goal-hint">Email and phone can&apos;t be changed here — contact support if this needs to change.</p>
+        </section>
+
+        <section className="usage-card">
+          <div className="usage-card-head"><h3>Appearance</h3></div>
+          <div className="settings-profile-row">
+            <span className="settings-profile-label">Theme</span>
+            <div className="settings-palette-grid" role="radiogroup" aria-label="Theme">
+              {PALETTE_OPTIONS.map((p) => (
+                <label key={p.value} className={`settings-palette-option${palette === p.value ? " selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="palette"
+                    value={p.value}
+                    className="sr-only"
+                    checked={palette === p.value}
+                    onChange={() => setPalette(p.value)}
+                  />
+                  <span className="settings-palette-swatch" style={{ background: p.swatch }} aria-hidden="true" />
+                  <span className="settings-palette-text">
+                    <strong>{p.label}</strong>
+                    <span>{p.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="settings-profile-row">
+            <span className="settings-profile-label">Mode</span>
+            <div className="settings-theme-toggle" role="radiogroup" aria-label="Mode">
+              {MODES.map((m) => (
+                <label key={m.value} className={`settings-theme-option${mode === m.value ? " selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="mode"
+                    value={m.value}
+                    className="sr-only"
+                    checked={mode === m.value}
+                    onChange={() => setMode(m.value)}
+                  />
+                  <Icon name={m.icon} size={15} />
+                  {m.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="settings-profile-row">
+            <span className="settings-profile-label">Font</span>
+            <div className="settings-font-grid" role="radiogroup" aria-label="Font">
+              {FONTS.map((f) => (
+                <label key={f.id} className={`settings-font-option${font === f.id ? " selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="font"
+                    value={f.id}
+                    className="sr-only"
+                    checked={font === f.id}
+                    onChange={() => setFont(f.id)}
+                  />
+                  <span className="settings-font-sample" style={{ fontFamily: `var(${f.varName})` }} aria-hidden="true">
+                    Ag
+                  </span>
+                  <span className="settings-palette-text">
+                    <strong style={{ fontFamily: `var(${f.varName})` }}>{f.label}</strong>
+                    <span>{f.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <p className="goal-hint">Saved on this device. Dark is kinder for late-night sessions; Light suits bright rooms.</p>
         </section>
 
         <section className="usage-card">

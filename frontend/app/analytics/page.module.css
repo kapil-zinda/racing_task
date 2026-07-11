@@ -18,8 +18,8 @@
 .skelCard {
   position: relative;
   overflow: hidden;
-  background: #131826;
-  border: 1px solid #222a3d;
+  background: var(--card);
+  border: 1px solid var(--card-border);
   border-radius: 14px;
 }
 
@@ -51,8 +51,8 @@
 
 /* ---- Empty state (new user, no data yet) ---- */
 .emptyCard {
-  background: #131826;
-  border: 1px solid #222a3d;
+  background: var(--card);
+  border: 1px solid var(--card-border);
   border-radius: 14px;
   padding: 48px 24px;
   display: flex;
@@ -64,14 +64,14 @@
 
 .emptyTitle {
   margin: 0;
-  color: #e7ecf5;
+  color: var(--text);
   font-size: 16px;
   font-weight: 600;
 }
 
 .emptyText {
   margin: 0;
-  color: #8b95a7;
+  color: var(--muted);
   font-size: 14px;
   line-height: 1.55;
   max-width: 440px;

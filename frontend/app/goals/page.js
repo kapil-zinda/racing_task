@@ -1,4 +1,7 @@
 "use client";
+import "./goals.css";
+import "../components/goal.css";
+
 // Goals dashboard + list. Replaces the old /mission journey list.
 
 import { useCallback, useEffect, useMemo, useState } from "react";

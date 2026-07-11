@@ -1,10 +1,12 @@
 "use client";
 
+import "./mindmap.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import Icon from "../components/Icon";
 import { apiFetch } from "../lib/auth";
 import { confirmDialog } from "../lib/dialog";
+import { cssVar } from "../lib/theme";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 const MAP_PAGE_SIZE = 5;
@@ -60,17 +62,37 @@ const CANVAS_PADDING_X = 40;
 const CANVAS_PADDING_Y = 40;
 
 // Theme colors for the SVG canvas (kept solid so SVG/PNG/PDF exports match).
-const SVG_BG = "#101228";
-const NODE_FILL = "#1c1f3f";
-const ROOT_FILL = "#312e81";
-const NODE_STROKE = "#6366f1";
-const ROOT_STROKE = "#818cf8";
-const COLLAPSED_STROKE = "#a5b4fc";
-const LINK_STROKE = "#6366f1";
-const TEXT_FILL = "#e0e7ff";
-const NOTE_FILL = "#94a3b8";
-const TOGGLE_FILL = "#312e81";
-const TOGGLE_TEXT = "#c7d2fe";
+// Map colors follow the active theme. They must be literal values (not
+// var()) because exports (SVG/PNG/PDF) produce standalone documents, so
+// refreshMapColors() re-resolves them from the theme tokens — called on every
+// page render and at the top of each export.
+let SVG_BG = "#101228";
+let NODE_FILL = "#1c1f3f";
+let ROOT_FILL = "#312e81";
+let ROOT_TEXT = "#ffffff";
+let NODE_STROKE = "#6366f1";
+let ROOT_STROKE = "#818cf8";
+let COLLAPSED_STROKE = "#a5b4fc";
+let LINK_STROKE = "#6366f1";
+let TEXT_FILL = "#e0e7ff";
+let NOTE_FILL = "#94a3b8";
+let TOGGLE_FILL = "#312e81";
+let TOGGLE_TEXT = "#c7d2fe";
+
+function refreshMapColors() {
+  SVG_BG = cssVar("--sunken", "#101228");
+  NODE_FILL = cssVar("--card", "#1c1f3f");
+  ROOT_FILL = cssVar("--primary", "#312e81");
+  ROOT_TEXT = cssVar("--on-accent", "#ffffff");
+  NODE_STROKE = cssVar("--primary", "#6366f1");
+  ROOT_STROKE = cssVar("--primary-hover", "#818cf8");
+  COLLAPSED_STROKE = cssVar("--indigo-text", "#a5b4fc");
+  LINK_STROKE = cssVar("--primary", "#6366f1");
+  TEXT_FILL = cssVar("--text", "#e0e7ff");
+  NOTE_FILL = cssVar("--muted", "#94a3b8");
+  TOGGLE_FILL = cssVar("--primary-soft", "#312e81");
+  TOGGLE_TEXT = cssVar("--indigo-text", "#c7d2fe");
+}
 const FONT_FAMILY = "Avenir Next, Segoe UI, sans-serif";
 
 let nodeIdCounter = 0;
@@ -413,8 +435,8 @@ function nodeMarkup(node) {
     textY += LINE_HEIGHT;
     return markup;
   };
-  const titleMarkup = titleLines.map((line) => lineMarkup(line, TEXT_FILL)).join("");
-  const noteMarkup = noteLines.map((line) => lineMarkup(line, NOTE_FILL)).join("");
+  const titleMarkup = titleLines.map((line) => lineMarkup(line, isRoot ? ROOT_TEXT : TEXT_FILL)).join("");
+  const noteMarkup = noteLines.map((line) => lineMarkup(line, isRoot ? ROOT_TEXT : NOTE_FILL)).join("");
   const toggleMarkup = node.children.length
     ? `<rect x="${node.x + width - 44}" y="${node.y + 14}" width="28" height="20" rx="10" ry="10" fill="${TOGGLE_FILL}" stroke="${NODE_STROKE}" stroke-width="1"></rect>` +
       `<text x="${node.x + width - 30}" y="${node.y + 24}" fill="${TOGGLE_TEXT}" font-family="${FONT_FAMILY}" font-size="13" font-weight="800" text-anchor="middle" dominant-baseline="central">${node.collapsed ? "+" : "−"}</text>`
@@ -572,6 +594,10 @@ function formatSavedDate(value) {
 
 // ── page component ──────────────────────────────────────────────────────────
 export default function MindmapPage() {
+  // Re-resolve the map colors from the active theme on every render — the
+  // live SVG and any subsequent export both read the refreshed values.
+  refreshMapColors();
+
   const [view, setView] = useState("list");
   const [maps, setMaps] = useState([]);
   const [mapsTotal, setMapsTotal] = useState(0);
@@ -1121,8 +1147,8 @@ html, body { margin: 0; padding: 0; background: #ffffff; }
               const collapsed = node.children.length && node.collapsed;
               let textY = node.y + CARD_PADDING_TOP;
               const lines = [
-                ...titleLines.map((line) => ({ line, fill: TEXT_FILL })),
-                ...noteLines.map((line) => ({ line, fill: NOTE_FILL })),
+                ...titleLines.map((line) => ({ line, fill: isRoot ? ROOT_TEXT : TEXT_FILL })),
+                ...noteLines.map((line) => ({ line, fill: isRoot ? ROOT_TEXT : NOTE_FILL })),
               ].map(({ line, fill }) => {
                 const y = textY;
                 textY += LINE_HEIGHT;

@@ -89,8 +89,6 @@ from .group_domain import (
 from .leaderboard_domain import global_leaderboard, group_leaderboard, list_leaderboard_categories
 from .race_domain import (
     add_points_payload,
-    build_mission_control_payload,
-    build_syllabus_payload,
     delete_points_event_payload,
     get_days_payload,
     get_state_payload,
@@ -103,7 +101,6 @@ from .agent_v2_domain import (
     refresh_daily_aggregate,
     refresh_daily_aggregates_for_date,
     report_period_payload,
-    report_revision_gaps_payload,
     search_suggest_payload,
     search_unified_payload,
     state_range_payload,
@@ -173,7 +170,6 @@ from .goal_attachment_domain import (
     list_attachments,
     presign_attachment,
 )
-from .mission_domain import get_or_create_mission, mission_progress_payload, mission_selector_options, upsert_mission
 from .mindmap_domain import (
     create_mindmap,
     delete_mindmap,
@@ -227,7 +223,6 @@ from .schemas import (
     PresignRequest,
     QnaAskRequest,
     QnaSessionCreateRequest,
-    MissionUpsertRequest,
     GoalCreateRequest,
     GoalUpdateRequest,
     GoalNodeCreateRequest,
@@ -470,13 +465,6 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /days")
 
-    @app.get("/syllabus")
-    def get_syllabus(request: Request):
-        try:
-            return build_syllabus_payload(_req_user_id(request))
-        except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "GET /syllabus")
-
     @app.get("/content/list")
     def content_list(
         request: Request,
@@ -625,56 +613,6 @@ def create_app() -> FastAPI:
             return ask_qna_in_session(payload.session_id, payload.question, payload.course, payload.limit, _require_auth(request))
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "POST /qna/ask")
-
-    @app.get("/mission-control")
-    def get_mission_control(
-        request: Request,
-        lookback_days: int = Query(default=90, ge=14, le=365),
-    ):
-        try:
-            user_id = _req_user_id(request)
-            payload = build_mission_control_payload(user_id, lookback_days)
-            payload["mission"] = get_or_create_mission(user_id)
-            payload["mission_progress"] = mission_progress_payload(user_id, lookback_days)
-            return payload
-        except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "GET /mission-control")
-
-    @app.get("/mission")
-    def get_mission(request: Request, lookback_days: int = Query(default=90, ge=14, le=365)):
-        try:
-            user_id = _req_user_id(request)
-            return {
-                "mission": get_or_create_mission(user_id),
-                "mission_progress": mission_progress_payload(user_id, lookback_days),
-                "selector_options": mission_selector_options(user_id),
-            }
-        except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "GET /mission")
-
-    @app.put("/mission")
-    def save_mission(request: Request, payload: MissionUpsertRequest):
-        try:
-            user_id = _req_user_id(request) or payload.user_id
-            mission = upsert_mission(
-                user_id,
-                title=payload.title,
-                target_date=payload.target_date,
-                status=payload.status,
-                icon=payload.icon,
-                category=payload.category,
-                weights=payload.weights,
-                targets=payload.targets,
-                plan=payload.plan,
-            )
-            return {
-                "message": "Mission saved",
-                "mission": mission,
-                "mission_progress": mission_progress_payload(user_id, 90),
-                "selector_options": mission_selector_options(user_id),
-            }
-        except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "PUT /mission")
 
     # --- Universal Goal OS ---
 
@@ -993,13 +931,6 @@ def create_app() -> FastAPI:
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "DELETE /attachments/{attachment_id}")
 
-    @app.get("/mission/options")
-    def get_mission_options(request: Request):
-        try:
-            return mission_selector_options(_req_user_id(request))
-        except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "GET /mission/options")
-
     @app.get("/agent-v2/context")
     def agent_v2_context(
         request: Request,
@@ -1026,19 +957,6 @@ def create_app() -> FastAPI:
             return report_period_payload(_req_user_id(request), from_date, to_date, group_by, x_days, y_days)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /agent-v2/reports/period")
-
-    @app.get("/agent-v2/reports/revision-gaps")
-    def agent_v2_revision_gaps(
-        request: Request,
-        x_days: int = Query(default=7, ge=1, le=60),
-        y_days: int = Query(default=15, ge=1, le=90),
-        limit: int = Query(default=200, ge=1, le=1000),
-        reference_date: Optional[str] = Query(default=None),
-    ):
-        try:
-            return report_revision_gaps_payload(_req_user_id(request), x_days, y_days, limit, reference_date)
-        except Exception as err:  # noqa: BLE001
-            _raise_as_http(err, "GET /agent-v2/reports/revision-gaps")
 
     @app.get("/agent-v2/recommendations/next-actions")
     def agent_v2_next_actions(

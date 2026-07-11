@@ -1,5 +1,6 @@
 "use client";
 
+import "./recorder.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import MainMenu from "../components/MainMenu";
@@ -9,6 +10,7 @@ import { confirmDialog } from "../lib/dialog";
 import { AGENT_PENDING_RECORDER_ACTION_KEY, AGENT_RECORDER_EVENT, AGENT_RECORDER_STATUS_EVENT } from "../lib/agent/constants";
 import { apiFetch, useAuth } from "../lib/auth";
 import { friendlyApiError } from "../lib/errors";
+import { listGoals } from "../lib/goalApi";
 
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -35,39 +37,7 @@ const RECORDER_TYPES = [
   { value: "pdf_explainer", label: "PDF Explainer" },
   { value: "uploader", label: "Uploader recording" }
 ];
-const OTHER_VALUE = "__other__";
-const SIMP_RECORD_VALUE = "simp_record";
-const getSubjectsForExam = (examType, catalog = {}) => (catalog[examType] || []).map((entry) => entry.subject);
-
-const getTopicsForSelection = (examType, subject, catalog = {}) => {
-  const found = (catalog[examType] || []).find((entry) => entry.subject === subject);
-  return found?.topics || [];
-};
-const getExamOptionsFromCatalog = (catalog = {}) =>
-  Object.keys(catalog || {}).map((key) => ({ value: key, label: key.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 const MULTIPART_MIN_PART_BYTES = 5 * 1024 * 1024;
-
-function buildTestsCatalogFromPlan(testPlanRows) {
-  const bySource = new Map();
-  (Array.isArray(testPlanRows) ? testPlanRows : []).forEach((row) => {
-    const source = String(row?.source || "").trim();
-    if (!source) return;
-    const testName = String(row?.test_name || "").trim() || "Test";
-    const count = Math.max(1, Number(row?.number_of_tests || 1));
-    if (!bySource.has(source)) bySource.set(source, []);
-    const list = bySource.get(source);
-    for (let i = 1; i <= count; i += 1) {
-      list.push(`${testName} ${i}`);
-    }
-  });
-  const out = [];
-  [...bySource.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .forEach(([source, topics]) => {
-      out.push({ subject: source, topics: [...new Set(topics)] });
-    });
-  return out;
-}
 
 
 function formatDuration(totalSeconds) {
@@ -165,44 +135,16 @@ function broadcastRecorderStatus(status) {
 
 export default function RecorderPage() {
   const { auth } = useAuth();
-  const defaultSubject = "";
-  const defaultTopic = "";
-  const [missionSelector, setMissionSelector] = useState({ exam_options: [], catalog: {}, plan: {} });
-  const [missionSelectorLoading, setMissionSelectorLoading] = useState(Boolean(API_BASE_URL));
-  const missionTestPlan = useMemo(
-    () => (Array.isArray(missionSelector?.plan?.tests) ? missionSelector.plan.tests : []),
-    [missionSelector?.plan?.tests],
-  );
-  const activeCatalog = useMemo(() => {
-    const base = Object.keys(missionSelector.catalog || {}).length ? missionSelector.catalog : {};
-    const testsCatalog = buildTestsCatalogFromPlan(missionTestPlan);
-    if (!testsCatalog.length) return base;
-    return { ...base, tests: testsCatalog };
-  }, [missionSelector.catalog, missionTestPlan]);
-  const activeExamOptions = useMemo(
-    () => (
-      (() => {
-        const fromMission = Array.isArray(missionSelector.exam_options) ? [...missionSelector.exam_options] : [];
-        const hasTests = fromMission.some((opt) => String(opt?.value || "") === "tests");
-        const testsAvailable = Array.isArray(activeCatalog.tests) && activeCatalog.tests.length > 0;
-        if (fromMission.length) {
-          if (testsAvailable && !hasTests) {
-            fromMission.push({ value: "tests", label: "Tests" });
-          }
-          return fromMission;
-        }
-        return getExamOptionsFromCatalog(activeCatalog);
-      })()
-    ),
-    [missionSelector.exam_options, activeCatalog],
-  );
+  const [goals, setGoals] = useState([]);
+  const [goalsLoading, setGoalsLoading] = useState(Boolean(API_BASE_URL));
+  const resolveGoalLabel = (goalId) => {
+    if (!goalId || goalId === "global") return "Global";
+    return goals.find((g) => g.id === goalId)?.name || "Global";
+  };
   const [sessionForm, setSessionForm] = useState({
-    exam_type: SIMP_RECORD_VALUE,
-    subject: defaultSubject,
-    topic: defaultTopic,
-    exam_type_other: "",
-    subject_other: "",
-    topic_other: "",
+    simple_record: true,
+    goal_id: "global",
+    topic: "",
     session_type: "study",
     recorder_type: "call",
     notes: "",
@@ -356,31 +298,13 @@ export default function RecorderPage() {
 
   useEffect(() => {
     if (!API_BASE_URL) return;
-    apiFetch(`${API_BASE_URL}/mission/options`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => {
-        setMissionSelector({ exam_options: data.exam_options || [], catalog: data.catalog || {}, plan: data.plan || {} });
-      })
-      .catch(() => {});
+    setGoalsLoading(true);
+    listGoals()
+      .then((d) => setGoals(d.goals || []))
+      .catch(() => {})
+      .finally(() => setGoalsLoading(false));
     fetchSessions();
   }, [API_BASE_URL]);
-
-  useEffect(() => {
-    if (!activeExamOptions.length) return;
-    const validExamValues = new Set(activeExamOptions.map((o) => o.value));
-    setSessionForm((prev) => {
-      if (prev.exam_type === SIMP_RECORD_VALUE) return prev;
-      const nextExam = validExamValues.has(prev.exam_type) ? prev.exam_type : activeExamOptions[0].value;
-      const subjects = getSubjectsForExam(nextExam, activeCatalog);
-      const nextSubject = subjects.includes(prev.subject) ? prev.subject : (subjects[0] || OTHER_VALUE);
-      const topics = nextSubject === OTHER_VALUE ? [] : getTopicsForSelection(nextExam, nextSubject, activeCatalog);
-      const nextTopic = topics.includes(prev.topic) ? prev.topic : (topics[0] || OTHER_VALUE);
-      if (nextExam === prev.exam_type && nextSubject === prev.subject && nextTopic === prev.topic) {
-        return prev;
-      }
-      return { ...prev, exam_type: nextExam, subject: nextSubject, topic: nextTopic };
-    });
-  }, [activeExamOptions, activeCatalog]);
 
   useEffect(() => {
     const hasPending = pendingFinalizeModes.length > 0;
@@ -570,30 +494,16 @@ export default function RecorderPage() {
   };
 
   const buildSessionSubjectTopic = () => {
-    if (sessionForm.exam_type === SIMP_RECORD_VALUE) {
+    if (sessionForm.simple_record) {
       // Simple Record mode: only record_type + record_note are filled, so
       // auto-fill subject/topic (backend requires them) from the note.
       const note = (sessionForm.notes || "").trim();
-      return { subject: "Simple Record", topic: note ? note.slice(0, 60) : "Quick Record" };
+      return { subject: "Simple Record", topic: note ? note.slice(0, 60) : "Quick Record", goal_id: "global" };
     }
-    const subject = (selectedSubjectValue || "").trim();
-    const topic = (selectedTopicValue || "").trim();
-    return { subject, topic };
-  };
-
-  const buildSessionTestRef = () => {
-    if (effectiveExamType !== "tests") return { test_source: "", test_name: "", test_number: "" };
-    const source = (selectedSubjectValue || "").trim();
-    const topic = (selectedTopicValue || "").trim();
-    if (!source || !topic) return { test_source: "", test_name: "", test_number: "" };
-
-    const match = topic.match(/^(.*?)(?:\s+(\d+))?$/);
-    const maybeName = (match?.[1] || topic).trim();
-    const maybeNumber = (match?.[2] || "").trim();
     return {
-      test_source: source,
-      test_name: maybeName || topic,
-      test_number: maybeNumber,
+      subject: resolveGoalLabel(sessionForm.goal_id),
+      topic: (sessionForm.topic || "").trim(),
+      goal_id: sessionForm.goal_id || "global",
     };
   };
 
@@ -637,22 +547,21 @@ export default function RecorderPage() {
       return null;
     }
     setSessionError("");
-    const { subject, topic } = buildSessionSubjectTopic();
+    const { subject, topic, goal_id } = buildSessionSubjectTopic();
     const notes = sessionForm.notes.trim();
     if (!subject || !topic) {
       setSessionError("Subject and topic are required.");
       return null;
     }
     try {
-      const testRef = buildSessionTestRef();
       const payload = {
         subject,
         topic,
+        goal_id,
         session_type: sessionForm.session_type,
         recorder_type: sessionForm.recorder_type,
         notes,
-        simple_record: sessionForm.exam_type === SIMP_RECORD_VALUE,
-        ...testRef,
+        simple_record: sessionForm.simple_record,
       };
       const res = await apiFetch(`${API_BASE_URL}/sessions`, {
         method: "POST",
@@ -1840,28 +1749,24 @@ export default function RecorderPage() {
         }
         const recorderType = String(args?.recorder_type || "audio").trim().toLowerCase();
         const sessionType = String(args?.session_type || "study").trim().toLowerCase();
-        const incomingSubject = String(args?.subject || "").trim();
+        const incomingGoalName = String(args?.goal || "").trim().toLowerCase();
+        const matchedGoal = incomingGoalName
+          ? goals.find((g) => String(g.name || "").trim().toLowerCase() === incomingGoalName)
+          : null;
+        const resolvedGoalId = String(args?.goal_id || "").trim() || matchedGoal?.id || sessionForm.goal_id || "global";
         const incomingTopic = String(args?.topic || "").trim();
         const incomingNotes = String(args?.notes || "").trim();
-        const fallback = buildSessionSubjectTopic();
-        const resolvedSubject = incomingSubject || fallback.subject || "";
-        const resolvedTopic = incomingTopic || fallback.topic || "";
+        const resolvedTopic = incomingTopic || sessionForm.topic.trim();
 
-        if (!resolvedSubject || !resolvedTopic) {
-          const plan = missionSelector?.plan && typeof missionSelector.plan === "object" ? missionSelector.plan : {};
-          const courseCount = Array.isArray(plan.courses) ? plan.courses.length : 0;
-          const bookCount = Array.isArray(plan.books) ? plan.books.length : 0;
-          const randomCount = Array.isArray(plan.random) ? plan.random.length : 0;
-          const testCount = Array.isArray(plan.tests) ? plan.tests.length : 0;
-          setSessionError(
-            `Agent needs confirmation before start. Pick subject/topic from your plan (courses:${courseCount}, books:${bookCount}, random:${randomCount}, tests:${testCount}) and retry.`
-          );
+        if (!resolvedTopic) {
+          setSessionError("Agent needs a topic to start a session. Pick one and retry.");
           return;
         }
 
         const payloadBody = {
-          subject: resolvedSubject,
+          subject: resolveGoalLabel(resolvedGoalId),
           topic: resolvedTopic,
+          goal_id: resolvedGoalId,
           session_type: ["study", "revision", "analysis", "test"].includes(sessionType) ? sessionType : "study",
           recorder_type: recorderType || "audio",
           notes: incomingNotes || `Agent-triggered ${recorderType || "audio"} session`,
@@ -2389,7 +2294,7 @@ export default function RecorderPage() {
 
   const createExplainerSessionWithUploads = async () => {
     if (!API_BASE_URL) return;
-    const { subject, topic } = buildSessionSubjectTopic();
+    const { subject, topic, goal_id } = buildSessionSubjectTopic();
     const notes = sessionForm.notes.trim();
     if (!subject || !topic) {
       setSessionError("Subject and topic are required.");
@@ -2406,15 +2311,14 @@ export default function RecorderPage() {
     try {
       setExplainerDoneLoading(true);
       setSessionError("");
-      const testRef = buildSessionTestRef();
       const payload = {
         subject,
         topic,
+        goal_id,
         session_type: sessionForm.session_type,
         recorder_type: "pdf_explainer",
         notes,
-        simple_record: sessionForm.exam_type === SIMP_RECORD_VALUE,
-        ...testRef,
+        simple_record: sessionForm.simple_record,
       };
       const createRes = await apiFetch(`${API_BASE_URL}/sessions`, {
         method: "POST",
@@ -2498,13 +2402,7 @@ export default function RecorderPage() {
   const attachmentKind = getAttachmentKindFromKey(attachmentKey);
   const explainerAttachmentReady = explainerFiles.length > 0;
   const explainerDoneReady = explainerAttachmentReady && Boolean(explainerVideoBlob);
-  const isSimpRecord = sessionForm.exam_type === SIMP_RECORD_VALUE;
-  const effectiveExamType = sessionForm.exam_type === OTHER_VALUE ? sessionForm.exam_type_other.trim().toLowerCase() : sessionForm.exam_type;
-  const currentSubjectOptions = effectiveExamType ? getSubjectsForExam(effectiveExamType, activeCatalog) : [];
-  const effectiveSubject = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other.trim() : sessionForm.subject;
-  const currentTopicOptions = effectiveExamType && effectiveSubject ? getTopicsForSelection(effectiveExamType, effectiveSubject, activeCatalog) : [];
-  const selectedSubjectValue = sessionForm.subject === OTHER_VALUE ? sessionForm.subject_other : sessionForm.subject;
-  const selectedTopicValue = sessionForm.topic === OTHER_VALUE ? sessionForm.topic_other : sessionForm.topic;
+  const isSimpRecord = sessionForm.simple_record;
   // Always present newest-first by created_at, deterministically, so selecting or
   // running a previous session never reshuffles the list.
   // The session this device is actively recording (if any) — used to hide
@@ -2582,106 +2480,34 @@ export default function RecorderPage() {
               <h3>New Recording</h3>
               <button className="btn-cancel" onClick={() => setCreateModalOpen(false)}>Close</button>
             </div>
-            {missionSelectorLoading ? <p className="day-state">Loading mission options...</p> : null}
+            {goalsLoading ? <p className="day-state">Loading goals...</p> : null}
             <div className="session-form-grid">
               <select
                 className="task-select"
-                value={sessionForm.exam_type}
-                onChange={(e) => {
-                  const nextExam = e.target.value;
-                  const nextExamForCatalog = nextExam === OTHER_VALUE ? "" : nextExam;
-                  const nextSubjects = nextExamForCatalog ? getSubjectsForExam(nextExamForCatalog, activeCatalog) : [];
-                  const nextSubject = nextExam === OTHER_VALUE ? OTHER_VALUE : (nextSubjects[0] || OTHER_VALUE);
-                  const nextTopics = nextExamForCatalog && nextSubject !== OTHER_VALUE
-                    ? getTopicsForSelection(nextExamForCatalog, nextSubject, activeCatalog)
-                    : [];
-                  setSessionForm((p) => {
-                    const nextState = {
-                      ...p,
-                      exam_type: nextExam,
-                      subject: nextSubject,
-                      topic: nextTopics[0] || OTHER_VALUE,
-                    };
-                    if (nextExam !== OTHER_VALUE) {
-                      nextState.exam_type_other = "";
-                    }
-                    if (nextSubject !== OTHER_VALUE) {
-                      nextState.subject_other = "";
-                    }
-                    if ((nextTopics[0] || OTHER_VALUE) !== OTHER_VALUE) {
-                      nextState.topic_other = "";
-                    }
-                    return nextState;
-                  });
-                }}
+                value={sessionForm.simple_record ? "simple" : "detailed"}
+                onChange={(e) => setSessionForm((p) => ({ ...p, simple_record: e.target.value === "simple" }))}
               >
-                <option value={SIMP_RECORD_VALUE}>Simple Record</option>
-                {activeExamOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-                <option value={OTHER_VALUE}>Other</option>
+                <option value="simple">Simple Record</option>
+                <option value="detailed">Detailed Session</option>
               </select>
-              {sessionForm.exam_type === OTHER_VALUE ? (
-                <input
-                  className="task-select"
-                  placeholder="Type custom exam"
-                  value={sessionForm.exam_type_other}
-                  onChange={(e) => setSessionForm((p) => ({ ...p, exam_type_other: e.target.value, subject: OTHER_VALUE, topic: OTHER_VALUE }))}
-                />
-              ) : null}
               {!isSimpRecord ? (
               <>
               <select
                 className="task-select"
-                value={sessionForm.subject}
-                onChange={(e) => {
-                  const nextSubject = e.target.value;
-                  const nextTopics = nextSubject === OTHER_VALUE
-                    ? []
-                    : getTopicsForSelection(effectiveExamType, nextSubject, activeCatalog);
-                  setSessionForm((p) => {
-                    const nextState = { ...p, subject: nextSubject, topic: nextTopics[0] || OTHER_VALUE };
-                    if (nextSubject !== OTHER_VALUE) {
-                      nextState.subject_other = "";
-                    }
-                    if ((nextTopics[0] || OTHER_VALUE) !== OTHER_VALUE) {
-                      nextState.topic_other = "";
-                    }
-                    return nextState;
-                  });
-                }}
+                value={sessionForm.goal_id}
+                onChange={(e) => setSessionForm((p) => ({ ...p, goal_id: e.target.value }))}
               >
-                {currentSubjectOptions.map((subj) => (
-                  <option key={subj} value={subj}>{subj}</option>
+                <option value="global">Global (all goals)</option>
+                {goals.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
-                <option value={OTHER_VALUE}>Other</option>
               </select>
-              {sessionForm.subject === OTHER_VALUE ? (
-                <input
-                  className="task-select"
-                  placeholder="Type custom subject"
-                  value={sessionForm.subject_other}
-                  onChange={(e) => setSessionForm((p) => ({ ...p, subject_other: e.target.value, topic: OTHER_VALUE }))}
-                />
-              ) : null}
-              <select
+              <input
                 className="task-select"
+                placeholder="Topic — what did you study?"
                 value={sessionForm.topic}
                 onChange={(e) => setSessionForm((p) => ({ ...p, topic: e.target.value }))}
-              >
-                {currentTopicOptions.map((topic) => (
-                  <option key={topic} value={topic}>{topic}</option>
-                ))}
-                <option value={OTHER_VALUE}>Other</option>
-              </select>
-              {sessionForm.topic === OTHER_VALUE ? (
-                <input
-                  className="task-select"
-                  placeholder="Type custom topic"
-                  value={sessionForm.topic_other}
-                  onChange={(e) => setSessionForm((p) => ({ ...p, topic_other: e.target.value }))}
-                />
-              ) : null}
+              />
               <select className="task-select" value={sessionForm.session_type} onChange={(e) => setSessionForm((p) => ({ ...p, session_type: e.target.value }))}>
                 <option value="study">Study</option>
                 <option value="revision">Revision</option>
@@ -2729,7 +2555,7 @@ export default function RecorderPage() {
 
             {isRecordingActive || recorderArming ? (
               <div
-                className={`meet-overlay recording-${recordView}`}
+                className={`theme-dark meet-overlay recording-${recordView}`}
                 ref={recordingBoxRef}
                 style={recordView === "float" && floatPos ? { left: floatPos.x, top: floatPos.y, right: "auto", bottom: "auto" } : undefined}
               >
@@ -2881,7 +2707,7 @@ export default function RecorderPage() {
 
             {/* Explainer meet-frame */}
             {explainerFrameOpen ? (
-              <div className="meet-overlay recording-full">
+              <div className="theme-dark meet-overlay recording-full">
                 {/* Top bar */}
                 <div className="meet-topbar">
                   <div className="meet-topbar-left">
@@ -3099,7 +2925,7 @@ export default function RecorderPage() {
         </div>
       ) : null}
       {playerModal.open ? (
-        <div className="vlc-backdrop" onClick={closePlayer}>
+        <div className="theme-dark vlc-backdrop" onClick={closePlayer}>
           <div className="vlc-player" onClick={(e) => e.stopPropagation()}>
             {/* Title bar */}
             <div className="vlc-titlebar">

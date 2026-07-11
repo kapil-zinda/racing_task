@@ -1,4 +1,6 @@
 "use client";
+import "./usage.css";
+
 // Usage & credits. All money is shown in USD. Credits come from the in-memory store
 // (GET /payments/credits); storage + activity counts come from GET /storage. Top-ups
 // go through Razorpay in INR, converted from the USD amount at the server's rate.

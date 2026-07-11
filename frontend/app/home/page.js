@@ -1,5 +1,6 @@
 "use client";
 
+import "./home.css";
 import { useEffect, useRef, useState } from "react";
 import MainMenu from "../components/MainMenu";
 import DayTracker from "../components/DayTracker";

@@ -20,6 +20,7 @@ class CreateSessionRequest(BaseModel):
     user_id: str = ""
     subject: str
     topic: str
+    goal_id: str = "global"
     session_type: str  # study | revision | analysis
     recorder_type: str = "call"
     modes: List[str] = []  # audio | video | screen
@@ -220,18 +221,6 @@ class QnaAskRequest(BaseModel):
 class QnaSessionCreateRequest(BaseModel):
     user_id: str = ""
     title: str = ""
-
-
-class MissionUpsertRequest(BaseModel):
-    user_id: str = ""
-    title: str = ""
-    target_date: str = ""
-    status: str = "active"
-    icon: str = ""
-    category: str = ""
-    weights: dict = {}
-    targets: Optional[dict] = None
-    plan: dict = {}
 
 
 # --- Universal Goal OS ---

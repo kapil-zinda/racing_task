@@ -1,0 +1,110 @@
+.btn-revise { background: var(--blue); color: var(--on-accent); }
+
+.tracker-wrap {
+  background: rgba(var(--veil-rgb), 0.04);
+  border: 1px solid rgba(var(--indigo-rgb), 0.18);
+  border-radius: 16px;
+  padding: 1.4rem 1.6rem 1rem;
+  margin-bottom: 1.4rem;
+}
+
+.tracker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.1rem;
+}
+
+.tracker-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--indigo-soft);
+  margin: 0;
+}
+
+.tracker-tabs {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.tracker-tab {
+  padding: 0.28rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--indigo-rgb), 0.3);
+  background: transparent;
+  color: var(--indigo-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.tracker-tab:hover { background: rgba(var(--indigo-rgb), 0.15); }
+
+.tracker-refresh {
+  font-size: 15px;
+  padding: 0.28rem 0.6rem;
+}
+
+.tracker-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.2rem;
+}
+
+.tracker-stat {
+  background: rgba(var(--indigo-rgb), 0.1);
+  border: 1px solid rgba(var(--indigo-rgb), 0.2);
+  border-radius: 12px;
+  padding: 0.75rem 0.6rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.tracker-stat-val {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--indigo-text);
+  line-height: 1;
+}
+
+.tracker-stat-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tracker-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.2rem;
+}
+
+.tracker-chart-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.tracker-chart {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .tracker-summary { grid-template-columns: repeat(2, 1fr); }
+  .tracker-stat-val { font-size: 1.3rem; }
+  .tracker-tabs { gap: 0.25rem; }
+  .tracker-tab { font-size: 11px; padding: 0.22rem 0.5rem; }
+}

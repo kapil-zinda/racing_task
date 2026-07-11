@@ -1,4 +1,6 @@
 "use client";
+import "./content.css";
+
 import { apiFetch } from "../lib/auth";
 
 import { useEffect, useMemo, useRef, useState } from "react";

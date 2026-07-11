@@ -1,5 +1,19 @@
 import "./globals.css";
-import { Bebas_Neue, Manrope } from "next/font/google";
+import {
+  Bebas_Neue,
+  Manrope,
+  Inter,
+  Lexend,
+  Atkinson_Hyperlegible,
+  Source_Sans_3,
+  Plus_Jakarta_Sans,
+  DM_Sans,
+  Figtree,
+  Nunito_Sans,
+  Work_Sans,
+  IBM_Plex_Sans,
+  Lora,
+} from "next/font/google";
 import ClientLayout from "./components/ClientLayout";
 
 const bebas = Bebas_Neue({
@@ -9,12 +23,35 @@ const bebas = Bebas_Neue({
   variable: "--font-bebas",
 });
 
+// The default app font. The rest are user-selectable in Settings (data-font
+// on <html> → --app-font in globals.css). All are self-hosted by next/font;
+// only the selected family's files are actually downloaded, but the
+// non-default ones must not be preloaded (12 preload hints would defeat it).
 const manrope = Manrope({
   weight: ["400", "600", "700", "800"],
   subsets: ["latin"],
   display: "swap",
   variable: "--font-manrope",
 });
+
+/* next/font calls are compiled at build time, so every options object must be
+   an inline literal (no shared spread). */
+const inter = Inter({ subsets: ["latin"], display: "swap", preload: false, variable: "--font-inter" });
+const lexend = Lexend({ subsets: ["latin"], display: "swap", preload: false, variable: "--font-lexend" });
+const atkinson = Atkinson_Hyperlegible({ subsets: ["latin"], display: "swap", preload: false, weight: ["400", "700"], variable: "--font-atkinson" });
+const sourceSans = Source_Sans_3({ subsets: ["latin"], display: "swap", preload: false, variable: "--font-source-sans" });
+const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], display: "swap", preload: false, variable: "--font-jakarta" });
+const dmSans = DM_Sans({ subsets: ["latin"], display: "swap", preload: false, weight: ["400", "500", "700"], variable: "--font-dm-sans" });
+const figtree = Figtree({ subsets: ["latin"], display: "swap", preload: false, variable: "--font-figtree" });
+const nunito = Nunito_Sans({ subsets: ["latin"], display: "swap", preload: false, variable: "--font-nunito" });
+const workSans = Work_Sans({ subsets: ["latin"], display: "swap", preload: false, variable: "--font-work-sans" });
+const plex = IBM_Plex_Sans({ subsets: ["latin"], display: "swap", preload: false, weight: ["400", "500", "600", "700"], variable: "--font-plex" });
+const lora = Lora({ subsets: ["latin"], display: "swap", preload: false, variable: "--font-lora" });
+
+const FONT_VARS = [
+  bebas, manrope, inter, lexend, atkinson, sourceSans, jakarta,
+  dmSans, figtree, nunito, workSans, plex, lora,
+].map((f) => f.variable).join(" ");
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://dias.uchhal.in";
 
@@ -74,15 +111,21 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: "#0b0f1a",
+  themeColor: "#09090b",
   width: "device-width",
   initialScale: 1,
 };
 
+// Applies the stored appearance (mode + palette + font) before first paint so
+// a light-theme user never sees a dark flash (and vice versa). Dark Focus with
+// Manrope is the default and needs no attributes.
+const THEME_INIT = `(function(){try{var d=document.documentElement;if(localStorage.getItem("race_hub_theme")==="light")d.dataset.theme="light";var p=localStorage.getItem("race_hub_palette");if(p==="prime"||p==="midnight"||p==="academic")d.dataset.palette=p;var f=localStorage.getItem("race_hub_font");if(/^(inter|lexend|atkinson|source-sans|jakarta|dm-sans|figtree|nunito|work-sans|plex|lora)$/.test(f))d.dataset.font=f;}catch(e){}})();`;
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${bebas.variable} ${manrope.variable}`}>
+    <html lang="en" className={FONT_VARS} suppressHydrationWarning>
       <body>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
