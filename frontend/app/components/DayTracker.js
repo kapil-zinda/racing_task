@@ -157,16 +157,16 @@ function ClockPicker({ value, onChange, onClose }) {
         <div className="cp-clock-outer">
           <svg width={CLOCK_SIZE} height={CLOCK_SIZE} viewBox={`0 0 ${CLOCK_SIZE} ${CLOCK_SIZE}`}>
             {/* Dial */}
-            <circle cx={CX} cy={CY} r={CX - 6} fill="rgba(99,102,241,0.07)" stroke="rgba(129,140,248,0.18)" strokeWidth="1.5" />
+            <circle cx={CX} cy={CY} r={CX - 6} fill="rgba(var(--indigo-rgb), 0.07)" stroke="rgba(var(--indigo-rgb), 0.22)" strokeWidth="1.5" />
 
             {/* Hand + highlight circle */}
             <g style={{ transform: `rotate(${dispAngle}deg)`, transformOrigin: `${CX}px ${CY}px`, transition: "transform 0.22s cubic-bezier(0.22, 1, 0.36, 1)" }}>
-              <line x1={CX} y1={CY} x2={CX} y2={CY - R_HAND} stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" />
-              <circle cx={CX} cy={CY - R_HAND} r="18" fill="#6366f1" />
+              <line x1={CX} y1={CY} x2={CX} y2={CY - R_HAND} stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round" />
+              <circle cx={CX} cy={CY - R_HAND} r="18" fill="var(--primary)" />
             </g>
 
             {/* Center dot */}
-            <circle cx={CX} cy={CY} r="5" fill="#6366f1" />
+            <circle cx={CX} cy={CY} r="5" fill="var(--primary)" />
 
             {/* Numbers */}
             {items.map((num, i) => {
@@ -185,7 +185,7 @@ function ClockPicker({ value, onChange, onClose }) {
                     dominantBaseline="central"
                     fontSize="13"
                     fontWeight={isSelected ? "700" : "400"}
-                    fill={isSelected ? "#fff" : "var(--indigo-text)"}
+                    fill={isSelected ? "var(--on-accent)" : "var(--indigo-text)"}
                     style={{ userSelect: "none", pointerEvents: "none" }}
                   >
                     {step === "minute" ? String(num).padStart(2, "0") : num}
