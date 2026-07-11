@@ -86,7 +86,7 @@
 
 /* ── Answer-eval: intake upgrades ── */
 .ae-file-preview { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px; border: 1px solid var(--card-border); border-radius: 10px; background: rgba(var(--veil-rgb), 0.03); }
-.ae-file-thumb { width: 46px; height: 62px; object-fit: cover; border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.4); flex: none; }
+.ae-file-thumb { width: 46px; height: 62px; object-fit: cover; border-radius: 4px; background: #fff; box-shadow: var(--shadow-sm); flex: none; }
 .ae-file-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; color: var(--muted); }
 .ae-file-meta span:first-child { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
