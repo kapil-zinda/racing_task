@@ -33,7 +33,7 @@
 .kf-mark { background: rgba(255,214,0,0.35); color: var(--text-bright); border-radius: 2px; padding: 0 1px; }
 
 .kf-viewer { display: flex; flex-direction: column; border-radius: 14px; overflow: hidden;
-  border: 1px solid rgba(var(--veil-rgb), 0.1); background: rgba(0,0,0,0.25); min-height: 60vh; }
+  border: 1px solid rgba(var(--veil-rgb), 0.1); background: var(--sunken); min-height: 60vh; }
 .kf-viewer:fullscreen { background: var(--bg-1); }
 .kf-viewer-empty { display: flex; align-items: center; justify-content: center; height: 60vh; color: var(--muted); padding: 20px; text-align: center; }
 .kf-viewer-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px;
