@@ -205,6 +205,14 @@ def _mark_paid(order_id: str, payment_id: str, signature: str, *, user_id: str =
     paid_fields["credit_usd"] = credit_usd
     payments_collection().update_one({"order_id": order_id}, {"$set": paid_fields})
 
+    # Keep the cached wallet balance in step with the payments ledger. The
+    # already-paid short-circuit above makes this idempotent across the
+    # webhook + browser-return double fire.
+    if credit_usd:
+        from . import billing_domain
+
+        billing_domain.adjust_balance_cache(paid_fields.get("user_id") or existing.get("user_id", ""), credit_usd)
+
     return {"verified": True, "order_id": order_id, "payment_id": payment_id, "status": "paid"}
 
 

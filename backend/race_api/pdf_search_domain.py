@@ -413,6 +413,32 @@ def _extract_pdf_pages_from_textract(bucket: str, key: str, with_bbox: bool = Fa
     return pages
 
 
+def doc_url_payload(doc_id: str, user_id: str = "") -> Dict[str, Any]:
+    """Fresh presigned GET URL for an indexed document.
+
+    Presigned links expire after an hour, but they get persisted in places that
+    outlive them (QnA message sources, long-open tabs). Anything replaying a
+    stored source should re-resolve the link through this by ``doc_id`` instead
+    of trusting the embedded URL.
+    """
+    did = (doc_id or "").strip()
+    if not did:
+        raise ValueError("doc_id is required")
+    doc = pdf_docs_collection().find_one({"doc_id": did})
+    uid = (user_id or "").strip()
+    if not doc or (uid and str(doc.get("user_id", "") or "").strip() not in ("", uid)):
+        raise LookupError("PDF document not found")
+    key = doc.get("key") or ""
+    if not key:
+        raise LookupError("PDF document has no stored file")
+    url = s3_client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": doc.get("bucket") or _pdf_bucket(), "Key": key},
+        ExpiresIn=3600,
+    )
+    return {"doc_id": did, "url": url, "file_name": doc.get("file_name", "")}
+
+
 def index_pdf_document(payload) -> Dict[str, Any]:
     _ensure_pdf_indexes()
     doc_id = (payload.doc_id or "").strip()

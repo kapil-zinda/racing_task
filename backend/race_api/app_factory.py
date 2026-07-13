@@ -117,6 +117,7 @@ from .agent_v2_chat_domain import (
 )
 from .pdf_search_domain import (
     create_pdf_presigned_upload,
+    doc_url_payload,
     index_pdf_document,
     search_pdf,
 )
@@ -585,6 +586,13 @@ def create_app() -> FastAPI:
             return search_pdf(q, limit, course, user_id=_require_auth(request), track_search=True)
         except Exception as err:  # noqa: BLE001
             _raise_as_http(err, "GET /pdf-search/query")
+
+    @app.get("/pdf-search/doc-url")
+    def pdf_doc_url(request: Request, doc_id: str = Query(...)):
+        try:
+            return doc_url_payload(doc_id, user_id=_require_auth(request))
+        except Exception as err:  # noqa: BLE001
+            _raise_as_http(err, "GET /pdf-search/doc-url")
 
     @app.get("/qna/sessions")
     def qna_list_sessions(request: Request):

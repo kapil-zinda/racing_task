@@ -121,8 +121,62 @@ def spent_breakdown(user_id: str) -> Dict[str, float]:
     return out
 
 
+_BALANCE_FIELD = "credit_balance_usd"
+
+
 def balance_usd(user_id: str) -> float:
-    return round(added_usd(user_id) - spent_usd(user_id), 4)
+    """Current credit, read from the cached balance on the user's usage doc.
+
+    The ledger (payments + credit_ledger) stays the source of truth; the cache
+    is adjusted atomically on every charge/credit and lazily rebuilt from the
+    ledger when missing (first read for a user, or after a cache failure).
+    """
+    uid = _uid(user_id)
+    if not uid:
+        return 0.0
+    try:
+        doc = user_usage_collection().find_one({"_id": uid}, {_BALANCE_FIELD: 1}) or {}
+        cached = doc.get(_BALANCE_FIELD)
+        if cached is not None:
+            return round(float(cached), 4)
+    except Exception:
+        logger.exception("balance cache read failed for %s", uid)
+    return _rebuild_balance_cache(uid)
+
+
+def _rebuild_balance_cache(uid: str) -> float:
+    """Recompute the balance from the ledger and stamp it on the usage doc."""
+    bal = round(added_usd(uid) - spent_usd(uid), 4)
+    try:
+        user_usage_collection().update_one({"_id": uid}, {"$set": {_BALANCE_FIELD: bal}}, upsert=True)
+    except Exception:
+        logger.exception("balance cache rebuild write failed for %s", uid)
+    return bal
+
+
+def adjust_balance_cache(user_id: str, delta_usd: float) -> None:
+    """Atomically move the cached balance after a ledger write (+credit / −charge).
+
+    Only $inc-es an existing cache; if the field isn't there yet the rebuild
+    recomputes from the ledger, which already contains this entry.
+    """
+    uid = _uid(user_id)
+    if not uid or not delta_usd:
+        return
+    try:
+        res = user_usage_collection().update_one(
+            {"_id": uid, _BALANCE_FIELD: {"$exists": True}},
+            {"$inc": {_BALANCE_FIELD: round(float(delta_usd), 6)}},
+        )
+        if not res.matched_count:
+            _rebuild_balance_cache(uid)
+    except Exception:
+        # Ledger already holds the truth — drop the cache so the next read rebuilds.
+        logger.exception("balance cache adjust failed for %s; invalidating", uid)
+        try:
+            user_usage_collection().update_one({"_id": uid}, {"$unset": {_BALANCE_FIELD: ""}})
+        except Exception:
+            logger.exception("balance cache invalidation failed for %s", uid)
 
 
 # ----------------------------------------------------------------------------- free tier
@@ -162,6 +216,9 @@ def _record(user_id: str, entry_type: str, kind: str, usd: float, meta: Optional
         })
     except Exception:
         logger.exception("credit ledger record failed (%s/%s)", entry_type, kind)
+        return
+    if entry_type == "charge" and usd > 0:
+        adjust_balance_cache(user_id, -float(usd))
 
 
 def _record_failed(user_id: str, kind: str, meta: Optional[Dict[str, Any]], error: Exception) -> None:
@@ -295,6 +352,15 @@ def summary_payload(user_id: str) -> Dict[str, Any]:
     breakdown = spent_breakdown(uid)
     spent = round(sum(breakdown.values()), 4)
     used = _free_used(uid)
+
+    # This is the one place that still sums the full ledger, so use it as a
+    # reconciliation point: re-stamp the cached balance with ledger truth.
+    try:
+        user_usage_collection().update_one(
+            {"_id": uid}, {"$set": {_BALANCE_FIELD: round(added - spent, 4)}}, upsert=True
+        )
+    except Exception:
+        logger.exception("balance cache reconcile failed for %s", uid)
 
     def free_block(kind: str) -> Dict[str, int]:
         limit = _free_limit(kind)

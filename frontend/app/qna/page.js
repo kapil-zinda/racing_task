@@ -250,9 +250,24 @@ export default function QnaPage() {
     setSourcesOpenByMessage((prev) => ({ ...prev, [messageId]: !prev[messageId] }));
   };
 
-  const openSourcePopup = (source) => {
+  const openSourcePopup = async (source) => {
     if (!source) return;
-    setSourcePopup({ open: true, source });
+    // Stored sources carry the presigned URL minted when the answer was
+    // written — dead within an hour. Re-resolve a fresh link by doc_id so
+    // citations in old history still open; fall back to the stored URL.
+    let fresh = source;
+    if (source.doc_id) {
+      try {
+        const res = await apiFetch(`${API_BASE_URL}/pdf-search/doc-url?doc_id=${encodeURIComponent(source.doc_id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.url) fresh = { ...source, source_url: data.url, pdf_url: data.url };
+        }
+      } catch (_) {
+        /* stored URL is the best we have */
+      }
+    }
+    setSourcePopup({ open: true, source: fresh });
   };
 
   const closeSourcePopup = () => {
