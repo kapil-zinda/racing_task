@@ -295,8 +295,6 @@ export default function HomePage() {
         <DayTracker onDateChange={setTodayDate} />
       </section>
 
-      <OnboardingChecklist />
-
       <section className={`player-card extras-card ${styles.extrasCard}`}>
         <button
           className={styles.extrasToggle}
@@ -376,6 +374,8 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <OnboardingChecklist />
 
       <DayReport open={reportOpen} onClose={() => setReportOpen(false)} />
 

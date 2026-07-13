@@ -13,7 +13,7 @@ import {
   Timer, Disc, MoreHorizontal, Plus, Minus, Circle as Dot, Loader2, Layers,
   CalendarDays, ClipboardList, Paperclip, StickyNote, CreditCard,
   Eye, EyeOff, Wallet, Zap, MicOff, PhoneOff, Copy, ImageOff, Languages,
-  Keyboard, HelpCircle, Settings, Sun, Moon,
+  Keyboard, HelpCircle, Settings, Sun, Moon, Users,
 } from "lucide-react";
 
 const MAP = {
@@ -93,6 +93,7 @@ const MAP = {
   food: Salad,
   puzzle: Puzzle,
   user: User,
+  users: Users,
   tree: TreePine,
   more: MoreHorizontal,
   plus: Plus,

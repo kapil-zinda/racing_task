@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { apiFetch } from "../lib/auth";
 import TrackerSummary from "./TrackerSummary";
+import GroupsPanel from "./GroupsPanel";
+import LeaderboardPanel from "./LeaderboardPanel";
 import Icon from "./Icon";
 import { confirmDialog } from "../lib/dialog";
 import { friendlyApiError } from "../lib/errors";
@@ -247,6 +249,9 @@ export default function DayTracker({ onDateChange }) {
   const [catOpen, setCatOpen]       = useState(false);
   const [newCat, setNewCat]         = useState({ name: "", color: "#6366f1" });
   const [catSaving, setCatSaving]   = useState(false);
+  // Set when the add-modal was opened from a category row: the category is fixed
+  // and the entry is a private manual backfill (not visible to others).
+  const [lockedCat, setLockedCat]   = useState("");
 
   const loadedCatsRef = useRef(false);
 
@@ -287,15 +292,36 @@ export default function DayTracker({ onDateChange }) {
 
   const openAdd = () => {
     setOverlapWarn("");
+    setLockedCat("");
     setForm({ ...EMPTY_FORM, date, category: categories[0]?.name || "Study" });
     setModal({ open: true, mode: "add", id: null });
   };
   const openEdit = (act) => {
     setOverlapWarn("");
+    setLockedCat("");
     setForm({ title: act.title || "", start_time: act.start_time || "", end_time: act.end_time || "", category: act.category || (categories[0]?.name || "Study"), note: act.note || "", date: act.date || date });
     setModal({ open: true, mode: "edit", id: act.id });
   };
-  const closeModal = () => { setModal({ open: false, mode: "add", id: null }); setForm(EMPTY_FORM); setOverlapWarn(""); };
+  // Manual backfill for one category — the modal locks the category and flags
+  // the entry as private (manual time never feeds groups/leaderboard).
+  const openAddTime = (name) => {
+    setOverlapWarn("");
+    setLockedCat(name);
+    setForm({ ...EMPTY_FORM, date, category: name });
+    setModal({ open: true, mode: "add", id: null });
+  };
+  // The play button deliberately does NOT start a timer on the web — live
+  // recording lives in the mobile/desktop app; here we offer the manual path.
+  const startFromCategory = async (name) => {
+    const ok = await confirmDialog({
+      title: "Recording is app-only",
+      message: "The live study timer and recording are available on the mobile/desktop app only. Here you can add time manually — manually added time is not visible to others.",
+      confirmLabel: "Add time manually",
+      cancelLabel: "Close",
+    });
+    if (ok) openAddTime(name);
+  };
+  const closeModal = () => { setModal({ open: false, mode: "add", id: null }); setForm(EMPTY_FORM); setOverlapWarn(""); setLockedCat(""); };
 
   const saveActivity = async () => {
     if (!form.title.trim() || saving) return;
@@ -356,6 +382,8 @@ export default function DayTracker({ onDateChange }) {
         <div className="dt-tabs">
           <button className={`dt-tab${view === "log" ? " active" : ""}`} onClick={() => setView("log")}>Day Log</button>
           <button className={`dt-tab${view === "summary" ? " active" : ""}`} onClick={() => setView("summary")}>Summary</button>
+          <button className={`dt-tab${view === "groups" ? " active" : ""}`} onClick={() => setView("groups")}>Groups</button>
+          <button className={`dt-tab${view === "leaderboard" ? " active" : ""}`} onClick={() => setView("leaderboard")}>Leaderboard</button>
         </div>
         {view === "log" && (
           <div className="dt-log-controls">
@@ -374,8 +402,61 @@ export default function DayTracker({ onDateChange }) {
 
       {view === "summary" ? (
         <TrackerSummary categories={categories} />
+      ) : view === "groups" ? (
+        <GroupsPanel />
+      ) : view === "leaderboard" ? (
+        <LeaderboardPanel />
       ) : (
         <>
+      {/* Category launcher — like the app's Timer tab, but the web never starts a
+          timer: the play button explains and offers a private manual backfill. */}
+      <div className="dt-launch">
+        <div className="dt-launch-head"><Icon name="timer" size={15} /> Study timer</div>
+        {categories.length === 0 ? (
+          <p className="dt-empty">No categories yet — add one under Categories below.</p>
+        ) : categories.map((cat) => (
+          <div className="dt-launch-row" key={cat.name}>
+            <button className="dt-launch-main" onClick={() => startFromCategory(cat.name)} title="Recording is available on the mobile/desktop app">
+              <span className="dt-launch-play" style={{ background: cat.color }}><Icon name="play" size={13} /></span>
+              <span className="dt-launch-name">{cat.name}</span>
+            </button>
+            <span className="dt-launch-total">{fmtMins(catTotals[cat.name] || 0)}</span>
+            <button className="dt-today-btn" onClick={() => openAddTime(cat.name)}>+ Add time</button>
+          </div>
+        ))}
+        <p className="dt-launch-hint">Live recording runs on the mobile/desktop app. Time added here is manual and not visible to others.</p>
+      </div>
+
+      {/* Bar chart */}
+      {catEntries.length > 0 && (
+        <div className="dt-chart-wrap">
+          <div className="dt-chart-label">Time by Category</div>
+          <Plot
+            data={[{
+              type: "bar", orientation: "h",
+              x: catEntries.map(([, v]) => v),
+              y: catEntries.map(([k]) => k),
+              text: catEntries.map(([, v]) => fmtMins(v)),
+              textposition: "outside",
+              textfont: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
+              marker: { color: catEntries.map(([k]) => catColor(k)) },
+              hovertemplate: "%{y}: %{text}<extra></extra>",
+            }]}
+            layout={{
+              plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)",
+              font: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
+              margin: { l: 90, r: 60, t: 8, b: 30 },
+              xaxis: { tickfont: { color: cssVar("--indigo-text", "#818cf8"), size: 10 }, gridcolor: "rgba(99,102,241,0.12)", showline: false, zeroline: false, ticksuffix: "m" },
+              yaxis: { tickfont: { color: cssVar("--indigo-text", "#a5b4fc"), size: 11 }, showgrid: false, automargin: true },
+              showlegend: false, autosize: true, bargap: 0.35,
+            }}
+            config={{ responsive: true, displayModeBar: false }}
+            style={{ width: "100%", height: `${Math.max(120, catEntries.length * 44 + 50)}px` }}
+            useResizeHandler
+          />
+        </div>
+      )}
+
       {/* Summary */}
       <div className="dt-summary">
         <div className="dt-stat">
@@ -417,36 +498,6 @@ export default function DayTracker({ onDateChange }) {
           ))}
       </div>
 
-      {/* Bar chart */}
-      {catEntries.length > 0 && (
-        <div className="dt-chart-wrap">
-          <div className="dt-chart-label">Time by Category</div>
-          <Plot
-            data={[{
-              type: "bar", orientation: "h",
-              x: catEntries.map(([, v]) => v),
-              y: catEntries.map(([k]) => k),
-              text: catEntries.map(([, v]) => fmtMins(v)),
-              textposition: "outside",
-              textfont: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
-              marker: { color: catEntries.map(([k]) => catColor(k)) },
-              hovertemplate: "%{y}: %{text}<extra></extra>",
-            }]}
-            layout={{
-              plot_bgcolor: "rgba(0,0,0,0)", paper_bgcolor: "rgba(0,0,0,0)",
-              font: { color: cssVar("--indigo-soft", "#c7d2fe"), size: 11 },
-              margin: { l: 90, r: 60, t: 8, b: 30 },
-              xaxis: { tickfont: { color: cssVar("--indigo-text", "#818cf8"), size: 10 }, gridcolor: "rgba(99,102,241,0.12)", showline: false, zeroline: false, ticksuffix: "m" },
-              yaxis: { tickfont: { color: cssVar("--indigo-text", "#a5b4fc"), size: 11 }, showgrid: false, automargin: true },
-              showlegend: false, autosize: true, bargap: 0.35,
-            }}
-            config={{ responsive: true, displayModeBar: false }}
-            style={{ width: "100%", height: `${Math.max(120, catEntries.length * 44 + 50)}px` }}
-            useResizeHandler
-          />
-        </div>
-      )}
-
       {/* Categories */}
       <div className="dt-cat-section">
         <button className="dt-cat-toggle" onClick={() => setCatOpen((v) => !v)}>
@@ -481,14 +532,21 @@ export default function DayTracker({ onDateChange }) {
       {modal.open && (
         <div className="task-modal-overlay" role="dialog" aria-modal="true">
           <div className="task-modal dt-modal">
-            <h3>{modal.mode === "edit" ? "Edit Activity" : "Log Activity"}</h3>
+            <h3>{modal.mode === "edit" ? "Edit Activity" : lockedCat ? `Add time · ${lockedCat}` : "Log Activity"}</h3>
+            {lockedCat ? <p className="dt-private-note">This time will not be visible to others.</p> : null}
             <div className="session-form-grid">
               <input className="task-select" placeholder="Title (e.g. Morning run)" value={form.title} autoFocus
                 onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
-              <select className="task-select" value={form.category}
-                onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}>
-                {categories.map((cat) => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
-              </select>
+              {lockedCat ? (
+                <span className="dt-locked-cat" style={{ borderColor: catColor(lockedCat), color: catColor(lockedCat), background: catColor(lockedCat) + "1c" }}>
+                  <span className="dt-cat-dot" style={{ background: catColor(lockedCat) }} />{lockedCat}
+                </span>
+              ) : (
+                <select className="task-select" value={form.category}
+                  onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}>
+                  {categories.map((cat) => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+                </select>
+              )}
               <input type="date" className="task-select" value={form.date || date}
                 onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))} />
             </div>

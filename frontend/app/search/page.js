@@ -76,6 +76,7 @@ export default function PdfSearchPage() {
       if (!res.ok) throw new Error(`Search failed: ${res.status} ${await res.text()}`);
       const data = await res.json();
       const rows = data.results || [];
+      resultsMintedAt.current = Date.now();
       setResults(rows);
       setSearched(true);
       refreshCredits();
@@ -87,6 +88,28 @@ export default function PdfSearchPage() {
     } finally {
       setSearching(false);
     }
+  };
+
+  // Result URLs are presigned for 1 hour; if this tab sat idle past that,
+  // clicking a hit re-resolves a fresh link by doc_id instead of 403ing.
+  const resultsMintedAt = useRef(0);
+  const URL_FRESH_MS = 45 * 60 * 1000;
+
+  const selectHit = async (row) => {
+    if (!row?.doc_id || Date.now() - resultsMintedAt.current < URL_FRESH_MS) {
+      setSelected(row);
+      return;
+    }
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/pdf-search/doc-url?doc_id=${encodeURIComponent(row.doc_id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.url) { setSelected({ ...row, pdf_url: data.url }); return; }
+      }
+    } catch (_) {
+      /* fall through to the stored URL */
+    }
+    setSelected(row);
   };
 
   const pdfCount = useMemo(() => new Set(results.map((r) => r.doc_id)).size, [results]);
@@ -181,7 +204,7 @@ export default function PdfSearchPage() {
                 <button
                   key={`${row.doc_id}-${row.page_number}-${idx}`}
                   className={`kf-hit ${sameHit(selected, row) ? "active" : ""}`}
-                  onClick={() => setSelected(row)}
+                  onClick={() => selectHit(row)}
                 >
                   <div className="kf-hit-head">
                     <span className="kf-hit-file">{row.file_name || "PDF"}</span>

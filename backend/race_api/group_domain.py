@@ -174,7 +174,9 @@ def get_group(user_id: str, group_id: str) -> Dict[str, Any]:
     group = study_groups_collection().find_one({"_id": group_id})
     if not group:
         raise LookupError("Group not found")
-    members = list(study_group_members_collection().find({"group_id": group_id}))
+    # Membership docs carry a Mongo ObjectId _id (unlike group docs' string ids),
+    # which FastAPI can't JSON-encode — project it out.
+    members = list(study_group_members_collection().find({"group_id": group_id}, {"_id": 0}))
     for m in members:
         m["name"] = _user_name(m["user_id"])
     return {"group": group, "members": members}
