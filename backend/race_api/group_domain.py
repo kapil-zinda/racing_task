@@ -17,6 +17,7 @@ from .context import (
     study_groups_collection,
     users_collection,
 )
+from .live_session_domain import completed_pomodoros_for_users
 
 RECENT_WINDOW_SECONDS = 3600  # "stopped studying in the last hour" — off icon + clock
 
@@ -192,6 +193,7 @@ def get_group_live_status(user_id: str, group_id: str) -> Dict[str, Any]:
         raise LookupError("Group not found")
     members = list(study_group_members_collection().find({"group_id": group_id}))
     member_ids = [m["user_id"] for m in members]
+    pomodoros_by_user = completed_pomodoros_for_users(member_ids)
     if not member_ids:
         return {"members": []}
 
@@ -233,6 +235,7 @@ def get_group_live_status(user_id: str, group_id: str) -> Dict[str, Any]:
                 "category": agg["category"],
                 "status": status,
                 "today_seconds": agg["today_seconds"],
+                "completed_pomodoros": pomodoros_by_user.get(uid, 0),
                 "last_active_at": agg["last_at"] or None,
             }
         )
