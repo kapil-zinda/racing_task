@@ -17,6 +17,12 @@ from .context import (
 
 _ACTIVE_STATUSES = {"running", "paused"}
 
+# One "completed sand timer" = this many seconds of tracked focus time. A session
+# contributes floor(elapsed_seconds / POMODORO_SECONDS) completed timers, so the
+# cumulative count is derived straight from recorded live time (retroactive,
+# tamper-consistent, and correct offline once heartbeats sync).
+POMODORO_SECONDS = 25 * 60
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -177,6 +183,51 @@ def get_active_live_session(user_id: str) -> Dict[str, Any]:
     reap_stale_live_sessions(uid)
     doc = live_study_sessions_collection().find_one({"user_id": uid, "status": {"$in": list(_ACTIVE_STATUSES)}})
     return {"session": doc}
+
+
+def completed_pomodoros_for_users(user_ids: List[str]) -> Dict[str, int]:
+    """Map of user_id -> total completed sand timers (floor(elapsed/25min) summed
+    per session) across all of their sessions, in a single aggregation so a group
+    view can badge every member without scanning history per row."""
+    ids = [u for u in {(uid or "").strip() for uid in user_ids} if u]
+    if not ids:
+        return {}
+    pipeline = [
+        {"$match": {"user_id": {"$in": ids}}},
+        {
+            "$group": {
+                "_id": "$user_id",
+                "pomodoros": {
+                    "$sum": {"$floor": {"$divide": [{"$ifNull": ["$elapsed_seconds", 0]}, POMODORO_SECONDS]}}
+                },
+            }
+        },
+    ]
+    out: Dict[str, int] = {}
+    for row in live_study_sessions_collection().aggregate(pipeline):
+        out[row["_id"]] = max(0, int(row.get("pomodoros", 0)))
+    return out
+
+
+def completed_pomodoros_for_user(user_id: str) -> int:
+    uid = _uid(user_id)
+    return completed_pomodoros_for_users([uid]).get(uid, 0)
+
+
+def get_live_stats(user_id: str) -> Dict[str, Any]:
+    """Lightweight per-user totals for the Home badge: lifetime completed sand
+    timers plus today's tracked seconds/timers."""
+    uid = _uid(user_id)
+    today = current_date_str()
+    today_seconds = 0
+    for d in live_study_sessions_collection().find({"user_id": uid, "date": today}):
+        today_seconds += max(0, int(d.get("elapsed_seconds", 0)))
+    return {
+        "completed_pomodoros": completed_pomodoros_for_user(uid),
+        "today_seconds": today_seconds,
+        "today_pomodoros": today_seconds // POMODORO_SECONDS,
+        "pomodoro_seconds": POMODORO_SECONDS,
+    }
 
 
 def reap_stale_live_sessions(user_id: Optional[str] = None) -> Dict[str, Any]:
