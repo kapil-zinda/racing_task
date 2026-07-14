@@ -1,0 +1,49 @@
+/* Structural overrides on top of the BlockNote Theme object (NoterEditor.js
+   builds that from our design tokens). This file covers what the Theme
+   object's fixed color-role shape can't reach: placeholder text, links,
+   code blocks, table borders, and content measure. */
+
+.noter-blocknote .bn-editor {
+  padding: 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.noter-blocknote .bn-default-styles {
+  font-family: var(--app-font, var(--font-manrope));
+}
+
+/* DESIGN.md requires placeholder text at the same 4.5:1 floor as body text;
+   BlockNote's own default is a low-opacity black that fails on dark cards. */
+.noter-blocknote [data-is-empty-and-focused]::before {
+  color: var(--muted) !important;
+  opacity: 1 !important;
+}
+
+.noter-blocknote .bn-inline-content a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.noter-blocknote [data-content-type="table"] th,
+.noter-blocknote [data-content-type="table"] td {
+  border-color: var(--card-border);
+}
+
+.noter-blocknote [data-content-type="table"] th {
+  background: var(--sunken);
+}
+
+.noter-blocknote [data-content-type="codeBlock"] pre {
+  background: var(--sunken);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+}
+
+.noter-blocknote ::selection {
+  background: var(--primary-soft);
+}
+
+/* Editor top-level menus/popovers already float above app chrome via
+   Mantine's own z-index scale (300+), well past our --z-dialog (140). */
