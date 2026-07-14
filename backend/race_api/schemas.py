@@ -513,6 +513,69 @@ class MindmapUpsertRequest(BaseModel):
     tree: Optional[dict] = None
 
 
+# --- Noter (Notion-style docs) ---
+
+class NoterCreateRequest(BaseModel):
+    title: str = ""
+    content: Optional[List[dict]] = None
+    parent_id: str = ""
+
+
+class NoterSaveRequest(BaseModel):
+    title: str = ""
+    content: Optional[List[dict]] = None
+    snapshot: bool = False  # force a version snapshot with this save
+
+
+class NoterRestoreRequest(BaseModel):
+    version_id: str
+
+
+class NoterAssetPresignRequest(BaseModel):
+    filename: str = "file"
+    content_type: str = ""
+
+
+class NoterAssetResolveRequest(BaseModel):
+    key: str
+
+
+# --- Noter directory (folders) ---
+
+class NoterFolderCreateRequest(BaseModel):
+    parent_id: str = ""
+    name: str
+
+
+class NoterItemRenameRequest(BaseModel):
+    id: str
+    item_type: str  # "doc" | "folder"
+    name: str
+
+
+class NoterItemMoveRequest(BaseModel):
+    id: str
+    item_type: str
+    destination_folder_id: str = ""
+
+
+class NoterItemCopyRequest(BaseModel):
+    id: str
+    item_type: str
+    destination_folder_id: str = ""
+
+
+class NoterItemDuplicateRequest(BaseModel):
+    id: str
+    item_type: str
+
+
+class NoterItemDeleteRequest(BaseModel):
+    id: str
+    item_type: str
+    recursive: bool = False
+
+
 # --- Razorpay payments ---
 
 class CreateOrderRequest(BaseModel):
