@@ -15,6 +15,7 @@ const GO_MAP = {
   a: "/analytics",
   r: "/recorder",
   m: "/mindmap",
+  n: "/noter",
   c: "/content",
   s: "/search",
   u: "/usage",

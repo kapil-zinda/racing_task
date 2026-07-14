@@ -118,6 +118,13 @@ def settings() -> Dict[str, Any]:
         "mongodb_activity_categories_collection": os.getenv("MONGODB_ACTIVITY_CATEGORIES_COLLECTION", "activity_categories"),
         "mongodb_extra_categories_collection": os.getenv("MONGODB_EXTRA_CATEGORIES_COLLECTION", "extra_categories"),
         "mongodb_mindmaps_collection": os.getenv("MONGODB_MINDMAPS_COLLECTION", "mindmaps"),
+        # Noter — Notion-style docs. Metadata lives in Mongo; doc content, assets and
+        # the whole version history live in S3 under NOTER_PREFIX (content bucket).
+        "mongodb_noter_docs_collection": os.getenv("MONGODB_NOTER_DOCS_COLLECTION", "noter_docs"),
+        "mongodb_noter_folders_collection": os.getenv("MONGODB_NOTER_FOLDERS_COLLECTION", "noter_folders"),
+        "noter_prefix": os.getenv("NOTER_PREFIX", "noter"),
+        "noter_version_interval_seconds": int(os.getenv("NOTER_VERSION_INTERVAL_SECONDS", "600")),
+        "noter_version_keep": int(os.getenv("NOTER_VERSION_KEEP", "100")),
         # Live study timer + groups + leaderboard (YeolPumTa-inspired).
         "mongodb_live_study_sessions_collection": os.getenv(
             "MONGODB_LIVE_STUDY_SESSIONS_COLLECTION", "live_study_sessions"
@@ -334,6 +341,16 @@ def extra_categories_collection():
 def mindmaps_collection():
     cfg = settings()
     return _mongo()[cfg["mongodb_db"]][cfg["mongodb_mindmaps_collection"]]
+
+
+def noter_docs_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_noter_docs_collection"]]
+
+
+def noter_folders_collection():
+    cfg = settings()
+    return _mongo()[cfg["mongodb_db"]][cfg["mongodb_noter_folders_collection"]]
 
 
 def live_study_sessions_collection():

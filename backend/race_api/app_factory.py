@@ -66,6 +66,7 @@ from .live_session_domain import (
     get_active_live_session,
     get_day_full,
     get_day_full_summary,
+    get_live_stats,
     get_member_day_focus,
     get_member_month_overview,
     heartbeat_live_session,
@@ -178,6 +179,27 @@ from .mindmap_domain import (
     list_mindmaps,
     update_mindmap,
 )
+from .noter_domain import (
+    copy_item_payload as noter_copy_item,
+    create_doc_payload as noter_create_doc,
+    create_folder_payload as noter_create_folder,
+    delete_doc_payload as noter_delete_doc,
+    delete_item_payload as noter_delete_item,
+    duplicate_item_payload as noter_duplicate_item,
+    get_doc_payload as noter_get_doc,
+    get_version_payload as noter_get_version,
+    list_directory_payload as noter_list_items,
+    list_docs_payload as noter_list_docs,
+    list_folder_tree_payload as noter_folder_tree,
+    list_versions_payload as noter_list_versions,
+    move_item_payload as noter_move_item,
+    presign_asset_upload_payload as noter_presign_asset,
+    rename_item_payload as noter_rename_item,
+    resolve_asset_url_payload as noter_resolve_asset,
+    restore_version_payload as noter_restore_version,
+    save_doc_payload as noter_save_doc,
+    snapshot_doc_payload as noter_snapshot_doc,
+)
 from .payment_domain import create_order_payload, verify_payment_payload, verify_webhook_payload, credit_balance_payload
 from .plans_domain import list_plans_payload, current_subscription_payload, create_plan_order_payload
 from .contact_domain import send_contact_message
@@ -193,6 +215,17 @@ from .schemas import (
     GroupJoinRequest,
     GroupJoinByCodeRequest,
     MindmapUpsertRequest,
+    NoterAssetPresignRequest,
+    NoterAssetResolveRequest,
+    NoterCreateRequest,
+    NoterFolderCreateRequest,
+    NoterItemCopyRequest,
+    NoterItemDeleteRequest,
+    NoterItemDuplicateRequest,
+    NoterItemMoveRequest,
+    NoterItemRenameRequest,
+    NoterRestoreRequest,
+    NoterSaveRequest,
     AddPointsRequest,
     DeletePointsEventRequest,
     ContentCreateFolderRequest,
@@ -1589,6 +1622,13 @@ def create_app() -> FastAPI:
         except Exception as err:
             _raise_as_http(err, "GET /live/active")
 
+    @app.get("/live/stats")
+    def live_stats(request: Request):
+        try:
+            return get_live_stats(_req_user_id(request))
+        except Exception as err:
+            _raise_as_http(err, "GET /live/stats")
+
     @app.post("/live/{session_id}/heartbeat")
     def live_heartbeat(session_id: str, request: Request, payload: LiveSessionHeartbeatRequest):
         try:
@@ -1764,6 +1804,153 @@ def create_app() -> FastAPI:
             return delete_mindmap(_req_user_id(request), map_id)
         except Exception as err:
             _raise_as_http(err, "DELETE /mindmaps/{id}")
+
+    # --- Noter (Notion-style docs; content + version history on S3) ---
+
+    @app.get("/noter/docs")
+    def noter_docs_list(
+        request: Request,
+        limit: int = Query(default=100),
+        offset: int = Query(default=0),
+    ):
+        try:
+            return noter_list_docs(_req_user_id(request), limit, offset)
+        except Exception as err:
+            _raise_as_http(err, "GET /noter/docs")
+
+    @app.post("/noter/docs")
+    def noter_docs_create(request: Request, payload: NoterCreateRequest):
+        try:
+            return noter_create_doc(_req_user_id(request), payload.model_dump())
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/docs")
+
+    @app.get("/noter/docs/{doc_id}")
+    def noter_docs_get(doc_id: str, request: Request):
+        try:
+            return noter_get_doc(_req_user_id(request), doc_id)
+        except Exception as err:
+            _raise_as_http(err, "GET /noter/docs/{id}")
+
+    @app.put("/noter/docs/{doc_id}")
+    def noter_docs_save(doc_id: str, request: Request, payload: NoterSaveRequest):
+        try:
+            return noter_save_doc(_req_user_id(request), doc_id, payload.model_dump())
+        except Exception as err:
+            _raise_as_http(err, "PUT /noter/docs/{id}")
+
+    @app.delete("/noter/docs/{doc_id}")
+    def noter_docs_delete(doc_id: str, request: Request):
+        try:
+            return noter_delete_doc(_req_user_id(request), doc_id)
+        except Exception as err:
+            _raise_as_http(err, "DELETE /noter/docs/{id}")
+
+    @app.get("/noter/docs/{doc_id}/versions")
+    def noter_versions_list(doc_id: str, request: Request):
+        try:
+            return noter_list_versions(_req_user_id(request), doc_id)
+        except Exception as err:
+            _raise_as_http(err, "GET /noter/docs/{id}/versions")
+
+    @app.post("/noter/docs/{doc_id}/versions")
+    def noter_versions_snapshot(doc_id: str, request: Request):
+        try:
+            return noter_snapshot_doc(_req_user_id(request), doc_id)
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/docs/{id}/versions")
+
+    @app.get("/noter/docs/{doc_id}/versions/{version_id}")
+    def noter_versions_get(doc_id: str, version_id: str, request: Request):
+        try:
+            return noter_get_version(_req_user_id(request), doc_id, version_id)
+        except Exception as err:
+            _raise_as_http(err, "GET /noter/docs/{id}/versions/{vid}")
+
+    @app.post("/noter/docs/{doc_id}/restore")
+    def noter_versions_restore(doc_id: str, request: Request, payload: NoterRestoreRequest):
+        try:
+            return noter_restore_version(_req_user_id(request), doc_id, payload.version_id)
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/docs/{id}/restore")
+
+    @app.post("/noter/docs/{doc_id}/assets/presign")
+    def noter_assets_presign(doc_id: str, request: Request, payload: NoterAssetPresignRequest):
+        try:
+            return noter_presign_asset(_req_user_id(request), doc_id, payload.model_dump())
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/docs/{id}/assets/presign")
+
+    @app.post("/noter/assets/resolve")
+    def noter_assets_resolve(request: Request, payload: NoterAssetResolveRequest):
+        try:
+            return noter_resolve_asset(_req_user_id(request), payload.key)
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/assets/resolve")
+
+    # --- Noter directory (folders: create, list, rename, move, copy, duplicate, delete) ---
+
+    @app.get("/noter/folders/tree")
+    def noter_folders_tree(request: Request):
+        try:
+            return noter_folder_tree(_req_user_id(request))
+        except Exception as err:
+            _raise_as_http(err, "GET /noter/folders/tree")
+
+    @app.post("/noter/folders")
+    def noter_folders_create(request: Request, payload: NoterFolderCreateRequest):
+        try:
+            return noter_create_folder(_req_user_id(request), payload.parent_id, payload.name)
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/folders")
+
+    @app.get("/noter/items")
+    def noter_items_list(
+        request: Request,
+        folder_id: str = Query(default=""),
+        q: str = Query(default=""),
+        sort_by: str = Query(default="name"),
+        sort_dir: str = Query(default="asc"),
+    ):
+        try:
+            return noter_list_items(_req_user_id(request), folder_id, q, sort_by, sort_dir)
+        except Exception as err:
+            _raise_as_http(err, "GET /noter/items")
+
+    @app.post("/noter/items/rename")
+    def noter_items_rename(request: Request, payload: NoterItemRenameRequest):
+        try:
+            return noter_rename_item(_req_user_id(request), payload.id, payload.item_type, payload.name)
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/items/rename")
+
+    @app.post("/noter/items/move")
+    def noter_items_move(request: Request, payload: NoterItemMoveRequest):
+        try:
+            return noter_move_item(_req_user_id(request), payload.id, payload.item_type, payload.destination_folder_id)
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/items/move")
+
+    @app.post("/noter/items/copy")
+    def noter_items_copy(request: Request, payload: NoterItemCopyRequest):
+        try:
+            return noter_copy_item(_req_user_id(request), payload.id, payload.item_type, payload.destination_folder_id)
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/items/copy")
+
+    @app.post("/noter/items/duplicate")
+    def noter_items_duplicate(request: Request, payload: NoterItemDuplicateRequest):
+        try:
+            return noter_duplicate_item(_req_user_id(request), payload.id, payload.item_type)
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/items/duplicate")
+
+    @app.post("/noter/items/delete")
+    def noter_items_delete(request: Request, payload: NoterItemDeleteRequest):
+        try:
+            return noter_delete_item(_req_user_id(request), payload.id, payload.item_type, payload.recursive)
+        except Exception as err:
+            _raise_as_http(err, "POST /noter/items/delete")
 
     # --- Razorpay payments ---
 

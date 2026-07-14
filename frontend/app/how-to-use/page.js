@@ -69,6 +69,17 @@ const USECASES = [
     ],
   },
   {
+    icon: "noter",
+    title: "Noter",
+    lede: "Write free-form notes and documents in blocks, with autosave and full version history.",
+    steps: [
+      "Open Noter and start a new document — write in blocks (headings, lists, checklists, tables, images, code) using / for the block menu, just like Notion.",
+      "It autosaves as you type; the status in the top bar shows Saving… or Saved.",
+      "Open History any time to browse every saved version, preview it, and restore it — nothing is ever truly lost.",
+    ],
+    note: "Every document and every version is stored durably, so you can always go back to an earlier draft.",
+  },
+  {
     icon: "file",
     title: "Answer Evaluation (UPSC Mains)",
     lede: "Upload a written answer and get it evaluated like an examiner would — marks plus specific feedback.",
@@ -123,7 +134,7 @@ const USECASES = [
     title: "Keyboard shortcuts",
     lede: "Jump anywhere without touching the menu. Shortcuts are off while you're typing in a field.",
     steps: [
-      "Press g then a letter to jump: g h Home · g i Interview · g e Answer Eval · g q QnA · g o Goals · g a Analytics · g r Recorder · g m Mind Map · g c Content · g s Search · g u Usage.",
+      "Press g then a letter to jump: g h Home · g i Interview · g e Answer Eval · g q QnA · g o Goals · g a Analytics · g r Recorder · g m Mind Map · g n Noter · g c Content · g s Search · g u Usage.",
       "Press / to jump straight to Search.",
       "Press ? to open this guide from anywhere.",
     ],

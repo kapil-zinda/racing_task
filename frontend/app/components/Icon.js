@@ -13,7 +13,8 @@ import {
   Timer, Disc, MoreHorizontal, Plus, Minus, Circle as Dot, Loader2, Layers,
   CalendarDays, ClipboardList, Paperclip, StickyNote, CreditCard,
   Eye, EyeOff, Wallet, Zap, MicOff, PhoneOff, Copy, ImageOff, Languages,
-  Keyboard, HelpCircle, Settings, Sun, Moon, Users,
+  Keyboard, HelpCircle, Settings, Sun, Moon, Users, NotebookPen, History,
+  RotateCcw, GripVertical,
 } from "lucide-react";
 
 const MAP = {
@@ -119,6 +120,10 @@ const MAP = {
   settings: Settings,
   sun: Sun,
   moon: Moon,
+  noter: NotebookPen,
+  history: History,
+  restore: RotateCcw,
+  "grip-vertical": GripVertical,
 };
 
 export default function Icon({ name, size = "1em", className = "", strokeWidth = 2, ...rest }) {

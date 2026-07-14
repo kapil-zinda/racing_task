@@ -37,6 +37,7 @@ const NAV_GROUPS = [
       { key: "content", label: "Content", href: "/content", icon: "content" },
       { key: "search", label: "Search", href: "/search", icon: "search" },
       { key: "mindmap", label: "Mind Map", href: "/mindmap", icon: "mindmap" },
+      { key: "noter", label: "Noter", href: "/noter", icon: "noter" },
     ],
   },
   {
