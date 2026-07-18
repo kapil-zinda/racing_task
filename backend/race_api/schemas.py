@@ -484,6 +484,7 @@ class LiveSessionStartRequest(BaseModel):
 
 class LiveSessionHeartbeatRequest(BaseModel):
     elapsed_seconds: int = 0
+    foreground: bool = True
 
 
 class LiveSessionSyncRequest(BaseModel):

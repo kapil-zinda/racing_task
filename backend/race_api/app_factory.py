@@ -1590,9 +1590,13 @@ def create_app() -> FastAPI:
             _raise_as_http(err, "DELETE /tracker/categories/{name}")
 
     @app.get("/tracker/day-full")
-    def tracker_day_full(request: Request, date: Optional[str] = Query(default=None)):
+    def tracker_day_full(
+        request: Request,
+        date: Optional[str] = Query(default=None),
+        tz_offset: int = Query(default=0),
+    ):
         try:
-            return get_day_full(_req_user_id(request), date or "")
+            return get_day_full(_req_user_id(request), date or "", tz_offset)
         except Exception as err:
             _raise_as_http(err, "GET /tracker/day-full")
 
@@ -1601,9 +1605,10 @@ def create_app() -> FastAPI:
         request: Request,
         start_date: Optional[str] = Query(default=None),
         end_date: Optional[str] = Query(default=None),
+        tz_offset: int = Query(default=0),
     ):
         try:
-            return get_day_full_summary(_req_user_id(request), start_date or "", end_date or "")
+            return get_day_full_summary(_req_user_id(request), start_date or "", end_date or "", tz_offset)
         except Exception as err:
             _raise_as_http(err, "GET /tracker/day-full-summary")
 
@@ -1632,7 +1637,7 @@ def create_app() -> FastAPI:
     @app.post("/live/{session_id}/heartbeat")
     def live_heartbeat(session_id: str, request: Request, payload: LiveSessionHeartbeatRequest):
         try:
-            return heartbeat_live_session(_req_user_id(request), session_id, payload.elapsed_seconds)
+            return heartbeat_live_session(_req_user_id(request), session_id, payload.elapsed_seconds, payload.foreground)
         except Exception as err:
             _raise_as_http(err, "POST /live/{id}/heartbeat")
 
