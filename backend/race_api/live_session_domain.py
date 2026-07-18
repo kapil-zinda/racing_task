@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from pymongo import ASCENDING
@@ -79,6 +79,7 @@ def start_live_session(user_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         "stopped_at": None,
         "elapsed_seconds": 0,
         "paused_seconds": 0,
+        "foreground": True,
         "last_heartbeat": now,
         "events": [{"type": "started", "at": now, "elapsed_seconds": 0}],
         "created_at": now,
@@ -96,7 +97,7 @@ def _get_owned_session(user_id: str, session_id_value: str) -> Dict[str, Any]:
     return doc
 
 
-def heartbeat_live_session(user_id: str, session_id_value: str, elapsed_seconds: int) -> Dict[str, Any]:
+def heartbeat_live_session(user_id: str, session_id_value: str, elapsed_seconds: int, foreground: bool = True) -> Dict[str, Any]:
     uid = _uid(user_id)
     doc = _get_owned_session(uid, session_id_value)
     if doc.get("status") != "running":
@@ -104,7 +105,7 @@ def heartbeat_live_session(user_id: str, session_id_value: str, elapsed_seconds:
     now = _now_iso()
     live_study_sessions_collection().update_one(
         {"_id": session_id_value},
-        {"$set": {"elapsed_seconds": max(0, int(elapsed_seconds)), "last_heartbeat": now, "updated_at": now}},
+        {"$set": {"elapsed_seconds": max(0, int(elapsed_seconds)), "foreground": bool(foreground), "last_heartbeat": now, "updated_at": now}},
     )
     return {"message": "ok", "at": now}
 
@@ -131,7 +132,12 @@ def _transition(
     if reason:
         event["reason"] = reason
 
-    update_fields: Dict[str, Any] = {"status": to_status, "elapsed_seconds": elapsed, "updated_at": now}
+    update_fields: Dict[str, Any] = {
+        "status": to_status,
+        "elapsed_seconds": elapsed,
+        "foreground": reason != "backgrounded",
+        "updated_at": now,
+    }
 
     if to_status == "paused":
         # Stop expecting heartbeats while paused — the reaper only watches "running".
@@ -354,9 +360,25 @@ def get_member_day_focus(viewer_user_id: str, group_id: str, target_user_id: str
     return {"date": day, **_day_focus_stats(target, day)}
 
 
-def _activity_row_from_live(doc: Dict[str, Any]) -> Dict[str, Any]:
-    started = (doc.get("started_at") or "")[11:16]
-    stopped = (doc.get("stopped_at") or "")[11:16]
+def _iso_to_local_hhmm(iso: str, tz_offset_min: int = 0) -> str:
+    """UTC ISO timestamp -> local "HH:MM", using the client's JS getTimezoneOffset()
+    convention (UTC-minus-local, e.g. IST = -330) — same pattern as
+    goal_domain.iso_to_local_date."""
+    if not iso:
+        return ""
+    try:
+        dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except ValueError:
+        return str(iso)[11:16]
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    local = dt.astimezone(timezone.utc) - timedelta(minutes=int(tz_offset_min or 0))
+    return local.strftime("%H:%M")
+
+
+def _activity_row_from_live(doc: Dict[str, Any], tz_offset_min: int = 0) -> Dict[str, Any]:
+    started = _iso_to_local_hhmm(doc.get("started_at"), tz_offset_min)
+    stopped = _iso_to_local_hhmm(doc.get("stopped_at"), tz_offset_min)
     return {
         "id": doc["_id"],
         "title": doc.get("title") or doc.get("category") or "Live session",
@@ -370,18 +392,18 @@ def _activity_row_from_live(doc: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def get_day_full(user_id: str, date: str) -> Dict[str, Any]:
+def get_day_full(user_id: str, date: str, tz_offset_min: int = 0) -> Dict[str, Any]:
     uid = _uid(user_id)
     day = (date or "").strip() or current_date_str()
     manual = [{**a, "source": "manual"} for a in get_activities(uid, day)]
     live_docs = live_study_sessions_collection().find({"user_id": uid, "date": day, "status": "stopped"})
-    live_rows = [_activity_row_from_live(d) for d in live_docs]
+    live_rows = [_activity_row_from_live(d, tz_offset_min) for d in live_docs]
     activities = sorted(manual + live_rows, key=lambda a: a.get("start_time") or "")
     active = get_active_live_session(uid).get("session")
     return {"activities": activities, "active_session": active, "focus": _day_focus_stats(uid, day)}
 
 
-def get_day_full_summary(user_id: str, start_date: str, end_date: str) -> Dict[str, Any]:
+def get_day_full_summary(user_id: str, start_date: str, end_date: str, tz_offset_min: int = 0) -> Dict[str, Any]:
     uid = _uid(user_id)
     summary = get_activities_summary(uid, start_date, end_date)
     start = summary.get("start_date")
@@ -420,7 +442,7 @@ def get_day_full_summary(user_id: str, start_date: str, end_date: str) -> Dict[s
             cat_minutes = max(0, int(d.get("elapsed_seconds", 0)) // 60)
             row.setdefault("by_category", {})
             row["by_category"][cat] = row["by_category"].get(cat, 0) + cat_minutes
-            row.setdefault("activities", []).append(_activity_row_from_live(d))
+            row.setdefault("activities", []).append(_activity_row_from_live(d, tz_offset_min))
 
     focused_total = 0.0
     other_total = 0.0
